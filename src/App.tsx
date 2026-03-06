@@ -1,8 +1,10 @@
-import React, { useState } from 'react';
-import './App.css'; // Mantenemos el mismo archivo CSS
+import React, { useState, useEffect } from 'react';
+import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc } from 'firebase/firestore';
+import { db } from './firebase'; // Asegúrate de que la ruta coincida con donde creaste el archivo firebase.ts
+import './App.css';
 
 // =========================================
-// INTERFACES Y TIPOS (El poder de TypeScript)
+// INTERFACES Y TIPOS
 // =========================================
 interface User {
   username: string;
@@ -10,7 +12,7 @@ interface User {
 }
 
 interface JobOrder {
-  id: number;
+  id: string; // FUE CAMBIADO A STRING PARA SOPORTAR FIREBASE
   jobOrder: string;
   destination: string;
   description: string;
@@ -20,19 +22,10 @@ interface JobOrder {
   createdBy: string;
 }
 
-// Un tipo para el formulario (igual a JobOrder pero sin ID ni creador)
 type JobFormData = Omit<JobOrder, 'id' | 'createdBy'>;
 
 // =========================================
-// DATOS SIMULADOS
-// =========================================
-const initialOrders: JobOrder[] = [
-  { id: 1, jobOrder: 'Hot Water Heater / window', destination: 'OV 58', description: "it's fixed, Hot Water", workFinish: 'NO', pendingWork: 'Window', schedule: '2026-02-25', createdBy: 'natan' },
-  { id: 2, jobOrder: 'A/C Repair', destination: 'Apt 12', description: 'Replaced filter', workFinish: 'YES', pendingWork: 'None', schedule: '2026-02-20', createdBy: 'otheruser' }
-];
-
-// =========================================
-// COMPONENTE 1: PANTALLA DE AUTENTICACIÓN
+// COMPONENTE 1: PANTALLA DE AUTENTICACIÓN (Mockup)
 // =========================================
 interface AuthScreenProps {
   onLogin: (username: string, password: string) => void;
@@ -84,22 +77,43 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
 };
 
 // =========================================
-// COMPONENTE 2: MÓDULO DE TRABAJO (CRUD)
+// COMPONENTE 2: MÓDULO DE TRABAJO (CRUD FIREBASE)
 // =========================================
 interface WorkActivityProps {
   currentUser: User;
 }
 
 const WorkActivity: React.FC<WorkActivityProps> = ({ currentUser }) => {
-  const [orders, setOrders] = useState<JobOrder[]>(initialOrders);
+  const [orders, setOrders] = useState<JobOrder[]>([]);
   const [isJobModalOpen, setIsJobModalOpen] = useState<boolean>(false);
   const [isExportModalOpen, setIsExportModalOpen] = useState<boolean>(false);
-  const [editingJob, setEditingJob] = useState<number | null>(null);
+  const [editingJob, setEditingJob] = useState<string | null>(null); // Cambiado a string
 
   const initialFormState: JobFormData = {
     jobOrder: '', destination: '', description: '', workFinish: 'NO', pendingWork: '', schedule: ''
   };
   const [formData, setFormData] = useState<JobFormData>(initialFormState);
+
+  // REFERENCIA A LA COLECCIÓN EN FIREBASE
+  const ordersCollectionRef = collection(db, "jobOrders");
+
+  // LEER DATOS (READ)
+  const fetchOrders = async () => {
+    try {
+      const data = await getDocs(ordersCollectionRef);
+      const fetchedOrders = data.docs.map((doc) => ({
+        ...doc.data(),
+        id: doc.id // Firestore usa doc.id como identificador único
+      })) as JobOrder[];
+      setOrders(fetchedOrders);
+    } catch (error) {
+      console.error("Error fetching documents: ", error);
+    }
+  };
+
+  useEffect(() => {
+    fetchOrders();
+  }, []);
 
   const visibleOrders = currentUser.role === 'admin' 
     ? orders 
@@ -119,21 +133,39 @@ const WorkActivity: React.FC<WorkActivityProps> = ({ currentUser }) => {
     setIsJobModalOpen(true);
   };
 
-  const handleDelete = (id: number) => {
+  // ELIMINAR DATOS (DELETE)
+  const handleDelete = async (id: string) => {
     if (window.confirm("⚠️ Are you sure you want to permanently delete this record?")) {
-      setOrders(orders.filter(o => o.id !== id));
+      try {
+        const jobDoc = doc(db, "jobOrders", id);
+        await deleteDoc(jobDoc);
+        fetchOrders(); // Recargar la lista
+      } catch (error) {
+        console.error("Error deleting document: ", error);
+      }
     }
   };
 
-  const handleSaveOrder = (e: React.FormEvent<HTMLFormElement>) => {
+  // CREAR Y ACTUALIZAR DATOS (CREATE / UPDATE)
+  const handleSaveOrder = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (editingJob) {
-      setOrders(orders.map(o => o.id === editingJob ? { ...formData, id: editingJob, createdBy: o.createdBy } : o));
-    } else {
-      const newId = orders.length > 0 ? Math.max(...orders.map(o => o.id)) + 1 : 1;
-      setOrders([...orders, { ...formData, id: newId, createdBy: currentUser.username }]);
+    try {
+      if (editingJob) {
+        // Actualizar registro existente
+        const jobDoc = doc(db, "jobOrders", editingJob);
+        await updateDoc(jobDoc, { ...formData });
+      } else {
+        // Crear nuevo registro
+        await addDoc(ordersCollectionRef, { 
+          ...formData, 
+          createdBy: currentUser.username 
+        });
+      }
+      fetchOrders(); // Recargar la lista desde Firebase
+      setIsJobModalOpen(false);
+    } catch (error) {
+      console.error("Error saving document: ", error);
     }
-    setIsJobModalOpen(false);
   };
 
   const handleExport = (format: 'Excel' | 'PDF') => {
@@ -158,17 +190,17 @@ const WorkActivity: React.FC<WorkActivityProps> = ({ currentUser }) => {
         <table>
           <thead>
             <tr>
-              <th>ID #</th><th>Job Order</th><th>Destination</th><th>Description</th>
+              <th>Job Order</th><th>Destination</th><th>Description</th>
               <th>Work Finish</th><th>Pending Work</th><th>Schedule</th><th style={{ textAlign: 'center' }}>Actions</th>
             </tr>
           </thead>
           <tbody>
             {visibleOrders.length === 0 && (
-              <tr><td colSpan={8} style={{ textAlign: 'center', padding: '20px' }}>No records found.</td></tr>
+              <tr><td colSpan={7} style={{ textAlign: 'center', padding: '20px' }}>No records found.</td></tr>
             )}
             {visibleOrders.map(order => (
               <tr key={order.id}>
-                <td>{order.id}</td><td>{order.jobOrder}</td><td>{order.destination}</td><td>{order.description}</td>
+                <td>{order.jobOrder}</td><td>{order.destination}</td><td>{order.description}</td>
                 <td><span className={order.workFinish === 'YES' ? 'badge-yes' : 'badge-no'}>{order.workFinish}</span></td>
                 <td>{order.pendingWork}</td><td>{order.schedule}</td>
                 <td>
@@ -214,10 +246,11 @@ const WorkActivity: React.FC<WorkActivityProps> = ({ currentUser }) => {
         </div>
       )}
 
-      {/* Modal Export */}
+      {/* Modal Export (Queda igual) */}
       {isExportModalOpen && (
         <div className="modal-overlay active">
           <div className="modal-content" style={{ maxWidth: '450px' }}>
+            {/* Contenido del modal de exportación... */}
             <div className="modal-header">
               <h3>Export Data</h3>
               <button type="button" className="close-modal" onClick={() => setIsExportModalOpen(false)}>&times;</button>
@@ -245,6 +278,7 @@ export default function App() {
   const [activeModule, setActiveModule] = useState<string>('workActivity');
   const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(false);
 
+  // NOTA: Este es un login falso. Se puede conectar con Firebase Auth luego.
   const handleLogin = (username: string, password: string) => {
     if (username.toLowerCase() === 'admin' && password.toLowerCase() === 'admin') {
       setCurrentUser({ username: 'admin', role: 'admin' });
