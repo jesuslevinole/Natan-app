@@ -65,6 +65,33 @@ body { background-color: var(--bg-color); color: var(--text-main); height: 100vh
 label { font-size: 0.85rem; font-weight: 600; color: var(--text-main); }
 input, select { padding: 10px 12px; border: 1px solid var(--border-color); border-radius: 6px; font-size: 0.95rem; outline: none; transition: all 0.2s; background-color: #ffffff; width: 100%; }
 input:focus, select:focus { border-color: var(--primary-color); box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1); }
+
+/* Selector Desplegable más robusto */
+.dropdown-select {
+    padding: 10px 12px;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    font-size: 0.95rem;
+    font-weight: 500;
+    width: 100%;
+    background-color: #ffffff;
+    color: var(--text-main);
+    cursor: pointer;
+}
+
+/* Inputs de Solo Lectura (Bloqueados) */
+.disabled-input {
+    background-color: #f1f5f9;
+    color: #94a3b8;
+    border-color: #cbd5e1;
+    cursor: not-allowed;
+    font-weight: 500;
+}
+.disabled-input:focus {
+    box-shadow: none;
+    border-color: #cbd5e1;
+}
+
 .btn-container { display: flex; justify-content: flex-end; gap: 12px; margin-top: 25px; padding-top: 15px; border-top: 1px solid var(--border-color); }
 
 /* BOTONES */
@@ -80,6 +107,10 @@ button.action { padding: 10px 20px; border: none; border-radius: 6px; font-size:
 .btn-pdf:hover { background-color: #fef2f2; }
 .btn-danger { background-color: #fef2f2; color: var(--danger-color); border: 1px solid #fecaca; }
 .btn-danger:hover { background-color: var(--danger-color); color: white; }
+
+/* Botones de texto para acciones en tablas */
+.btn-text-primary { background: none; border: none; color: var(--primary-color); font-weight: 600; font-size: 0.8rem; cursor: pointer; text-decoration: underline; margin-right: 10px;}
+.btn-text-primary:hover { color: var(--primary-hover); }
 .btn-text-danger { background: none; border: none; color: var(--danger-color); font-weight: 600; font-size: 0.8rem; cursor: pointer; text-decoration: underline; }
 .btn-text-danger:hover { color: #b91c1c; }
 
