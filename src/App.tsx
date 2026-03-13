@@ -40,7 +40,7 @@ type CatalogFormData = Omit<CatalogItem, 'id'>;
 // =========================================
 // COMPONENTE: PANTALLA DE AUTENTICACIÓN
 // =========================================
-const AuthScreen: React.FC<{ onLogin: (u: string, p: string) => void }> = ({ onLogin }) => {
+const AuthScreen: React.FC<{ onLogin: (_u: string, _p: string) => void }> = ({ onLogin }) => {
   const [isLogin, setIsLogin] = useState(true);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -346,6 +346,7 @@ const WorkActivity: React.FC<{currentUser: User}> = ({ currentUser }) => {
   const [orders, setOrders] = useState<JobOrder[]>([]);
   const [entranceList, setEntranceList] = useState<ItemEntranceRecord[]>([]); 
   const [isJobModalOpen, setIsJobModalOpen] = useState<boolean>(false);
+  const [isProductModalOpen, setIsProductModalOpen] = useState<boolean>(false);
   const [editingJob, setEditingJob] = useState<string | null>(null);
   const [viewingJob, setViewingJob] = useState<JobOrder | null>(null);
   const [viewProducts, setViewProducts] = useState<JobProduct[]>([]);
@@ -356,7 +357,6 @@ const WorkActivity: React.FC<{currentUser: User}> = ({ currentUser }) => {
   const [formData, setFormData] = useState<JobFormData>(initialFormState);
   const [formProducts, setFormProducts] = useState<JobProduct[]>([]);
   
-  const [isProductModalOpen, setIsProductModalOpen] = useState<boolean>(false);
   const [currentProduct, setCurrentProduct] = useState<ProductFormData>({
     itemEntranceId: '', modelPart: '', serial: '', po: '', quantity: 1, itemName: '', destination: ''
   });
@@ -469,14 +469,15 @@ const WorkActivity: React.FC<{currentUser: User}> = ({ currentUser }) => {
         <table>
           <thead><tr><th>Job Order</th><th>Destination</th><th>Description</th><th>Work Finish</th><th>Pending Work</th><th>Schedule</th></tr></thead>
           <tbody>
-            {orders.length === 0 && <tr><td colSpan={6} className="empty-state">No records found.</td></tr>}
-            {orders.map(order => (
-              <tr key={order.id} className="clickable-row" onClick={() => handleViewDetails(order)}>
-                <td>{order.jobOrder}</td><td>{order.destination}</td><td>{order.description}</td>
-                <td><span className={order.workFinish === 'YES' ? 'badge-yes' : 'badge-no'}>{order.workFinish}</span></td>
-                <td>{order.pendingWork}</td><td>{order.schedule}</td>
-              </tr>
-            ))}
+            {orders.length === 0 ? <tr><td colSpan={6} className="empty-state">No records found.</td></tr> :
+              orders.map(order => (
+                <tr key={order.id} className="clickable-row" onClick={() => handleViewDetails(order)}>
+                  <td>{order.jobOrder}</td><td>{order.destination}</td><td>{order.description}</td>
+                  <td><span className={order.workFinish === 'YES' ? 'badge-yes' : 'badge-no'}>{order.workFinish}</span></td>
+                  <td>{order.pendingWork}</td><td>{order.schedule}</td>
+                </tr>
+              ))
+            }
           </tbody>
         </table>
       </div>
@@ -538,7 +539,7 @@ const WorkActivity: React.FC<{currentUser: User}> = ({ currentUser }) => {
                   <table>
                     <thead><tr><th>Item Name</th><th>Model/Part #</th><th>Qty</th><th>Destination</th><th>Status</th><th style={{ textAlign: 'center' }}>Action</th></tr></thead>
                     <tbody>
-                      {formProducts.length === 0 ? <tr><td colSpan={6} className="empty-state">No products added yet.</td></tr> :
+                      {formProducts.length === 0 ? <tr><td colSpan={6} className="empty-state">No products added yet. Click "+ Add Product".</td></tr> :
                         formProducts.map((p, index) => (
                           <tr key={index}><td style={{ fontWeight: 600 }}>{p.itemName}</td><td>{p.modelPart}</td><td>{p.quantity}</td><td>{p.destination || '-'}</td><td><span style={{ fontSize: '0.75rem', color: p.id ? 'green' : 'orange', fontWeight: 'bold' }}>{p.id ? 'Saved' : 'Pending Save'}</span></td><td style={{ textAlign: 'center' }}><button type="button" className="btn-text-danger" onClick={() => handleRemoveProductFromForm(index, p)}>Remove</button></td></tr>
                         ))
@@ -577,6 +578,7 @@ const WorkActivity: React.FC<{currentUser: User}> = ({ currentUser }) => {
   );
 };
 
+
 // =========================================
 // COMPONENTE PRINCIPAL (App)
 // =========================================
@@ -586,7 +588,7 @@ export default function App() {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState<boolean>(false);
 
-  const handleLogin = (username: string, _password: string) => setCurrentUser({ username, role: 'user' });
+  const handleLogin = (u: string, _p: string) => setCurrentUser({ username: u, role: 'user' });
 
   if (!currentUser) return <AuthScreen onLogin={handleLogin} />;
 
