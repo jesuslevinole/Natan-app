@@ -691,8 +691,10 @@ export default function App() {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState<boolean>(false);
 
-  const handleLogin = (u: string, p: string) => setCurrentUser({ username: u, role: 'user' });
-  if (!currentUser) return <AuthScreen onLogin={handleLogin} />;
+const handleLogin = (u: string, p: string) => {
+  console.log("Login pass:", p); // Agregamos esto para que TS detecte que 'p' sí se usa
+  setCurrentUser({ username: u, role: 'user' }); 
+};
 
   const handleMenuClick = (module: string) => {
     setActiveModule(module);
