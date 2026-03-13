@@ -687,14 +687,14 @@ const WorkActivity: React.FC<{currentUser: User}> = ({ currentUser }) => {
 // =========================================
 export default function App() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
-  const [activeModule, setActiveModule] = useState<string>('workActivity'); // <- Modificado para que inicie en WorkActivity
+  const [activeModule, setActiveModule] = useState<string>('workActivity');
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState<boolean>(false);
 
-const handleLogin = (u: string, p: string) => {
-  console.log("Login pass:", p); // Agregamos esto para que TS detecte que 'p' sí se usa
-  setCurrentUser({ username: u, role: 'user' }); 
-};
+  // LA CORRECCIÓN CLAVE PARA EVITAR EL ERROR DE CLOUDFLARE (TS6133) ESTÁ AQUÍ
+  const handleLogin = (u: string, _p: string) => {
+    setCurrentUser({ username: u, role: 'user' }); 
+  };
 
   const handleMenuClick = (module: string) => {
     setActiveModule(module);
@@ -717,7 +717,6 @@ const handleLogin = (u: string, p: string) => {
             </button>
           </div>
 
-          {/* Menú Actualizado: Order Entry ha sido eliminado */}
           <ul className="nav-links">
             <li className={activeModule === 'itemEntrance' ? 'active' : ''} onClick={() => handleMenuClick('itemEntrance')}>
               <PackageSearch size={20}/> <span>Item Entrance</span>
@@ -748,7 +747,10 @@ const handleLogin = (u: string, p: string) => {
         
         <main className="main-content">
           {activeModule === 'itemEntrance' && <ItemEntrance />}
-          {activeModule === 'workActivity' && <WorkActivity currentUser={currentUser} />}
+          
+          {/* LA CORRECCIÓN CLAVE PARA EL ERROR DE TYPESCRIPT ESTÁ AQUÍ (currentUser!) */}
+          {activeModule === 'workActivity' && <WorkActivity currentUser={currentUser!} />}
+          
           {activeModule === 'settings' && <SettingsModule />}
         </main>
       </div>
