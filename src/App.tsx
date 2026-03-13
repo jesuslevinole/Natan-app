@@ -1,133 +1,259 @@
 import React, { useState, useEffect } from 'react';
 import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, query, where } from 'firebase/firestore';
 import { db } from './firebase'; 
+import { 
+  PackageSearch, Briefcase, Settings, LogOut, 
+  MapPin, Truck, ChevronLeft, ChevronRight, Edit2, Trash2, Plus, 
+  X, ArrowLeft, Menu
+} from 'lucide-react';
 import './App.css';
 
 // =========================================
 // INTERFACES Y TIPOS
 // =========================================
-interface User {
-  username: string;
-  role: 'admin' | 'user';
-}
+interface User { username: string; role: 'admin' | 'user'; }
 
 interface JobOrder {
-  id: string;
-  jobOrder: string;
-  destination: string;
-  description: string;
-  workFinish: 'YES' | 'NO';
-  pendingWork: string;
-  schedule: string;
-  createdBy: string;
+  id: string; jobOrder: string; destination: string; description: string;
+  workFinish: 'YES' | 'NO'; pendingWork: string; schedule: string; createdBy: string;
 }
 
 interface JobProduct {
-  id?: string; 
-  jobOrderId: string; 
-  inventoryId: string; // Relación con la tabla de inventario
-  modelPart: string;
-  serial: string;
-  po: string;
-  quantity: number;
-  itemName: string;
-  destination: string;
+  id?: string; jobOrderId: string; itemEntranceId: string; modelPart: string;
+  serial: string; po: string; quantity: number; itemName: string; destination: string;
 }
 
-// NUEVA INTERFAZ: INVENTARIO
-interface InventoryItem {
-  id: string;
-  date: string;
-  modelPart: string;
-  serial: string;
-  po: string;
-  orderDate: string;
-  quantityOrdered: number;
-  itemsArrived: number;
-  supplyCompany: string;
-  itemName: string;
+interface ItemEntranceRecord {
+  id: string; date: string; modelPart: string; serial: string; po: string;
+  orderDate: string; quantityOrdered: number; itemsArrived: number; supplyCompany: string; itemName: string;
+}
+
+// INTERFAZ PARA CATÁLOGOS GENÉRICOS
+interface CatalogItem {
+  id: string; name: string; description: string;
 }
 
 type JobFormData = Omit<JobOrder, 'id' | 'createdBy'>;
 type ProductFormData = Omit<JobProduct, 'id' | 'jobOrderId'>;
-type InventoryFormData = Omit<InventoryItem, 'id'>;
+type ItemEntranceFormData = Omit<ItemEntranceRecord, 'id'>;
+type CatalogFormData = Omit<CatalogItem, 'id'>;
 
 // =========================================
-// COMPONENTE 1: PANTALLA DE AUTENTICACIÓN
+// COMPONENTE: PANTALLA DE AUTENTICACIÓN
 // =========================================
-interface AuthScreenProps {
-  onLogin: (username: string, password: string) => void;
-}
+const AuthScreen: React.FC<{ onLogin: (u: string, p: string) => void }> = ({ onLogin }) => {
+  const [isLogin, setIsLogin] = useState(true);
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
 
-const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
-  const [isLogin, setIsLogin] = useState<boolean>(true);
-  const [username, setUsername] = useState<string>('');
-  const [password, setPassword] = useState<string>('');
-
-  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (isLogin) {
-      onLogin(username, password);
-    } else {
-      alert("Registration submitted successfully!\n\nWait for Admin approval.");
-      setIsLogin(true);
-    }
+    if (isLogin) onLogin(username, password);
+    else { alert("Registration submitted!\nWait for Admin approval."); setIsLogin(true); }
   };
 
   return (
     <div className="auth-wrapper">
       <div className="auth-card">
+        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '15px' }}>
+          <div className="catalog-icon" style={{ marginBottom: 0 }}><Briefcase size={32} /></div>
+        </div>
         <h2>App Mr Natan</h2>
         <p className="subtitle">{isLogin ? "Test Mode: Any credentials work." : "Create a new account"}</p>
         <form onSubmit={handleSubmit}>
-          {!isLogin && (
-            <div className="form-group" style={{ marginBottom: '15px' }}>
-              <label>Full Name</label>
-              <input type="text" placeholder="John Doe" required />
-            </div>
-          )}
-          <div className="form-group" style={{ marginBottom: '15px' }}>
-            <label>Username</label>
-            <input type="text" value={username} onChange={(e) => setUsername(e.target.value)} required />
-          </div>
-          <div className="form-group">
-            <label>Password</label>
-            <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required />
-          </div>
+          {!isLogin && (<div className="form-group" style={{ marginBottom: '15px' }}><label>Full Name</label><input type="text" required /></div>)}
+          <div className="form-group" style={{ marginBottom: '15px' }}><label>Username</label><input type="text" value={username} onChange={e => setUsername(e.target.value)} required /></div>
+          <div className="form-group"><label>Password</label><input type="password" value={password} onChange={e => setPassword(e.target.value)} required /></div>
           <button type="submit" className="auth-btn">{isLogin ? 'Log In' : 'Sign Up'}</button>
         </form>
-        <p className="toggle-auth" onClick={() => setIsLogin(!isLogin)}>
-          {isLogin ? "Don't have an account? Sign up" : "Already have an account? Log in"}
-        </p>
+        <p className="toggle-auth" onClick={() => setIsLogin(!isLogin)}>{isLogin ? "Don't have an account? Sign up" : "Already have an account? Log in"}</p>
       </div>
     </div>
   );
 };
 
 // =========================================
-// COMPONENTE 2: MÓDULO DE INVENTARIO (NUEVO)
+// NUEVO COMPONENTE: GESTOR DE CATÁLOGOS (CRUD GENÉRICO)
 // =========================================
-const InventoryLog: React.FC = () => {
-  const [inventory, setInventory] = useState<InventoryItem[]>([]);
+const CatalogManager: React.FC<{ title: string, collectionName: string, icon: React.ReactNode, onBack: () => void }> = ({ title, collectionName, icon, onBack }) => {
+  const [items, setItems] = useState<CatalogItem[]>([]);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [viewingItem, setViewingItem] = useState<CatalogItem | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [formData, setFormData] = useState<CatalogFormData>({ name: '', description: '' });
+
+  const colRef = collection(db, collectionName);
+
+  const fetchItems = async () => {
+    const data = await getDocs(colRef);
+    setItems(data.docs.map(doc => ({ ...doc.data(), id: doc.id })) as CatalogItem[]);
+  };
+
+  useEffect(() => { fetchItems(); }, [collectionName]);
+
+  const handleOpenModal = (item: CatalogItem | null = null) => {
+    setViewingItem(null);
+    if (item) { setEditingId(item.id); setFormData({ name: item.name, description: item.description }); } 
+    else { setEditingId(null); setFormData({ name: '', description: '' }); }
+    setIsModalOpen(true);
+  };
+
+  const handleDelete = async (id: string) => {
+    if (window.confirm("⚠️ Delete this record?")) {
+      await deleteDoc(doc(db, collectionName, id));
+      setViewingItem(null);
+      fetchItems();
+    }
+  };
+
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (editingId) await updateDoc(doc(db, collectionName, editingId), { ...formData });
+    else await addDoc(colRef, formData);
+    fetchItems();
+    setIsModalOpen(false);
+  };
+
+  return (
+    <div className="card catalog-manager-anim">
+      <div className="card-header" style={{ alignItems: 'center' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+          <button className="icon-btn" onClick={onBack} title="Back to Settings"><ArrowLeft size={24} color="var(--text-main)"/></button>
+          <div className="card-header-text">
+            <h2 style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>{icon} {title} Catalog</h2>
+            <p>Manage list options for the system.</p>
+          </div>
+        </div>
+        <button className="action btn-primary" onClick={() => handleOpenModal(null)}><Plus size={18}/> New {title}</button>
+      </div>
+
+      <div className="table-container">
+        <table>
+          <thead><tr><th>Name</th><th>Description</th><th style={{textAlign:'center'}}>Actions</th></tr></thead>
+          <tbody>
+            {items.length === 0 && <tr><td colSpan={3} className="empty-state">No records found.</td></tr>}
+            {items.map(item => (
+              <tr key={item.id} className="clickable-row" onClick={() => setViewingItem(item)}>
+                <td style={{ fontWeight: 'bold' }}>{item.name}</td>
+                <td>{item.description || '-'}</td>
+                <td style={{ textAlign: 'center' }} onClick={(e) => e.stopPropagation()}>
+                  <div className="action-btns">
+                    <button className="icon-btn edit" onClick={() => handleOpenModal(item)}><Edit2 size={16}/></button>
+                    <button className="icon-btn delete" onClick={() => handleDelete(item.id)}><Trash2 size={16}/></button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {viewingItem && (
+        <div className="modal-overlay active">
+          <div className="modal-content">
+            <div className="modal-header">
+              <h3>{title} Details</h3>
+              <button className="close-modal" onClick={() => setViewingItem(null)}><X size={24}/></button>
+            </div>
+            <div className="details-grid">
+              <div className="detail-item full-width"><span>Name:</span> <p>{viewingItem.name}</p></div>
+              <div className="detail-item full-width"><span>Description:</span> <p>{viewingItem.description || 'No description provided.'}</p></div>
+            </div>
+            <div className="btn-container modal-footer-actions">
+              <button className="action btn-danger" onClick={() => handleDelete(viewingItem.id)}><Trash2 size={18}/> Delete</button>
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <button className="action btn-secondary" onClick={() => setViewingItem(null)}>Close</button>
+                <button className="action btn-primary" onClick={() => handleOpenModal(viewingItem)}><Edit2 size={18}/> Edit</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isModalOpen && (
+        <div className="modal-overlay active" style={{ zIndex: 1000 }}>
+          <div className="modal-content">
+            <div className="modal-header">
+              <h3>{editingId ? `Edit ${title}` : `New ${title}`}</h3>
+              <button className="close-modal" onClick={() => setIsModalOpen(false)}><X size={24}/></button>
+            </div>
+            <form onSubmit={handleSave}>
+              <div className="form-grid">
+                <div className="form-group full-width"><label>Name</label><input type="text" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} required /></div>
+                <div className="form-group full-width"><label>Description</label><input type="text" value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} /></div>
+              </div>
+              <div className="btn-container">
+                <button type="button" className="action btn-secondary" onClick={() => setIsModalOpen(false)}>Cancel</button>
+                <button type="submit" className="action btn-primary">Save {title}</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// =========================================
+// MÓDULO: SETTINGS / CATALOGS
+// =========================================
+const SettingsModule: React.FC = () => {
+  const [activeCatalog, setActiveCatalog] = useState<{title: string, collection: string, icon: React.ReactNode} | null>(null);
+
+  const catalogs = [
+    { id: 'destinations', title: 'Destinations', collection: 'destinations', icon: <MapPin size={32}/> },
+    { id: 'supplies', title: 'Supply Companies', collection: 'supplies', icon: <Truck size={32}/> },
+  ];
+
+  if (activeCatalog) {
+    return <CatalogManager title={activeCatalog.title} collectionName={activeCatalog.collection} icon={activeCatalog.icon} onBack={() => setActiveCatalog(null)} />
+  }
+
+  return (
+    <div className="card">
+      <div className="card-header">
+        <div className="card-header-text">
+          <h2 style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><Settings size={28}/> Settings & Catalogs</h2>
+          <p>Manage your system parameters and lists.</p>
+        </div>
+      </div>
+      <div className="catalog-grid">
+        {catalogs.map(cat => (
+          <div key={cat.id} className="catalog-card" onClick={() => setActiveCatalog(cat)}>
+            <div className="catalog-icon">{cat.icon}</div>
+            <h3>{cat.title}</h3>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+
+// =========================================
+// MÓDULO: ITEM ENTRANCE
+// =========================================
+const ItemEntrance: React.FC = () => {
+  const [items, setItems] = useState<ItemEntranceRecord[]>([]);
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
   const [editingId, setEditingId] = useState<string | null>(null);
 
-  const initialForm: InventoryFormData = {
+  const initialForm: ItemEntranceFormData = {
     date: '', modelPart: '', serial: '', po: '', orderDate: '', 
     quantityOrdered: 0, itemsArrived: 0, supplyCompany: '', itemName: ''
   };
-  const [formData, setFormData] = useState<InventoryFormData>(initialForm);
+  const [formData, setFormData] = useState<ItemEntranceFormData>(initialForm);
 
-  const collectionRef = collection(db, "inventory");
+  const collectionRef = collection(db, "itemEntrance");
 
-  const fetchInventory = async () => {
+  const fetchItems = async () => {
     const data = await getDocs(collectionRef);
-    setInventory(data.docs.map(doc => ({ ...doc.data(), id: doc.id })) as InventoryItem[]);
+    setItems(data.docs.map(doc => ({ ...doc.data(), id: doc.id })) as ItemEntranceRecord[]);
   };
 
-  useEffect(() => { fetchInventory(); }, []);
+  useEffect(() => { fetchItems(); }, []);
 
-  const handleOpenModal = (item: InventoryItem | null = null) => {
+  const handleOpenModal = (item: ItemEntranceRecord | null = null) => {
     if (item) {
       setEditingId(item.id);
       setFormData(item);
@@ -139,20 +265,20 @@ const InventoryLog: React.FC = () => {
   };
 
   const handleDelete = async (id: string) => {
-    if (window.confirm("⚠️ Delete this item?")) {
-      await deleteDoc(doc(db, "inventory", id));
-      fetchInventory();
+    if (window.confirm("⚠️ Delete this record permanently?")) {
+      await deleteDoc(doc(db, "itemEntrance", id));
+      fetchItems();
     }
   };
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (editingId) {
-      await updateDoc(doc(db, "inventory", editingId), { ...formData });
+      await updateDoc(doc(db, "itemEntrance", editingId), { ...formData });
     } else {
       await addDoc(collectionRef, formData);
     }
-    fetchInventory();
+    fetchItems();
     setIsModalOpen(false);
   };
 
@@ -160,10 +286,10 @@ const InventoryLog: React.FC = () => {
     <div className="card">
       <div className="card-header">
         <div className="card-header-text">
-          <h2>Inventory Log</h2>
+          <h2 style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><PackageSearch size={24}/> Item Entrance</h2>
           <p>Register and manage incoming products and materials.</p>
         </div>
-        <button className="action btn-primary" onClick={() => handleOpenModal(null)}>+ New Item</button>
+        <button className="action btn-primary" onClick={() => handleOpenModal(null)}><Plus size={18}/> New Entrance</button>
       </div>
       <div className="table-container">
         <table>
@@ -175,16 +301,16 @@ const InventoryLog: React.FC = () => {
             </tr>
           </thead>
           <tbody>
-            {inventory.length === 0 && <tr><td colSpan={10} className="empty-state">No inventory items.</td></tr>}
-            {inventory.map(item => (
+            {items.length === 0 && <tr><td colSpan={10} className="empty-state">No items registered yet.</td></tr>}
+            {items.map(item => (
               <tr key={item.id}>
                 <td>{item.date}</td><td>{item.modelPart}</td><td>{item.serial}</td><td>{item.po}</td>
                 <td>{item.orderDate}</td><td>{item.quantityOrdered}</td><td>{item.itemsArrived}</td>
                 <td>{item.supplyCompany}</td><td style={{fontWeight: 'bold'}}>{item.itemName}</td>
                 <td>
                   <div className="action-btns">
-                    <button className="btn-text-primary" onClick={() => handleOpenModal(item)}>Edit</button>
-                    <button className="btn-text-danger" onClick={() => handleDelete(item.id)}>Delete</button>
+                    <button className="icon-btn edit" onClick={() => handleOpenModal(item)}><Edit2 size={16}/></button>
+                    <button className="icon-btn delete" onClick={() => handleDelete(item.id)}><Trash2 size={16}/></button>
                   </div>
                 </td>
               </tr>
@@ -197,8 +323,8 @@ const InventoryLog: React.FC = () => {
         <div className="modal-overlay active" style={{ zIndex: 1000 }}>
           <div className="modal-content modal-large">
             <div className="modal-header">
-              <h3>{editingId ? "Edit Item" : "Add New Item to Inventory"}</h3>
-              <button type="button" className="close-modal" onClick={() => setIsModalOpen(false)}>&times;</button>
+              <h3>{editingId ? "Edit Item Entrance" : "Add New Item Entrance"}</h3>
+              <button className="close-modal" onClick={() => setIsModalOpen(false)}><X size={24}/></button>
             </div>
             <form onSubmit={handleSave}>
               <div className="form-grid">
@@ -214,7 +340,7 @@ const InventoryLog: React.FC = () => {
               </div>
               <div className="btn-container">
                 <button type="button" className="action btn-secondary" onClick={() => setIsModalOpen(false)}>Cancel</button>
-                <button type="submit" className="action btn-primary">Save Item</button>
+                <button type="submit" className="action btn-primary">Save Record</button>
               </div>
             </form>
           </div>
@@ -225,15 +351,11 @@ const InventoryLog: React.FC = () => {
 };
 
 // =========================================
-// COMPONENTE 3: MÓDULO DE TRABAJO (ACTUALIZADO)
+// MÓDULO: WORK ACTIVITY
 // =========================================
-interface WorkActivityProps {
-  currentUser: User;
-}
-
-const WorkActivity: React.FC<WorkActivityProps> = ({ currentUser }) => {
+const WorkActivity: React.FC<{currentUser: User}> = ({ currentUser }) => {
   const [orders, setOrders] = useState<JobOrder[]>([]);
-  const [inventoryList, setInventoryList] = useState<InventoryItem[]>([]); // NUEVO: Estado para lista de inventario
+  const [entranceList, setEntranceList] = useState<ItemEntranceRecord[]>([]); 
   const [isJobModalOpen, setIsJobModalOpen] = useState<boolean>(false);
   const [editingJob, setEditingJob] = useState<string | null>(null);
   const [viewingJob, setViewingJob] = useState<JobOrder | null>(null);
@@ -247,31 +369,27 @@ const WorkActivity: React.FC<WorkActivityProps> = ({ currentUser }) => {
   
   const [isProductModalOpen, setIsProductModalOpen] = useState<boolean>(false);
   const [currentProduct, setCurrentProduct] = useState<ProductFormData>({
-    inventoryId: '', modelPart: '', serial: '', po: '', quantity: 1, itemName: '', destination: ''
+    itemEntranceId: '', modelPart: '', serial: '', po: '', quantity: 1, itemName: '', destination: ''
   });
 
   const ordersCollectionRef = collection(db, "jobOrders");
   const productsCollectionRef = collection(db, "jobProducts");
-  const inventoryCollectionRef = collection(db, "inventory"); // Referencia a la tabla Inventory
+  const entranceCollectionRef = collection(db, "itemEntrance"); 
 
   const fetchData = async () => {
     try {
-      // Traer Ordenes
       const orderData = await getDocs(ordersCollectionRef);
       setOrders(orderData.docs.map((doc) => ({ ...doc.data(), id: doc.id })) as JobOrder[]);
-      // Traer Inventario (para el Dropdown)
-      const invData = await getDocs(inventoryCollectionRef);
-      setInventoryList(invData.docs.map(doc => ({ ...doc.data(), id: doc.id })) as InventoryItem[]);
-    } catch (error) {
-      console.error("Error fetching documents: ", error);
-    }
+      
+      const entranceData = await getDocs(entranceCollectionRef);
+      setEntranceList(entranceData.docs.map(doc => ({ ...doc.data(), id: doc.id })) as ItemEntranceRecord[]);
+    } catch (error) { console.error("Error", error); }
   };
 
   useEffect(() => { fetchData(); }, []);
 
   const visibleOrders = currentUser.role === 'admin' 
-    ? orders 
-    : orders.filter(o => o.createdBy === currentUser.username);
+    ? orders : orders.filter(o => o.createdBy === currentUser.username);
 
   const handleViewDetails = async (job: JobOrder) => {
     setViewingJob(job);
@@ -322,7 +440,6 @@ const WorkActivity: React.FC<WorkActivityProps> = ({ currentUser }) => {
       for (const product of formProducts) {
         if (!product.id && savedJobId) { 
           await addDoc(productsCollectionRef, { ...product, jobOrderId: savedJobId });
-          // AQUI PODRÍAS AÑADIR LÓGICA PARA RESTAR LA CANTIDAD DEL INVENTARIO ORIGINAL
         }
       }
       fetchData(); 
@@ -330,26 +447,15 @@ const WorkActivity: React.FC<WorkActivityProps> = ({ currentUser }) => {
     } catch (error) { console.error("Error", error); }
   };
 
-  // MANEJO DE SELECCIÓN DE PRODUCTO DEL DROPDOWN
-  const handleInventorySelection = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const selectedInvId = e.target.value;
-    if (selectedInvId) {
-      const item = inventoryList.find(i => i.id === selectedInvId);
+  const handleItemEntranceSelection = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const selectedId = e.target.value;
+    if (selectedId) {
+      const item = entranceList.find(i => i.id === selectedId);
       if (item) {
-        setCurrentProduct({
-          ...currentProduct,
-          inventoryId: item.id,
-          itemName: item.itemName,
-          modelPart: item.modelPart,
-          serial: item.serial,
-          po: item.po
-        });
+        setCurrentProduct({ ...currentProduct, itemEntranceId: item.id, itemName: item.itemName, modelPart: item.modelPart, serial: item.serial, po: item.po });
       }
     } else {
-      // Resetear si seleccionan la opción vacía
-      setCurrentProduct({
-        ...currentProduct, inventoryId: '', itemName: '', modelPart: '', serial: '', po: ''
-      });
+      setCurrentProduct({ ...currentProduct, itemEntranceId: '', itemName: '', modelPart: '', serial: '', po: '' });
     }
   };
 
@@ -361,7 +467,7 @@ const WorkActivity: React.FC<WorkActivityProps> = ({ currentUser }) => {
     } else {
       setFormProducts([...formProducts, { ...currentProduct, jobOrderId: 'pending' }]); 
     }
-    setCurrentProduct({ inventoryId: '', modelPart: '', serial: '', po: '', quantity: 1, itemName: '', destination: '' });
+    setCurrentProduct({ itemEntranceId: '', modelPart: '', serial: '', po: '', quantity: 1, itemName: '', destination: '' });
     setIsProductModalOpen(false);
   };
 
@@ -383,10 +489,10 @@ const WorkActivity: React.FC<WorkActivityProps> = ({ currentUser }) => {
     <div className="card">
       <div className="card-header">
         <div className="card-header-text">
-          <h2>Work Activity</h2>
+          <h2 style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><Briefcase size={24}/> Work Activity</h2>
           <p>Manage job orders and pending repairs. Click a row to view details.</p>
         </div>
-        <button className="action btn-primary" onClick={() => handleOpenModal(null)}>+ New Job Order</button>
+        <button className="action btn-primary" onClick={() => handleOpenModal(null)}><Plus size={18}/> New Job Order</button>
       </div>
 
       <div className="table-container">
@@ -407,14 +513,16 @@ const WorkActivity: React.FC<WorkActivityProps> = ({ currentUser }) => {
         </table>
       </div>
 
-      {/* MODAL: VER DETALLES */}
+      {/* MODAL DETALLES */}
       {viewingJob && (
         <div className="modal-overlay active">
           <div className="modal-content modal-large">
             <div className="modal-header">
               <h3>Job Order Details</h3>
-              <button type="button" className="close-modal" onClick={() => setViewingJob(null)}>&times;</button>
+              <button className="close-modal" onClick={() => setViewingJob(null)}><X size={24}/></button>
             </div>
+            
+            {/* SEPARACIÓN MEJORADA */}
             <div className="details-grid">
               <div className="detail-item"><span>Job Order:</span> <p>{viewingJob.jobOrder}</p></div>
               <div className="detail-item"><span>Destination:</span> <p>{viewingJob.destination}</p></div>
@@ -424,10 +532,14 @@ const WorkActivity: React.FC<WorkActivityProps> = ({ currentUser }) => {
               <div className="detail-item full-width"><span>Pending Work:</span> <p>{viewingJob.pendingWork || 'None'}</p></div>
             </div>
 
+            {/* SECCIÓN DE PRODUCTOS CON CAJA VISUAL CLARA */}
             <div className="products-section">
               <div className="products-header">
-                <h4>Associated Products / Materials</h4>
-                <button type="button" className="action btn-secondary btn-sm" onClick={() => setIsProductModalOpen(true)}>+ Add Product</button>
+                <div>
+                  <h4 style={{ margin: 0, fontSize: '1.1rem', color: 'var(--text-main)' }}>Associated Products / Materials</h4>
+                  <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-muted)' }}>Items attached to this specific job order.</p>
+                </div>
+                <button type="button" className="action btn-secondary btn-sm" onClick={() => setIsProductModalOpen(true)}><Plus size={16}/> Add Product</button>
               </div>
               <div className="table-container large-table">
                 <table>
@@ -452,23 +564,23 @@ const WorkActivity: React.FC<WorkActivityProps> = ({ currentUser }) => {
             </div>
             
             <div className="btn-container modal-footer-actions">
-              <button type="button" className="action btn-danger" onClick={() => handleDelete(viewingJob.id)}>Delete Order</button>
+              <button className="action btn-danger" onClick={() => handleDelete(viewingJob.id)}><Trash2 size={18}/> Delete Order</button>
               <div style={{ display: 'flex', gap: '10px' }}>
-                <button type="button" className="action btn-secondary" onClick={() => setViewingJob(null)}>Close</button>
-                <button type="button" className="action btn-primary" onClick={() => handleOpenModal(viewingJob)}>Edit Order</button>
+                <button className="action btn-secondary" onClick={() => setViewingJob(null)}>Close</button>
+                <button className="action btn-primary" onClick={() => handleOpenModal(viewingJob)}><Edit2 size={18}/> Edit Order</button>
               </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* MODAL: CREAR/EDITAR JOB ORDER */}
+      {/* MODAL CREAR / EDITAR */}
       {isJobModalOpen && (
         <div className="modal-overlay active" style={{ zIndex: 1000 }}>
           <div className="modal-content modal-large">
             <div className="modal-header">
               <h3>{editingJob ? "Edit Job Order" : "Create New Job Order"}</h3>
-              <button type="button" className="close-modal" onClick={() => setIsJobModalOpen(false)}>&times;</button>
+              <button className="close-modal" onClick={() => setIsJobModalOpen(false)}><X size={24}/></button>
             </div>
             <form onSubmit={handleSaveOrder}>
               <div className="form-grid">
@@ -485,10 +597,14 @@ const WorkActivity: React.FC<WorkActivityProps> = ({ currentUser }) => {
                 <div className="form-group"><label>Schedule</label><input type="date" value={formData.schedule} onChange={e => setFormData({...formData, schedule: e.target.value})} required /></div>
               </div>
 
+              {/* SECCIÓN DE PRODUCTOS CON CAJA VISUAL CLARA */}
               <div className="products-section">
                 <div className="products-header">
-                  <h4>Products / Materials List</h4>
-                  <button type="button" className="action btn-secondary btn-sm" onClick={() => setIsProductModalOpen(true)}>+ Add Product</button>
+                  <div>
+                    <h4 style={{ margin: 0, fontSize: '1.1rem', color: 'var(--text-main)' }}>Products / Materials List</h4>
+                    <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-muted)' }}>Items to be saved with this order.</p>
+                  </div>
+                  <button type="button" className="action btn-secondary btn-sm" onClick={() => setIsProductModalOpen(true)}><Plus size={16}/> Add Product</button>
                 </div>
                 <div className="table-container large-table">
                   <table>
@@ -521,63 +637,39 @@ const WorkActivity: React.FC<WorkActivityProps> = ({ currentUser }) => {
         </div>
       )}
 
-      {/* SUB-MODAL: AÑADIR PRODUCTO (Con DROPDOWN e Inputs de Solo Lectura) */}
+      {/* SUB-MODAL AGREGAR PRODUCTO */}
       {isProductModalOpen && (
         <div className="modal-overlay active" style={{ zIndex: 1100, backgroundColor: 'rgba(15, 23, 42, 0.8)' }}>
           <div className="modal-content" style={{ maxWidth: '650px', transform: 'translateY(0)' }}>
             <div className="modal-header">
               <h3>{viewingJob ? "Add Product directly to DB" : "Add Product to Order"}</h3>
-              <button type="button" className="close-modal" onClick={() => setIsProductModalOpen(false)}>&times;</button>
+              <button className="close-modal" onClick={() => setIsProductModalOpen(false)}><X size={24}/></button>
             </div>
             <form onSubmit={handleAddProductSubmit}>
               <div className="form-grid">
-                
-                {/* SELECTOR DESPLEGABLE DESDE INVENTARIO */}
                 <div className="form-group" style={{ gridColumn: 'span 2' }}>
-                  <label>Select Item from Inventory</label>
-                  <select 
-                    value={currentProduct.inventoryId} 
-                    onChange={handleInventorySelection} 
-                    required 
-                    className="dropdown-select"
-                  >
+                  <label>Select Item from Entrance Log</label>
+                  <select value={currentProduct.itemEntranceId} onChange={handleItemEntranceSelection} required className="dropdown-select">
                     <option value="">-- Choose an item --</option>
-                    {inventoryList.map(item => (
+                    {entranceList.map(item => (
                       <option key={item.id} value={item.id}>
                         {item.itemName} (Model: {item.modelPart} | Available: {item.itemsArrived})
                       </option>
                     ))}
                   </select>
                 </div>
-
-                {/* CAMPOS DE CANTIDAD Y DESTINO (Editables) */}
                 <div className="form-group"><label>Quantity</label><input type="number" min="1" value={currentProduct.quantity} onChange={e => setCurrentProduct({...currentProduct, quantity: Number(e.target.value)})} required /></div>
                 <div className="form-group"><label>Destination</label><input type="text" value={currentProduct.destination} onChange={e => setCurrentProduct({...currentProduct, destination: e.target.value})} required placeholder="Location..." /></div>
 
-                {/* CAMPOS BLOQUEADOS (Vienen de la DB) */}
-                <div className="form-group" style={{ gridColumn: 'span 2' }}><h4 style={{ fontSize: '0.85rem', color: 'var(--primary-color)', marginTop: '10px', marginBottom: '-5px' }}>Auto-filled from Inventory:</h4></div>
-                
-                <div className="form-group">
-                  <label>Model / Part #</label>
-                  <input type="text" value={currentProduct.modelPart} readOnly className="disabled-input" />
-                </div>
-                <div className="form-group">
-                  <label>Serial #</label>
-                  <input type="text" value={currentProduct.serial} readOnly className="disabled-input" />
-                </div>
-                <div className="form-group">
-                  <label>PO #</label>
-                  <input type="text" value={currentProduct.po} readOnly className="disabled-input" />
-                </div>
-                <div className="form-group">
-                  <label>Item Name (Ref)</label>
-                  <input type="text" value={currentProduct.itemName} readOnly className="disabled-input" />
-                </div>
+                <div className="form-group" style={{ gridColumn: 'span 2' }}><h4 style={{ fontSize: '0.85rem', color: 'var(--primary-color)', marginTop: '10px', marginBottom: '-5px' }}>Auto-filled from Entrance Log:</h4></div>
+                <div className="form-group"><label>Model / Part #</label><input type="text" value={currentProduct.modelPart} readOnly className="disabled-input" /></div>
+                <div className="form-group"><label>Serial #</label><input type="text" value={currentProduct.serial} readOnly className="disabled-input" /></div>
+                <div className="form-group"><label>PO #</label><input type="text" value={currentProduct.po} readOnly className="disabled-input" /></div>
+                <div className="form-group"><label>Item Name (Ref)</label><input type="text" value={currentProduct.itemName} readOnly className="disabled-input" /></div>
               </div>
-              
               <div className="btn-container">
                 <button type="button" className="action btn-secondary" onClick={() => setIsProductModalOpen(false)}>Cancel</button>
-                <button type="submit" className="action btn-primary" disabled={!currentProduct.inventoryId}>
+                <button type="submit" className="action btn-primary" disabled={!currentProduct.itemEntranceId}>
                   {viewingJob ? "Save to DB" : "Add to List"}
                 </button>
               </div>
@@ -589,56 +681,73 @@ const WorkActivity: React.FC<WorkActivityProps> = ({ currentUser }) => {
   );
 };
 
+
 // =========================================
-// COMPONENTE PRINCIPAL (App)
+// COMPONENTE PRINCIPAL (App) CON SIDEBAR
 // =========================================
 export default function App() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
-  const [activeModule, setActiveModule] = useState<string>('workActivity');
-  const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(false);
+  const [activeModule, setActiveModule] = useState<string>('workActivity'); // <- Modificado para que inicie en WorkActivity
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState<boolean>(false);
 
-  const handleLogin = (username: string, password: string) => {
-    if (username.toLowerCase() === 'admin' && password.toLowerCase() === 'admin') {
-      setCurrentUser({ username: 'admin', role: 'admin' });
-    } else {
-      setCurrentUser({ username, role: 'user' });
-    }
-  };
-
+  const handleLogin = (u: string, p: string) => setCurrentUser({ username: u, role: 'user' });
   if (!currentUser) return <AuthScreen onLogin={handleLogin} />;
 
   const handleMenuClick = (module: string) => {
     setActiveModule(module);
-    setIsSidebarOpen(false);
+    setIsMobileMenuOpen(false);
   };
 
   return (
     <div className="app-layout active">
-      <div className={`sidebar-overlay ${isSidebarOpen ? 'active' : ''}`} onClick={() => setIsSidebarOpen(false)}></div>
-      <aside className={`sidebar ${isSidebarOpen ? 'open' : ''}`}>
+      <div className={`sidebar-overlay ${isMobileMenuOpen ? 'active' : ''}`} onClick={() => setIsMobileMenuOpen(false)}></div>
+      
+      <aside className={`sidebar ${isSidebarCollapsed ? 'collapsed' : ''} ${isMobileMenuOpen ? 'open' : ''}`}>
         <div>
-          <div className="sidebar-header">App Mr Natan</div>
+          <div className="sidebar-header">
+            <div className="sidebar-logo">
+              <div className="logo-icon"><Briefcase size={24} /></div>
+              {!isSidebarCollapsed && <span className="logo-text">App Mr Natan</span>}
+            </div>
+            <button className="collapse-btn desktop-only" onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}>
+              {isSidebarCollapsed ? <ChevronRight size={20}/> : <ChevronLeft size={20}/>}
+            </button>
+          </div>
+
+          {/* Menú Actualizado: Order Entry ha sido eliminado */}
           <ul className="nav-links">
-            <li className={activeModule === 'orderEntry' ? 'active' : ''} onClick={() => handleMenuClick('orderEntry')}>Order Entry</li>
-            <li className={activeModule === 'workActivity' ? 'active' : ''} onClick={() => handleMenuClick('workActivity')}>Work Activity</li>
-            {/* INVENTORY AHORA ESTÁ ACTIVO */}
-            <li className={activeModule === 'inventory' ? 'active' : ''} onClick={() => handleMenuClick('inventory')}>Inventory Log</li>
+            <li className={activeModule === 'itemEntrance' ? 'active' : ''} onClick={() => handleMenuClick('itemEntrance')}>
+              <PackageSearch size={20}/> <span>Item Entrance</span>
+            </li>
+            <li className={activeModule === 'workActivity' ? 'active' : ''} onClick={() => handleMenuClick('workActivity')}>
+              <Briefcase size={20}/> <span>Work Activity</span>
+            </li>
+            <li className={activeModule === 'settings' ? 'active' : ''} onClick={() => handleMenuClick('settings')}>
+              <Settings size={20}/> <span>Settings</span>
+            </li>
           </ul>
         </div>
+        
         <div className="sidebar-footer">
-          <button className="action logout-btn" onClick={() => setCurrentUser(null)}>Log Out</button>
+          <button className="action logout-btn" onClick={() => setCurrentUser(null)}>
+            <LogOut size={20}/> <span>Log Out</span>
+          </button>
         </div>
       </aside>
 
       <div className="main-wrapper">
         <div className="mobile-header">
-          <h2>App Mr Natan</h2>
-          <button onClick={() => setIsSidebarOpen(true)}>☰</button>
+          <div style={{display: 'flex', alignItems: 'center', gap: '10px'}}>
+            <Briefcase size={24} /> <h2>App Mr Natan</h2>
+          </div>
+          <button className="icon-btn" style={{color: 'white'}} onClick={() => setIsMobileMenuOpen(true)}><Menu size={28}/></button>
         </div>
+        
         <main className="main-content">
-          {activeModule === 'orderEntry' && <div className="card"><h2>Order Entry</h2><p>Under construction...</p></div>}
-          {activeModule === 'inventory' && <InventoryLog />}
+          {activeModule === 'itemEntrance' && <ItemEntrance />}
           {activeModule === 'workActivity' && <WorkActivity currentUser={currentUser} />}
+          {activeModule === 'settings' && <SettingsModule />}
         </main>
       </div>
     </div>
