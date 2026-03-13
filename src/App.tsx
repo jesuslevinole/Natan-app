@@ -1,6 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, query, where } from 'firebase/firestore';
 import { db } from './firebase'; 
+import { 
+  PackageSearch, Briefcase, Settings, LogOut, 
+  MapPin, Truck, ChevronLeft, ChevronRight, Edit2, Trash2, Plus, 
+  X, ArrowLeft, Menu
+} from 'lucide-react';
 import './App.css';
 
 // =========================================
@@ -49,7 +54,7 @@ const AuthScreen: React.FC<{ onLogin: (u: string, p: string) => void }> = ({ onL
   return (
     <div className="auth-wrapper">
       <div className="auth-card">
-        <div style={{ fontSize: '32px', marginBottom: '15px' }}>💼</div>
+        <div className="catalog-icon" style={{ marginBottom: '15px' }}><Briefcase size={32} /></div>
         <h2>App Mr Natan</h2>
         <p className="subtitle">{isLogin ? "Test Mode: Any credentials work." : "Create a new account"}</p>
         <form onSubmit={handleSubmit}>
@@ -67,7 +72,7 @@ const AuthScreen: React.FC<{ onLogin: (u: string, p: string) => void }> = ({ onL
 // =========================================
 // COMPONENTE: GESTOR DE CATÁLOGOS
 // =========================================
-const CatalogManager: React.FC<{ title: string, collectionName: string, icon: string, onBack: () => void }> = ({ title, collectionName, icon, onBack }) => {
+const CatalogManager: React.FC<{ title: string, collectionName: string, icon: React.ReactNode, onBack: () => void }> = ({ title, collectionName, icon, onBack }) => {
   const [items, setItems] = useState<CatalogItem[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [viewingItem, setViewingItem] = useState<CatalogItem | null>(null);
@@ -110,13 +115,13 @@ const CatalogManager: React.FC<{ title: string, collectionName: string, icon: st
     <div className="card catalog-manager-anim">
       <div className="card-header" style={{ alignItems: 'center' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-          <button className="icon-btn" onClick={onBack} title="Back">⬅️</button>
+          <button className="icon-btn" onClick={onBack} title="Back to Settings"><ArrowLeft size={24} color="var(--text-main)"/></button>
           <div className="card-header-text">
-            <h2>{icon} {title} Catalog</h2>
+            <h2 style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>{icon} {title} Catalog</h2>
             <p>Manage list options for the system.</p>
           </div>
         </div>
-        <button className="action btn-primary" onClick={() => handleOpenModal(null)}>+ New {title}</button>
+        <button className="action btn-primary" onClick={() => handleOpenModal(null)}><Plus size={18}/> New {title}</button>
       </div>
 
       <div className="table-container">
@@ -130,8 +135,8 @@ const CatalogManager: React.FC<{ title: string, collectionName: string, icon: st
                 <td>{item.description || '-'}</td>
                 <td style={{ textAlign: 'center' }} onClick={(e) => e.stopPropagation()}>
                   <div className="action-btns">
-                    <button className="icon-btn edit" onClick={() => handleOpenModal(item)}>✏️</button>
-                    <button className="icon-btn delete" onClick={() => handleDelete(item.id)}>🗑️</button>
+                    <button className="icon-btn edit" onClick={() => handleOpenModal(item)}><Edit2 size={16}/></button>
+                    <button className="icon-btn delete" onClick={() => handleDelete(item.id)}><Trash2 size={16}/></button>
                   </div>
                 </td>
               </tr>
@@ -145,17 +150,17 @@ const CatalogManager: React.FC<{ title: string, collectionName: string, icon: st
           <div className="modal-content">
             <div className="modal-header">
               <h3>{title} Details</h3>
-              <button className="close-modal" onClick={() => setViewingItem(null)}>✕</button>
+              <button className="close-modal" onClick={() => setViewingItem(null)}><X size={24}/></button>
             </div>
             <div className="details-grid">
               <div className="detail-item full-width"><span>Name:</span> <p>{viewingItem.name}</p></div>
               <div className="detail-item full-width"><span>Description:</span> <p>{viewingItem.description || 'No description provided.'}</p></div>
             </div>
             <div className="btn-container modal-footer-actions">
-              <button className="action btn-danger" onClick={() => handleDelete(viewingItem.id)}>🗑️ Delete</button>
+              <button className="action btn-danger" onClick={() => handleDelete(viewingItem.id)}><Trash2 size={18}/> Delete</button>
               <div style={{ display: 'flex', gap: '10px' }}>
                 <button className="action btn-secondary" onClick={() => setViewingItem(null)}>Close</button>
-                <button className="action btn-primary" onClick={() => handleOpenModal(viewingItem)}>✏️ Edit</button>
+                <button className="action btn-primary" onClick={() => handleOpenModal(viewingItem)}><Edit2 size={18}/> Edit</button>
               </div>
             </div>
           </div>
@@ -167,7 +172,7 @@ const CatalogManager: React.FC<{ title: string, collectionName: string, icon: st
           <div className="modal-content">
             <div className="modal-header">
               <h3>{editingId ? `Edit ${title}` : `New ${title}`}</h3>
-              <button className="close-modal" onClick={() => setIsModalOpen(false)}>✕</button>
+              <button className="close-modal" onClick={() => setIsModalOpen(false)}><X size={24}/></button>
             </div>
             <form onSubmit={handleSave}>
               <div className="form-grid">
@@ -190,11 +195,11 @@ const CatalogManager: React.FC<{ title: string, collectionName: string, icon: st
 // MÓDULO: SETTINGS / CATALOGS
 // =========================================
 const SettingsModule: React.FC = () => {
-  const [activeCatalog, setActiveCatalog] = useState<{title: string, collection: string, icon: string} | null>(null);
+  const [activeCatalog, setActiveCatalog] = useState<{title: string, collection: string, icon: React.ReactNode} | null>(null);
 
   const catalogs = [
-    { id: 'destinations', title: 'Destinations', collection: 'destinations', icon: '📍' },
-    { id: 'supplies', title: 'Supply Companies', collection: 'supplies', icon: '🚚' },
+    { id: 'destinations', title: 'Destinations', collection: 'destinations', icon: <MapPin size={32}/> },
+    { id: 'supplies', title: 'Supply Companies', collection: 'supplies', icon: <Truck size={32}/> },
   ];
 
   if (activeCatalog) {
@@ -205,14 +210,14 @@ const SettingsModule: React.FC = () => {
     <div className="card">
       <div className="card-header">
         <div className="card-header-text">
-          <h2>⚙️ Settings & Catalogs</h2>
+          <h2 style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><Settings size={28}/> Settings & Catalogs</h2>
           <p>Manage your system parameters and lists.</p>
         </div>
       </div>
       <div className="catalog-grid">
         {catalogs.map(cat => (
           <div key={cat.id} className="catalog-card" onClick={() => setActiveCatalog(cat)}>
-            <div className="catalog-icon" style={{ fontSize: '32px' }}>{cat.icon}</div>
+            <div className="catalog-icon">{cat.icon}</div>
             <h3>{cat.title}</h3>
           </div>
         ))}
@@ -251,7 +256,7 @@ const ItemEntrance: React.FC = () => {
   };
 
   const handleDelete = async (id: string) => {
-    if (window.confirm("⚠️ Delete record?")) {
+    if (window.confirm("⚠️ Delete record permanently?")) {
       await deleteDoc(doc(db, "itemEntrance", id));
       fetchItems();
     }
@@ -269,10 +274,10 @@ const ItemEntrance: React.FC = () => {
     <div className="card">
       <div className="card-header">
         <div className="card-header-text">
-          <h2>📦 Item Entrance</h2>
+          <h2 style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><PackageSearch size={24}/> Item Entrance</h2>
           <p>Register and manage incoming products and materials.</p>
         </div>
-        <button className="action btn-primary" onClick={() => handleOpenModal(null)}>+ New Entrance</button>
+        <button className="action btn-primary" onClick={() => handleOpenModal(null)}><Plus size={18}/> New Entrance</button>
       </div>
       <div className="table-container">
         <table>
@@ -286,8 +291,8 @@ const ItemEntrance: React.FC = () => {
                 <td>{item.date}</td><td>{item.modelPart}</td><td>{item.serial}</td><td>{item.po}</td><td>{item.orderDate}</td><td>{item.quantityOrdered}</td><td>{item.itemsArrived}</td><td>{item.supplyCompany}</td><td style={{fontWeight: 'bold'}}>{item.itemName}</td>
                 <td>
                   <div className="action-btns">
-                    <button className="icon-btn edit" onClick={() => handleOpenModal(item)}>✏️</button>
-                    <button className="icon-btn delete" onClick={() => handleDelete(item.id)}>🗑️</button>
+                    <button className="icon-btn edit" onClick={() => handleOpenModal(item)}><Edit2 size={16}/></button>
+                    <button className="icon-btn delete" onClick={() => handleDelete(item.id)}><Trash2 size={16}/></button>
                   </div>
                 </td>
               </tr>
@@ -301,7 +306,7 @@ const ItemEntrance: React.FC = () => {
           <div className="modal-content modal-large">
             <div className="modal-header">
               <h3>{editingId ? "Edit Item Entrance" : "Add New Item Entrance"}</h3>
-              <button className="close-modal" onClick={() => setIsModalOpen(false)}>✕</button>
+              <button className="close-modal" onClick={() => setIsModalOpen(false)}><X size={24}/></button>
             </div>
             <form onSubmit={handleSave}>
               <div className="form-grid">
@@ -448,10 +453,10 @@ const WorkActivity: React.FC<{currentUser: User}> = ({ currentUser }) => {
     <div className="card">
       <div className="card-header">
         <div className="card-header-text">
-          <h2>💼 Work Activity</h2>
+          <h2 style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><Briefcase size={24}/> Work Activity</h2>
           <p>Manage job orders and pending repairs. Click a row to view details.</p>
         </div>
-        <button className="action btn-primary" onClick={() => handleOpenModal(null)}>+ New Job Order</button>
+        <button className="action btn-primary" onClick={() => handleOpenModal(null)}><Plus size={18}/> New Job Order</button>
       </div>
       <div className="table-container">
         <table>
@@ -473,7 +478,7 @@ const WorkActivity: React.FC<{currentUser: User}> = ({ currentUser }) => {
       {viewingJob && (
         <div className="modal-overlay active">
           <div className="modal-content modal-large">
-            <div className="modal-header"><h3>Job Order Details</h3><button className="close-modal" onClick={() => setViewingJob(null)}>✕</button></div>
+            <div className="modal-header"><h3>Job Order Details</h3><button className="close-modal" onClick={() => setViewingJob(null)}><X size={24}/></button></div>
             <div className="details-grid">
               <div className="detail-item"><span>Job Order:</span> <p>{viewingJob.jobOrder}</p></div>
               <div className="detail-item"><span>Destination:</span> <p>{viewingJob.destination}</p></div>
@@ -485,7 +490,7 @@ const WorkActivity: React.FC<{currentUser: User}> = ({ currentUser }) => {
             <div className="products-section">
               <div className="products-header">
                 <div><h4 style={{ margin: 0, fontSize: '1.1rem', color: 'var(--text-main)' }}>Associated Products / Materials</h4><p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-muted)' }}>Items attached to this specific job order.</p></div>
-                <button type="button" className="action btn-secondary btn-sm" onClick={() => setIsProductModalOpen(true)}>+ Add Product</button>
+                <button type="button" className="action btn-secondary btn-sm" onClick={() => setIsProductModalOpen(true)}><Plus size={16}/> Add Product</button>
               </div>
               <div className="table-container large-table">
                 <table>
@@ -501,8 +506,8 @@ const WorkActivity: React.FC<{currentUser: User}> = ({ currentUser }) => {
               </div>
             </div>
             <div className="btn-container modal-footer-actions">
-              <button className="action btn-danger" onClick={() => handleDelete(viewingJob.id)}>🗑️ Delete Order</button>
-              <div style={{ display: 'flex', gap: '10px' }}><button className="action btn-secondary" onClick={() => setViewingJob(null)}>Close</button><button className="action btn-primary" onClick={() => handleOpenModal(viewingJob)}>✏️ Edit Order</button></div>
+              <button className="action btn-danger" onClick={() => handleDelete(viewingJob.id)}><Trash2 size={18}/> Delete Order</button>
+              <div style={{ display: 'flex', gap: '10px' }}><button className="action btn-secondary" onClick={() => setViewingJob(null)}>Close</button><button className="action btn-primary" onClick={() => handleOpenModal(viewingJob)}><Edit2 size={18}/> Edit Order</button></div>
             </div>
           </div>
         </div>
@@ -511,7 +516,7 @@ const WorkActivity: React.FC<{currentUser: User}> = ({ currentUser }) => {
       {isJobModalOpen && (
         <div className="modal-overlay active" style={{ zIndex: 1000 }}>
           <div className="modal-content modal-large">
-            <div className="modal-header"><h3>{editingJob ? "Edit Job Order" : "Create New Job Order"}</h3><button className="close-modal" onClick={() => setIsJobModalOpen(false)}>✕</button></div>
+            <div className="modal-header"><h3>{editingJob ? "Edit Job Order" : "Create New Job Order"}</h3><button className="close-modal" onClick={() => setIsJobModalOpen(false)}><X size={24}/></button></div>
             <form onSubmit={handleSaveOrder}>
               <div className="form-grid">
                 <div className="form-group"><label>Job Order</label><input type="text" value={formData.jobOrder} onChange={e => setFormData({...formData, jobOrder: e.target.value})} required /></div>
@@ -522,12 +527,12 @@ const WorkActivity: React.FC<{currentUser: User}> = ({ currentUser }) => {
                 <div className="form-group"><label>Schedule</label><input type="date" value={formData.schedule} onChange={e => setFormData({...formData, schedule: e.target.value})} required /></div>
               </div>
               <div className="products-section">
-                <div className="products-header"><div><h4 style={{ margin: 0, fontSize: '1.1rem', color: 'var(--text-main)' }}>Products / Materials List</h4><p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-muted)' }}>Items to be saved with this order.</p></div><button type="button" className="action btn-secondary btn-sm" onClick={() => setIsProductModalOpen(true)}>+ Add Product</button></div>
+                <div className="products-header"><div><h4 style={{ margin: 0, fontSize: '1.1rem', color: 'var(--text-main)' }}>Products / Materials List</h4><p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-muted)' }}>Items to be saved with this order.</p></div><button type="button" className="action btn-secondary btn-sm" onClick={() => setIsProductModalOpen(true)}><Plus size={16}/> Add Product</button></div>
                 <div className="table-container large-table">
                   <table>
                     <thead><tr><th>Item Name</th><th>Model/Part #</th><th>Qty</th><th>Destination</th><th>Status</th><th style={{ textAlign: 'center' }}>Action</th></tr></thead>
                     <tbody>
-                      {formProducts.length === 0 ? <tr><td colSpan={6} className="empty-state">No products added yet.</td></tr> :
+                      {formProducts.length === 0 ? <tr><td colSpan={6} className="empty-state">No products added yet. Click "+ Add Product".</td></tr> :
                         formProducts.map((p, index) => (
                           <tr key={index}><td style={{ fontWeight: 600 }}>{p.itemName}</td><td>{p.modelPart}</td><td>{p.quantity}</td><td>{p.destination || '-'}</td><td><span style={{ fontSize: '0.75rem', color: p.id ? 'green' : 'orange', fontWeight: 'bold' }}>{p.id ? 'Saved' : 'Pending Save'}</span></td><td style={{ textAlign: 'center' }}><button type="button" className="btn-text-danger" onClick={() => handleRemoveProductFromForm(index, p)}>Remove</button></td></tr>
                         ))
@@ -545,7 +550,7 @@ const WorkActivity: React.FC<{currentUser: User}> = ({ currentUser }) => {
       {isProductModalOpen && (
         <div className="modal-overlay active" style={{ zIndex: 1100, backgroundColor: 'rgba(15, 23, 42, 0.8)' }}>
           <div className="modal-content" style={{ maxWidth: '650px', transform: 'translateY(0)' }}>
-            <div className="modal-header"><h3>{viewingJob ? "Add Product directly to DB" : "Add Product to Order"}</h3><button className="close-modal" onClick={() => setIsProductModalOpen(false)}>✕</button></div>
+            <div className="modal-header"><h3>{viewingJob ? "Add Product directly to DB" : "Add Product to Order"}</h3><button className="close-modal" onClick={() => setIsProductModalOpen(false)}><X size={24}/></button></div>
             <form onSubmit={handleAddProductSubmit}>
               <div className="form-grid">
                 <div className="form-group" style={{ gridColumn: 'span 2' }}><label>Select Item from Entrance Log</label><select value={currentProduct.itemEntranceId} onChange={handleItemEntranceSelection} required className="dropdown-select"><option value="">-- Choose an item --</option>{entranceList.map(item => (<option key={item.id} value={item.id}>{item.itemName} (Model: {item.modelPart} | Available: {item.itemsArrived})</option>))}</select></div>
@@ -566,6 +571,7 @@ const WorkActivity: React.FC<{currentUser: User}> = ({ currentUser }) => {
   );
 };
 
+
 // =========================================
 // COMPONENTE PRINCIPAL (App)
 // =========================================
@@ -575,9 +581,8 @@ export default function App() {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState<boolean>(false);
 
-  // Solución definitiva para Cloudflare: Usar la variablepassword en un log sutil
-  const handleLogin = (u: string, p: string) => {
-    console.log("Logged in with session:", !!p);
+  // LA CORRECCIÓN CLAVE PARA EL ERROR 'p' TS6133 ESTÁ AQUÍ (_p)
+  const handleLogin = (u: string, _p: string) => {
     setCurrentUser({ username: u, role: 'user' }); 
   };
 
@@ -594,21 +599,22 @@ export default function App() {
       <aside className={`sidebar ${isSidebarCollapsed ? 'collapsed' : ''} ${isMobileMenuOpen ? 'open' : ''}`}>
         <div>
           <div className="sidebar-header">
-            <div className="sidebar-logo"><div className="logo-icon">💼</div>{!isSidebarCollapsed && <span className="logo-text">App Mr Natan</span>}</div>
-            <button className="collapse-btn desktop-only" onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}>{isSidebarCollapsed ? '▶' : '◀'}</button>
+            <div className="sidebar-logo"><div className="logo-icon"><Briefcase size={24} /></div>{!isSidebarCollapsed && <span className="logo-text">App Mr Natan</span>}</div>
+            <button className="collapse-btn desktop-only" onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}>{isSidebarCollapsed ? <ChevronRight size={20}/> : <ChevronLeft size={20}/>}</button>
           </div>
           <ul className="nav-links">
-            <li className={activeModule === 'itemEntrance' ? 'active' : ''} onClick={() => handleMenuClick('itemEntrance')}>📦 <span>Item Entrance</span></li>
-            <li className={activeModule === 'workActivity' ? 'active' : ''} onClick={() => handleMenuClick('workActivity')}>💼 <span>Work Activity</span></li>
-            <li className={activeModule === 'settings' ? 'active' : ''} onClick={() => handleMenuClick('settings')}>⚙️ <span>Settings</span></li>
+            <li className={activeModule === 'itemEntrance' ? 'active' : ''} onClick={() => handleMenuClick('itemEntrance')}><PackageSearch size={20}/> <span>Item Entrance</span></li>
+            <li className={activeModule === 'workActivity' ? 'active' : ''} onClick={() => handleMenuClick('workActivity')}><Briefcase size={20}/> <span>Work Activity</span></li>
+            <li className={activeModule === 'settings' ? 'active' : ''} onClick={() => handleMenuClick('settings')}><Settings size={20}/> <span>Settings</span></li>
           </ul>
         </div>
-        <div className="sidebar-footer"><button className="action logout-btn" onClick={() => setCurrentUser(null)}>🚪 <span>Log Out</span></button></div>
+        <div className="sidebar-footer"><button className="action logout-btn" onClick={() => setCurrentUser(null)}><LogOut size={20}/> <span>Log Out</span></button></div>
       </aside>
       <div className="main-wrapper">
-        <div className="mobile-header"><div style={{display: 'flex', alignItems: 'center', gap: '10px'}}>💼 <h2>App Mr Natan</h2></div><button className="icon-btn" style={{color: 'white'}} onClick={() => setIsMobileMenuOpen(true)}>☰</button></div>
+        <div className="mobile-header"><div style={{display: 'flex', alignItems: 'center', gap: '10px'}}><Briefcase size={24} /> <h2>App Mr Natan</h2></div><button className="icon-btn" style={{color: 'white'}} onClick={() => setIsMobileMenuOpen(true)}><Menu size={28}/></button></div>
         <main className="main-content">
           {activeModule === 'itemEntrance' && <ItemEntrance />}
+          {/* CORRECCIÓN TYPESCRIPT (signo ! después de currentUser) */}
           {activeModule === 'workActivity' && <WorkActivity currentUser={currentUser!} />}
           {activeModule === 'settings' && <SettingsModule />}
         </main>
