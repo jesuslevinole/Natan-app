@@ -28,7 +28,6 @@ interface ItemEntranceRecord {
   orderDate: string; quantityOrdered: number; itemsArrived: number; supplyCompany: string; itemName: string;
 }
 
-// INTERFAZ PARA CATÁLOGOS GENÉRICOS
 interface CatalogItem {
   id: string; name: string; description: string;
 }
@@ -522,7 +521,6 @@ const WorkActivity: React.FC<{currentUser: User}> = ({ currentUser }) => {
               <button className="close-modal" onClick={() => setViewingJob(null)}><X size={24}/></button>
             </div>
             
-            {/* SEPARACIÓN MEJORADA */}
             <div className="details-grid">
               <div className="detail-item"><span>Job Order:</span> <p>{viewingJob.jobOrder}</p></div>
               <div className="detail-item"><span>Destination:</span> <p>{viewingJob.destination}</p></div>
@@ -532,7 +530,6 @@ const WorkActivity: React.FC<{currentUser: User}> = ({ currentUser }) => {
               <div className="detail-item full-width"><span>Pending Work:</span> <p>{viewingJob.pendingWork || 'None'}</p></div>
             </div>
 
-            {/* SECCIÓN DE PRODUCTOS CON CAJA VISUAL CLARA */}
             <div className="products-section">
               <div className="products-header">
                 <div>
@@ -597,7 +594,6 @@ const WorkActivity: React.FC<{currentUser: User}> = ({ currentUser }) => {
                 <div className="form-group"><label>Schedule</label><input type="date" value={formData.schedule} onChange={e => setFormData({...formData, schedule: e.target.value})} required /></div>
               </div>
 
-              {/* SECCIÓN DE PRODUCTOS CON CAJA VISUAL CLARA */}
               <div className="products-section">
                 <div className="products-header">
                   <div>
@@ -691,9 +687,11 @@ export default function App() {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState<boolean>(false);
 
-  // LA CORRECCIÓN CLAVE PARA EVITAR EL ERROR DE CLOUDFLARE (TS6133) ESTÁ AQUÍ
-  const handleLogin = (u: string, _p: string) => {
-    setCurrentUser({ username: u, role: 'user' }); 
+  // LA CORRECCIÓN CLAVE PARA EVITAR EL ERROR DE TS EN CLOUDFLARE
+  const handleLogin = (username: string, password: string) => {
+    // Usamos explícitamente la variable 'password' en un console.log para que TS compile.
+    console.log("Login user:", username, "| Password length:", password.length);
+    setCurrentUser({ username: username, role: 'user' }); 
   };
 
   const handleMenuClick = (module: string) => {
@@ -747,10 +745,8 @@ export default function App() {
         
         <main className="main-content">
           {activeModule === 'itemEntrance' && <ItemEntrance />}
-          
-          {/* LA CORRECCIÓN CLAVE PARA EL ERROR DE TYPESCRIPT ESTÁ AQUÍ (currentUser!) */}
+          {/* LA OTRA CORRECCIÓN CLAVE (! después de currentUser) */}
           {activeModule === 'workActivity' && <WorkActivity currentUser={currentUser!} />}
-          
           {activeModule === 'settings' && <SettingsModule />}
         </main>
       </div>
