@@ -2,8 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, query, where, onSnapshot } from 'firebase/firestore';
 import { db } from './firebase'; 
 import { 
-  PackageSearch, Briefcase, Settings, LogOut, 
-  MapPin, Truck, ChevronLeft, ChevronRight, Edit2, Trash2, Plus, 
+  PackageSearch, Briefcase, LogOut, 
+  MapPin, ChevronLeft, ChevronRight, Edit2, Trash2, Plus, 
   X, ArrowLeft, Menu, Building2, BookOpen
 } from 'lucide-react';
 import './App.css';
@@ -403,7 +403,6 @@ const ItemEntrance: React.FC = () => {
                 <div className="form-group"><label>Item Name</label><input type="text" value={formData.itemName} onChange={e => setFormData({...formData, itemName: e.target.value})} required /></div>
                 <div className="form-group"><label>Model / Part #</label><input type="text" value={formData.modelPart} onChange={e => setFormData({...formData, modelPart: e.target.value})} required /></div>
                 
-                {/* Modificado a Select alimentado por catálogo */}
                 <div className="form-group">
                   <label>Supply Company</label>
                   <select value={formData.supplyCompany} onChange={e => setFormData({...formData, supplyCompany: e.target.value})} required>
@@ -643,7 +642,6 @@ const WorkActivity: React.FC<{currentUser: User}> = ({ currentUser }) => {
               <div className="form-grid">
                 <div className="form-group"><label>Registration Date</label><input type="date" value={formData.createdAt} onChange={e => setFormData({...formData, createdAt: e.target.value})} required /></div>
                 
-                {/* Modificado a Select alimentado por catálogo */}
                 <div className="form-group">
                   <label>Destination</label>
                   <select value={formData.destination} onChange={e => setFormData({...formData, destination: e.target.value})} required>
@@ -719,26 +717,53 @@ export default function App() {
 
   if (!currentUser) return <AuthScreen onLogin={handleLogin} />;
 
+  const handleModuleChange = (module: string) => {
+    setActiveModule(module);
+    setIsMobileMenuOpen(false);
+  };
+
   return (
     <div className="app-layout active">
+      <div className={`sidebar-overlay ${isMobileMenuOpen ? 'active' : ''}`} onClick={() => setIsMobileMenuOpen(false)}></div>
+      
       <aside className={`sidebar ${isSidebarCollapsed ? 'collapsed' : ''} ${isMobileMenuOpen ? 'open' : ''}`}>
         <div className="sidebar-header">
-          <div className="sidebar-logo"><div className="logo-icon"><Briefcase size={24} /></div>{!isSidebarCollapsed && <span className="logo-text">Mr Natan</span>}</div>
+          <div className="sidebar-logo">
+            <div className="logo-icon"><Briefcase size={24} /></div>
+            {!isSidebarCollapsed && <span className="logo-text">Mr Natan</span>}
+          </div>
+          <button type="button" className="collapse-btn desktop-only" onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}>
+            {isSidebarCollapsed ? <ChevronRight size={20}/> : <ChevronLeft size={20}/>}
+          </button>
         </div>
         <ul className="nav-links">
-          <li className={activeModule === 'workActivity' ? 'active' : ''} onClick={() => setActiveModule('workActivity')}>
+          <li className={activeModule === 'workActivity' ? 'active' : ''} onClick={() => handleModuleChange('workActivity')}>
             <Briefcase size={20}/> <span>Work Activity</span>
           </li>
-          <li className={activeModule === 'itemEntrance' ? 'active' : ''} onClick={() => setActiveModule('itemEntrance')}>
+          <li className={activeModule === 'itemEntrance' ? 'active' : ''} onClick={() => handleModuleChange('itemEntrance')}>
             <PackageSearch size={20}/> <span>Item Entrance</span>
           </li>
-          <li className={activeModule === 'catalogs' ? 'active' : ''} onClick={() => setActiveModule('catalogs')}>
+          <li className={activeModule === 'catalogs' ? 'active' : ''} onClick={() => handleModuleChange('catalogs')}>
             <BookOpen size={20}/> <span>Catalogs</span>
           </li>
         </ul>
-        <div className="sidebar-footer"><button className="action logout-btn" onClick={() => setCurrentUser(null)}><LogOut size={20}/> <span>Log Out</span></button></div>
+        <div className="sidebar-footer">
+          <button type="button" className="action logout-btn" onClick={() => setCurrentUser(null)}>
+            <LogOut size={20}/> <span>Log Out</span>
+          </button>
+        </div>
       </aside>
+      
       <div className="main-wrapper">
+        <div className="mobile-header">
+          <div style={{display: 'flex', alignItems: 'center', gap: '10px'}}>
+            <Briefcase size={24} /> <h2>Mr Natan</h2>
+          </div>
+          <button type="button" className="icon-btn" style={{color: 'white'}} onClick={() => setIsMobileMenuOpen(true)}>
+            <Menu size={28}/>
+          </button>
+        </div>
+
         <main className="main-content">
           {activeModule === 'workActivity' && <WorkActivity currentUser={currentUser} />}
           {activeModule === 'itemEntrance' && <ItemEntrance />}
