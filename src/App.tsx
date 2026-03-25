@@ -606,7 +606,6 @@ const ItemEntrance: React.FC = () => {
     return initialArrived - used;
   };
 
-  // Historial del ítem actual
   const itemHistory = allJobProducts
     .filter(p => p.itemEntranceId === editingId)
     .map(p => {
@@ -790,7 +789,6 @@ const ItemEntrance: React.FC = () => {
               </div>
             </form>
 
-            {/* SECCIÓN DE HISTORIAL DE INSTALACIONES */}
             {editingId && (
               <div className="products-section" style={{ marginTop: '20px', borderTop: '1px solid #e2e8f0', paddingTop: '20px' }}>
                 <div className="products-header">
@@ -836,7 +834,6 @@ const ItemEntrance: React.FC = () => {
         </div>
       )}
 
-      {/* MODAL EXPANDIDO DEL HISTORIAL */}
       {isExpandHistoryOpen && (
         <div className="modal-overlay active" style={{ zIndex: 1200 }}>
           <div className="modal-content modal-large">
@@ -1237,6 +1234,7 @@ const WorkActivity: React.FC<{currentUser: User}> = ({ currentUser }) => {
 
       {isProductModalOpen && (
         <div className="modal-overlay active" style={{ zIndex: 1100 }}>
+          {/* Se ha cambiado el maxWidth a 'modal-large' equivalente */}
           <div className="modal-content modal-large">
             <form onSubmit={handleAddProductSubmit}>
               <div className="modal-header">
