@@ -4,7 +4,7 @@ import { db } from './firebase';
 import { 
   PackageSearch, Briefcase, LogOut, Settings,
   MapPin, ChevronLeft, ChevronRight, Edit2, Trash2, Plus, 
-  X, ArrowLeft, Menu, Building2, BookOpen, Search
+  X, ArrowLeft, Menu, Building2, BookOpen, Search, Maximize2
 } from 'lucide-react';
 import './App.css';
 
@@ -198,7 +198,7 @@ const useFormConfig = (formKey: string, defaultRequired: string[]) => {
 // COMPONENTE: SELECTOR CON BUSCADOR
 // =========================================
 const SearchableSelect: React.FC<{
-  options: { id: string; label: string; searchKeywords: string }[];
+  options: { id: string; label: string; searchKeywords?: string; render?: React.ReactNode }[];
   value: string;
   onChange: (id: string) => void;
   placeholder?: string;
@@ -224,9 +224,10 @@ const SearchableSelect: React.FC<{
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const filteredOptions = options.filter(o => 
-    o.searchKeywords.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredOptions = options.filter(o => {
+    const target = o.searchKeywords || o.label;
+    return target.toLowerCase().includes(searchTerm.toLowerCase());
+  });
 
   return (
     <div ref={containerRef} style={{ position: 'relative', width: '100%' }}>
@@ -243,18 +244,18 @@ const SearchableSelect: React.FC<{
           onFocus={() => setIsOpen(true)}
           required={required && !value}
           style={{
-            width: '100%', padding: '10px 35px 10px 12px', border: '1px solid #cbd5e1',
-            borderRadius: '6px', fontSize: '0.95rem', outline: 'none', color: '#334155'
+            width: '100%', padding: '12px 40px 12px 14px', border: '1px solid #cbd5e1',
+            borderRadius: '8px', fontSize: '1rem', outline: 'none', color: '#334155'
           }}
         />
-        <Search size={16} color="#94a3b8" style={{ position: 'absolute', right: '12px' }} />
+        <Search size={18} color="#94a3b8" style={{ position: 'absolute', right: '14px' }} />
       </div>
       
       {isOpen && (
         <ul style={{
           position: 'absolute', top: '100%', left: 0, right: 0, background: 'white', 
-          border: '1px solid #e2e8f0', borderRadius: '6px', marginTop: '4px', maxHeight: '220px', 
-          overflowY: 'auto', zIndex: 100, listStyle: 'none', padding: 0, boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
+          border: '1px solid #e2e8f0', borderRadius: '8px', marginTop: '6px', maxHeight: '350px', 
+          overflowY: 'auto', zIndex: 100, listStyle: 'none', padding: '6px', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)'
         }}>
           {filteredOptions.length > 0 ? (
             filteredOptions.map(opt => (
@@ -265,15 +266,18 @@ const SearchableSelect: React.FC<{
                   setSearchTerm(opt.label);
                   setIsOpen(false);
                 }}
-                style={{ padding: '10px 12px', cursor: 'pointer', borderBottom: '1px solid #f1f5f9', fontSize: '0.9rem', color: '#334155' }}
+                style={{ 
+                  padding: '12px 14px', cursor: 'pointer', borderBottom: '1px solid #f1f5f9', 
+                  borderRadius: '6px', transition: 'background-color 0.2s'
+                }}
                 onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8fafc'}
-                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'white'}
+                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
               >
-                {opt.label}
+                {opt.render ? opt.render : opt.label}
               </li>
             ))
           ) : (
-            <li style={{ padding: '10px 12px', color: '#94a3b8', fontSize: '0.9rem' }}>No results found...</li>
+            <li style={{ padding: '15px', color: '#94a3b8', fontSize: '0.95rem', textAlign: 'center' }}>No results found...</li>
           )}
         </ul>
       )}
@@ -545,12 +549,16 @@ const CatalogsModule: React.FC = () => {
 const ItemEntrance: React.FC = () => {
   const [items, setItems] = useState<ItemEntranceRecord[]>([]);
   const [allJobProducts, setAllJobProducts] = useState<JobProduct[]>([]);
+  const [allOrders, setAllOrders] = useState<JobOrder[]>([]); // Para el historial expandido
   
   const [searchTerm, setSearchTerm] = useState(''); 
   const [stockFilter, setStockFilter] = useState<'ALL' | 'AVAILABLE' | 'UNAVAILABLE'>('ALL'); 
   
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
   const [isConfigOpen, setIsConfigOpen] = useState<boolean>(false);
+  const [isExpandHistoryOpen, setIsExpandHistoryOpen] = useState<boolean>(false);
+  const [historySearchTerm, setHistorySearchTerm] = useState('');
+  
   const [editingId, setEditingId] = useState<string | null>(null);
   
   const supplyCompanies = useCatalogOptions('supply_companies', 'company');
@@ -585,7 +593,10 @@ const ItemEntrance: React.FC = () => {
     setItems(mapped as ItemEntranceRecord[]);
 
     const prodData = await getDocs(collection(db, "jobProducts"));
-    setAllJobProducts(prodData.docs.map(doc => doc.data() as JobProduct));
+    setAllJobProducts(prodData.docs.map(doc => ({ ...doc.data(), id: doc.id }) as JobProduct));
+    
+    const ordersData = await getDocs(collection(db, "jobOrders"));
+    setAllOrders(ordersData.docs.map(doc => ({ ...doc.data(), id: doc.id }) as JobOrder));
   };
 
   useEffect(() => { fetchItems(); }, []);
@@ -594,6 +605,30 @@ const ItemEntrance: React.FC = () => {
     const used = allJobProducts.filter(p => p.itemEntranceId === itemId).reduce((acc, p) => acc + p.quantity, 0);
     return initialArrived - used;
   };
+
+  // Historial del ítem actual
+  const itemHistory = allJobProducts
+    .filter(p => p.itemEntranceId === editingId)
+    .map(p => {
+      const order = allOrders.find(o => o.id === p.jobOrderId);
+      return {
+        id: p.id,
+        quantity: p.quantity,
+        jobOrder: order?.jobOrder || 'Unknown',
+        destination: order?.destination || 'Unknown',
+        date: order?.createdAt || '',
+      };
+    })
+    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+  const filteredHistory = itemHistory.filter(h => {
+    const s = historySearchTerm.toLowerCase();
+    return (
+      h.jobOrder.toLowerCase().includes(s) || 
+      h.destination.toLowerCase().includes(s) || 
+      formatDateDisplay(h.date).includes(s)
+    );
+  });
 
   const handleOpenModal = (item: ItemEntranceRecord | null = null) => {
     if (item) { 
@@ -683,16 +718,15 @@ const ItemEntrance: React.FC = () => {
               <th style={thStyle}>Company</th>
               <th style={thStyle}>Qty</th>
               <th style={thStyle}>Stock</th>
-              <th style={{ textAlign: 'center', ...thStyle }}>Actions</th>
             </tr>
           </thead>
           <tbody>
-            {filteredItems.length === 0 && <tr><td colSpan={11} className="empty-state">No records found.</td></tr>}
+            {filteredItems.length === 0 && <tr><td colSpan={10} className="empty-state">No records found.</td></tr>}
             {filteredItems.map(item => {
               const currentStock = getStock(item.id, item.itemsArrived);
               const isAvailable = currentStock > 0;
               return (
-                <tr key={item.id}>
+                <tr key={item.id} className="clickable-row" onClick={() => handleOpenModal(item)}>
                   <td><SeqBadge seq={item.visualSeq} /></td>
                   <td style={{ textAlign: 'center' }}>
                     <span style={getInventoryStatusStyles(isAvailable)}>
@@ -709,11 +743,6 @@ const ItemEntrance: React.FC = () => {
                   <td style={{ color: isAvailable ? 'inherit' : '#ef4444', fontWeight: isAvailable ? 'normal' : 'bold' }}>
                     {currentStock}
                   </td>
-                  <td style={{ textAlign: 'center' }}>
-                    <div className="action-btns">
-                      <button className="icon-btn edit" onClick={() => handleOpenModal(item)}><Edit2 size={16}/></button>
-                    </div>
-                  </td>
                 </tr>
               );
             })}
@@ -725,13 +754,20 @@ const ItemEntrance: React.FC = () => {
 
       {isModalOpen && (
         <div className="modal-overlay active">
-          <div className="modal-content modal-large">
+          <div className="modal-content modal-large" style={{ maxHeight: '90vh', overflowY: 'auto' }}>
             <form onSubmit={handleSave}>
               <div className="modal-header">
                 <h3>{editingId ? "Edit Entrance" : "New Entrance"}</h3>
                 <div style={{ display: 'flex', gap: '10px' }}>
                   <button type="button" className="icon-btn" onClick={() => setIsConfigOpen(true)} title="Configure Required Fields"><Settings size={20}/></button>
                   <button type="submit" className="action btn-primary">Save Changes</button>
+                  <button type="button" className="action btn-danger" onClick={async () => {
+                    if (editingId && window.confirm("Delete this record permanently?")) {
+                      await deleteDoc(doc(db, "itemEntrance", editingId));
+                      setIsModalOpen(false);
+                      fetchItems();
+                    }
+                  }}><Trash2 size={16}/> Delete</button>
                   <button type="button" className="close-modal" onClick={() => setIsModalOpen(false)}><X size={24}/></button>
                 </div>
               </div>
@@ -753,6 +789,87 @@ const ItemEntrance: React.FC = () => {
                 <div className="form-group"><label>Items Arrived (Initial Total)</label><input type="number" value={formData.itemsArrived} onChange={e => setFormData({...formData, itemsArrived: Number(e.target.value)})} /></div>
               </div>
             </form>
+
+            {/* SECCIÓN DE HISTORIAL DE INSTALACIONES */}
+            {editingId && (
+              <div className="products-section" style={{ marginTop: '20px', borderTop: '1px solid #e2e8f0', paddingTop: '20px' }}>
+                <div className="products-header">
+                  <div>
+                    <h4 style={{ margin: 0, color: 'var(--primary-color)' }}>Installation History</h4>
+                    <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-muted)' }}>Recent Work Activities using this item</p>
+                  </div>
+                  <button type="button" className="action btn-secondary btn-sm" onClick={() => setIsExpandHistoryOpen(true)}>
+                    <Maximize2 size={16}/> Expand
+                  </button>
+                </div>
+                <div className="table-container large-table" style={{ maxHeight: '200px', overflowY: 'auto' }}>
+                  <table>
+                    <thead>
+                      <tr>
+                        <th style={thStyle}>Date</th>
+                        <th style={thStyle}>Ordered By</th>
+                        <th style={thStyle}>Destination</th>
+                        <th style={{ textAlign: 'center', ...thStyle }}>Qty Used</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {itemHistory.length === 0 && <tr><td colSpan={4} className="empty-state">No installation history for this item yet.</td></tr>}
+                      {itemHistory.slice(0, 3).map((h, i) => (
+                        <tr key={i}>
+                          <td>{formatDateDisplay(h.date)}</td>
+                          <td style={{ fontWeight: 'bold' }}>{h.jobOrder}</td>
+                          <td>{h.destination}</td>
+                          <td style={{ textAlign: 'center', fontWeight: 'bold', color: '#ef4444' }}>-{h.quantity}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  {itemHistory.length > 3 && (
+                    <div style={{ textAlign: 'center', padding: '10px', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                      Viewing 3 of {itemHistory.length} records. Click "Expand" to see all.
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* MODAL EXPANDIDO DEL HISTORIAL */}
+      {isExpandHistoryOpen && (
+        <div className="modal-overlay active" style={{ zIndex: 1200 }}>
+          <div className="modal-content modal-large">
+            <div className="modal-header">
+              <h3>Installation History: <span style={{ color: 'var(--primary-color)' }}>{formData.itemName}</span></h3>
+              <div style={{ display: 'flex', gap: '15px', alignItems: 'center' }}>
+                <SearchBar value={historySearchTerm} onChange={setHistorySearchTerm} />
+                <button type="button" className="close-modal" onClick={() => setIsExpandHistoryOpen(false)}><X size={24}/></button>
+              </div>
+            </div>
+            <div className="table-container large-table" style={{ marginTop: '15px', maxHeight: '60vh', overflowY: 'auto' }}>
+              <table>
+                <thead>
+                  <tr>
+                    <th style={thStyle}>Date</th>
+                    <th style={thStyle}>Ordered By</th>
+                    <th style={thStyle}>Destination</th>
+                    <th style={{ textAlign: 'center', ...thStyle }}>Qty Used</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredHistory.length === 0 && <tr><td colSpan={4} className="empty-state">No records found matching your search.</td></tr>}
+                  {filteredHistory.map((h, i) => (
+                    <tr key={i}>
+                      <td>{formatDateDisplay(h.date)}</td>
+                      <td style={{ fontWeight: 'bold' }}>{h.jobOrder}</td>
+                      <td>{h.destination}</td>
+                      <td style={{ textAlign: 'center', fontWeight: 'bold', color: '#ef4444' }}>-{h.quantity}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       )}
@@ -1120,7 +1237,7 @@ const WorkActivity: React.FC<{currentUser: User}> = ({ currentUser }) => {
 
       {isProductModalOpen && (
         <div className="modal-overlay active" style={{ zIndex: 1100 }}>
-          <div className="modal-content" style={{ maxWidth: '650px' }}>
+          <div className="modal-content" style={{ maxWidth: '800px' }}>
             <form onSubmit={handleAddProductSubmit}>
               <div className="modal-header">
                 <h3>Add Product</h3>
@@ -1130,18 +1247,44 @@ const WorkActivity: React.FC<{currentUser: User}> = ({ currentUser }) => {
                   <button type="button" className="close-modal" onClick={() => setIsProductModalOpen(false)}><X size={24}/></button>
                 </div>
               </div>
-              <div className="form-grid">
-                <div className="form-group" style={{ gridColumn: 'span 2' }}>
+              <div className="form-grid" style={{ gridTemplateColumns: '3fr 1fr' }}>
+                <div className="form-group">
                   <label>Select Item {isProdReq('itemEntranceId') && '*'}</label>
                   <SearchableSelect 
-                    options={entranceList.map(item => ({ 
-                      id: item.id, 
-                      label: `${item.itemName} | Model: ${item.modelPart || '-'} | Serial: ${item.serial || '-'} | PO: ${item.po || '-'} | Co: ${item.supplyCompany || '-'}`,
-                      searchKeywords: `${item.itemName} ${item.modelPart} ${item.serial} ${item.po} ${item.supplyCompany}`
-                    }))}
+                    options={entranceList.map(item => {
+                      const stock = getAvailableStock(item.id);
+                      return {
+                        id: item.id, 
+                        label: `${item.itemName} | Model: ${item.modelPart || '-'} | Serial: ${item.serial || '-'} | PO: ${item.po || '-'}`,
+                        searchKeywords: `${item.itemName} ${item.modelPart} ${item.serial} ${item.po} ${item.supplyCompany}`,
+                        render: (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                            <div style={{ fontWeight: 'bold', color: '#1e293b', fontSize: '1.05rem', display: 'flex', alignItems: 'center' }}>
+                              {item.itemName} 
+                              <span style={{ 
+                                color: stock > 0 ? '#059669' : '#dc2626', 
+                                marginLeft: '12px', 
+                                fontSize: '0.8rem',
+                                backgroundColor: stock > 0 ? '#d1fae5' : '#fee2e2',
+                                padding: '2px 8px',
+                                borderRadius: '12px'
+                              }}>
+                                Stock: {stock}
+                              </span>
+                            </div>
+                            <div style={{ display: 'flex', gap: '15px', fontSize: '0.85rem', color: '#64748b', flexWrap: 'wrap' }}>
+                              <span><b style={{color:'#475569'}}>Model:</b> {item.modelPart || '-'}</span>
+                              <span><b style={{color:'#475569'}}>Serial:</b> {item.serial || '-'}</span>
+                              <span><b style={{color:'#475569'}}>PO:</b> {item.po || '-'}</span>
+                              <span><b style={{color:'#475569'}}>Company:</b> {item.supplyCompany || '-'}</span>
+                            </div>
+                          </div>
+                        )
+                      };
+                    })}
                     value={currentProduct.itemEntranceId} 
                     onChange={handleItemEntranceSelection} 
-                    placeholder="-- Type to search item --"
+                    placeholder="-- Type name, model, serial, PO... --"
                     required={isProdReq('itemEntranceId')}
                   />
                 </div>
@@ -1167,7 +1310,7 @@ const WorkActivity: React.FC<{currentUser: User}> = ({ currentUser }) => {
                     }}
                   />
                   {currentProduct.itemEntranceId && getAvailableStock(currentProduct.itemEntranceId) <= 0 && (
-                    <span style={{color: '#ef4444', fontSize: '0.75rem', marginTop: '4px', display: 'block'}}>Out of stock</span>
+                    <span style={{color: '#ef4444', fontSize: '0.75rem', marginTop: '4px', display: 'block', fontWeight: 'bold'}}>Out of stock</span>
                   )}
                   {currentProduct.itemEntranceId && getAvailableStock(currentProduct.itemEntranceId) > 0 && (
                     <span style={{color: '#64748b', fontSize: '0.75rem', marginTop: '4px', display: 'block'}}>Max available: {getAvailableStock(currentProduct.itemEntranceId)}</span>
