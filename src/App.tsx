@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, query, where, onSnapshot } from 'firebase/firestore';
 import { db } from './firebase'; 
 import { 
@@ -180,6 +180,102 @@ const useFormConfig = (formKey: string, defaultRequired: string[]) => {
   const isRequired = (field: string) => requiredFields.includes(field);
 
   return { requiredFields, toggleRequired, isRequired };
+};
+
+// =========================================
+// COMPONENTE: SELECTOR CON BUSCADOR
+// =========================================
+const SearchableSelect: React.FC<{
+  options: { id: string; label: string }[];
+  value: string;
+  onChange: (id: string) => void;
+  placeholder?: string;
+  required?: boolean;
+}> = ({ options, value, onChange, placeholder = "Search...", required }) => {
+  const [searchTerm, setSearchTerm] = useState('');
+  const [isOpen, setIsOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const selectedOpt = options.find(o => o.id === value);
+    if (selectedOpt) setSearchTerm(selectedOpt.label);
+    else setSearchTerm('');
+  }, [value, options]);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const filteredOptions = options.filter(o => 
+    o.label.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  return (
+    <div ref={containerRef} style={{ position: 'relative', width: '100%' }}>
+      <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+        <input
+          type="text"
+          placeholder={placeholder}
+          value={isOpen ? searchTerm : (options.find(o => o.id === value)?.label || '')}
+          onChange={(e) => {
+            setSearchTerm(e.target.value);
+            setIsOpen(true);
+            if (e.target.value === '') onChange(''); // Limpia si se borra todo
+          }}
+          onFocus={() => setIsOpen(true)}
+          required={required && !value}
+          style={{
+            width: '100%',
+            padding: '10px 35px 10px 12px',
+            border: '1px solid #cbd5e1',
+            borderRadius: '6px',
+            fontSize: '0.95rem',
+            outline: 'none',
+            color: '#334155'
+          }}
+        />
+        <Search size={16} color="#94a3b8" style={{ position: 'absolute', right: '12px' }} />
+      </div>
+      
+      {isOpen && (
+        <ul style={{
+          position: 'absolute', top: '100%', left: 0, right: 0,
+          background: 'white', border: '1px solid #e2e8f0', borderRadius: '6px',
+          marginTop: '4px', maxHeight: '220px', overflowY: 'auto', zIndex: 100,
+          listStyle: 'none', padding: 0, boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
+        }}>
+          {filteredOptions.length > 0 ? (
+            filteredOptions.map(opt => (
+              <li
+                key={opt.id}
+                onMouseDown={() => {
+                  onChange(opt.id);
+                  setSearchTerm(opt.label);
+                  setIsOpen(false);
+                }}
+                style={{ 
+                  padding: '10px 12px', cursor: 'pointer', 
+                  borderBottom: '1px solid #f1f5f9', fontSize: '0.9rem', color: '#334155'
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8fafc'}
+                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'white'}
+              >
+                {opt.label}
+              </li>
+            ))
+          ) : (
+            <li style={{ padding: '10px 12px', color: '#94a3b8', fontSize: '0.9rem' }}>No results found...</li>
+          )}
+        </ul>
+      )}
+    </div>
+  );
 };
 
 // =========================================
@@ -769,8 +865,7 @@ const WorkActivity: React.FC<{currentUser: User}> = ({ currentUser }) => {
     } catch (error) { console.error("Error", error); }
   };
 
-  const handleItemEntranceSelection = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const selectedId = e.target.value;
+  const handleItemEntranceSelection = (selectedId: string) => {
     if (selectedId) {
       const item = entranceList.find(i => i.id === selectedId);
       if (item) setCurrentProduct({ ...currentProduct, itemEntranceId: item.id, itemName: item.itemName, modelPart: item.modelPart, serial: item.serial, po: item.po });
@@ -973,10 +1068,13 @@ const WorkActivity: React.FC<{currentUser: User}> = ({ currentUser }) => {
               <div className="form-grid">
                 <div className="form-group" style={{ gridColumn: 'span 2' }}>
                   <label>Select Item {isProdReq('itemEntranceId') && '*'}</label>
-                  <select value={currentProduct.itemEntranceId} onChange={handleItemEntranceSelection} required={isProdReq('itemEntranceId')}>
-                    <option value="">-- Choose item --</option>
-                    {entranceList.map(item => (<option key={item.id} value={item.id}>{item.itemName} ({item.modelPart})</option>))}
-                  </select>
+                  <SearchableSelect 
+                    options={entranceList.map(item => ({ id: item.id, label: `${item.itemName} (${item.modelPart || 'No Model'})` }))}
+                    value={currentProduct.itemEntranceId} 
+                    onChange={handleItemEntranceSelection} 
+                    placeholder="-- Type to search item --"
+                    required={isProdReq('itemEntranceId')}
+                  />
                 </div>
                 <div className="form-group"><label>Quantity {isProdReq('quantity') && '*'}</label><input type="number" min="1" value={currentProduct.quantity} onChange={e => setCurrentProduct({...currentProduct, quantity: Number(e.target.value)})} required={isProdReq('quantity')} /></div>
               </div>
