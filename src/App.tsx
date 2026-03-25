@@ -117,7 +117,6 @@ const getStatusStyles = (status: 'YES' | 'NO' | string) => ({
   boxShadow: '0 2px 4px rgba(0,0,0,0.05)'
 });
 
-// Estilos del nuevo Status Badge (Disponible / No Disponible)
 const getInventoryStatusStyles = (isAvailable: boolean) => ({
   backgroundColor: isAvailable ? '#10b981' : '#ef4444', 
   color: '#ffffff',
@@ -548,7 +547,7 @@ const ItemEntrance: React.FC = () => {
   const [allJobProducts, setAllJobProducts] = useState<JobProduct[]>([]);
   
   const [searchTerm, setSearchTerm] = useState(''); 
-  const [stockFilter, setStockFilter] = useState<'ALL' | 'AVAILABLE' | 'UNAVAILABLE'>('ALL'); // Nuevo Filtro
+  const [stockFilter, setStockFilter] = useState<'ALL' | 'AVAILABLE' | 'UNAVAILABLE'>('ALL'); 
   
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
   const [isConfigOpen, setIsConfigOpen] = useState<boolean>(false);
@@ -623,13 +622,10 @@ const ItemEntrance: React.FC = () => {
 
   const filteredItems = items.filter(item => {
     const currentStock = getStock(item.id, item.itemsArrived);
-    
-    // Filtro por Estatus
     let matchStock = true;
     if (stockFilter === 'AVAILABLE') matchStock = currentStock > 0;
     if (stockFilter === 'UNAVAILABLE') matchStock = currentStock <= 0;
 
-    // Filtro por Buscador
     const searchLower = searchTerm.toLowerCase();
     const matchSearch = (
       String(item.itemName || '').toLowerCase().includes(searchLower) ||
@@ -651,28 +647,17 @@ const ItemEntrance: React.FC = () => {
           <p>Register incoming products</p>
         </div>
         
-        {/* Contenedor central: Buscador + Filtros */}
         <div style={{ flex: 2, display: 'flex', flexDirection: 'column', gap: '10px', alignItems: 'center', minWidth: '250px' }}>
           <SearchBar value={searchTerm} onChange={setSearchTerm} />
           
-          {/* Botones de Filtro Segmentados */}
           <div style={{ display: 'flex', backgroundColor: '#f1f5f9', padding: '4px', borderRadius: '8px', gap: '4px' }}>
-            <button 
-              type="button" 
-              onClick={() => setStockFilter('ALL')} 
-              style={{ padding: '4px 16px', borderRadius: '6px', border: 'none', backgroundColor: stockFilter === 'ALL' ? '#ffffff' : 'transparent', boxShadow: stockFilter === 'ALL' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none', cursor: 'pointer', fontWeight: stockFilter === 'ALL' ? 'bold' : 'normal', color: '#334155', fontSize: '0.85rem', transition: 'all 0.2s' }}>
+            <button type="button" onClick={() => setStockFilter('ALL')} style={{ padding: '4px 16px', borderRadius: '6px', border: 'none', backgroundColor: stockFilter === 'ALL' ? '#ffffff' : 'transparent', boxShadow: stockFilter === 'ALL' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none', cursor: 'pointer', fontWeight: stockFilter === 'ALL' ? 'bold' : 'normal', color: '#334155', fontSize: '0.85rem', transition: 'all 0.2s' }}>
               All
             </button>
-            <button 
-              type="button" 
-              onClick={() => setStockFilter('AVAILABLE')} 
-              style={{ padding: '4px 16px', borderRadius: '6px', border: 'none', backgroundColor: stockFilter === 'AVAILABLE' ? '#ffffff' : 'transparent', boxShadow: stockFilter === 'AVAILABLE' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none', cursor: 'pointer', fontWeight: stockFilter === 'AVAILABLE' ? 'bold' : 'normal', color: '#10b981', fontSize: '0.85rem', transition: 'all 0.2s' }}>
+            <button type="button" onClick={() => setStockFilter('AVAILABLE')} style={{ padding: '4px 16px', borderRadius: '6px', border: 'none', backgroundColor: stockFilter === 'AVAILABLE' ? '#ffffff' : 'transparent', boxShadow: stockFilter === 'AVAILABLE' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none', cursor: 'pointer', fontWeight: stockFilter === 'AVAILABLE' ? 'bold' : 'normal', color: '#10b981', fontSize: '0.85rem', transition: 'all 0.2s' }}>
               Available
             </button>
-            <button 
-              type="button" 
-              onClick={() => setStockFilter('UNAVAILABLE')} 
-              style={{ padding: '4px 16px', borderRadius: '6px', border: 'none', backgroundColor: stockFilter === 'UNAVAILABLE' ? '#ffffff' : 'transparent', boxShadow: stockFilter === 'UNAVAILABLE' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none', cursor: 'pointer', fontWeight: stockFilter === 'UNAVAILABLE' ? 'bold' : 'normal', color: '#ef4444', fontSize: '0.85rem', transition: 'all 0.2s' }}>
+            <button type="button" onClick={() => setStockFilter('UNAVAILABLE')} style={{ padding: '4px 16px', borderRadius: '6px', border: 'none', backgroundColor: stockFilter === 'UNAVAILABLE' ? '#ffffff' : 'transparent', boxShadow: stockFilter === 'UNAVAILABLE' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none', cursor: 'pointer', fontWeight: stockFilter === 'UNAVAILABLE' ? 'bold' : 'normal', color: '#ef4444', fontSize: '0.85rem', transition: 'all 0.2s' }}>
               Unavailable
             </button>
           </div>
@@ -916,8 +901,17 @@ const WorkActivity: React.FC<{currentUser: User}> = ({ currentUser }) => {
   const handleItemEntranceSelection = (selectedId: string) => {
     if (selectedId) {
       const item = entranceList.find(i => i.id === selectedId);
-      if (item) setCurrentProduct({ ...currentProduct, itemEntranceId: item.id, itemName: item.itemName, modelPart: item.modelPart, serial: item.serial, po: item.po });
-    } else setCurrentProduct({ ...currentProduct, itemEntranceId: '', itemName: '', modelPart: '', serial: '', po: '' });
+      const stock = getAvailableStock(selectedId);
+      if (item) setCurrentProduct({ 
+        ...currentProduct, 
+        itemEntranceId: item.id, 
+        itemName: item.itemName, 
+        modelPart: item.modelPart, 
+        serial: item.serial, 
+        po: item.po,
+        quantity: stock > 0 ? 1 : 0
+      });
+    } else setCurrentProduct({ ...currentProduct, itemEntranceId: '', itemName: '', modelPart: '', serial: '', po: '', quantity: 1 });
   };
 
   const handleAddProductSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -1107,6 +1101,7 @@ const WorkActivity: React.FC<{currentUser: User}> = ({ currentUser }) => {
                   <table>
                     <thead><tr><th style={{ width: '50px', ...thStyle }}>#</th><th style={thStyle}>Item</th><th style={thStyle}>Model</th><th style={thStyle}>Qty</th><th style={thStyle}>Action</th></tr></thead>
                     <tbody>
+                      {formProducts.length === 0 && <tr><td colSpan={5} className="empty-state">No products added. Click "+ Add Product".</td></tr>}
                       {formProducts.map((p, index) => (
                         <tr key={index}>
                           <td style={{ color: 'var(--text-muted)' }}>{formatSeq(index + 1)}</td>
@@ -1149,7 +1144,36 @@ const WorkActivity: React.FC<{currentUser: User}> = ({ currentUser }) => {
                     required={isProdReq('itemEntranceId')}
                   />
                 </div>
-                <div className="form-group"><label>Quantity {isProdReq('quantity') && '*'}</label><input type="number" min="1" value={currentProduct.quantity} onChange={e => setCurrentProduct({...currentProduct, quantity: Number(e.target.value)})} required={isProdReq('quantity')} /></div>
+                
+                {/* Lógica Estricta de Cantidad Máxima */}
+                <div className="form-group">
+                  <label>Quantity {isProdReq('quantity') && '*'}</label>
+                  <input 
+                    type="number" 
+                    min="1" 
+                    max={currentProduct.itemEntranceId ? getAvailableStock(currentProduct.itemEntranceId) : ''}
+                    disabled={!currentProduct.itemEntranceId || getAvailableStock(currentProduct.itemEntranceId) <= 0}
+                    value={currentProduct.quantity} 
+                    onChange={e => {
+                      let val = Number(e.target.value);
+                      const maxStock = getAvailableStock(currentProduct.itemEntranceId);
+                      if (val > maxStock) val = maxStock;
+                      setCurrentProduct({...currentProduct, quantity: val});
+                    }} 
+                    required={isProdReq('quantity')} 
+                    style={{
+                      backgroundColor: (!currentProduct.itemEntranceId || getAvailableStock(currentProduct.itemEntranceId) <= 0) ? '#f1f5f9' : 'white',
+                      cursor: (!currentProduct.itemEntranceId || getAvailableStock(currentProduct.itemEntranceId) <= 0) ? 'not-allowed' : 'text'
+                    }}
+                  />
+                  {currentProduct.itemEntranceId && getAvailableStock(currentProduct.itemEntranceId) <= 0 && (
+                    <span style={{color: '#ef4444', fontSize: '0.75rem', marginTop: '4px', display: 'block'}}>Out of stock</span>
+                  )}
+                  {currentProduct.itemEntranceId && getAvailableStock(currentProduct.itemEntranceId) > 0 && (
+                    <span style={{color: '#64748b', fontSize: '0.75rem', marginTop: '4px', display: 'block'}}>Max available: {getAvailableStock(currentProduct.itemEntranceId)}</span>
+                  )}
+                </div>
+
               </div>
             </form>
           </div>
