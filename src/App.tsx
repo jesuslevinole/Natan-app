@@ -226,18 +226,13 @@ const SearchableSelect: React.FC<{
           onChange={(e) => {
             setSearchTerm(e.target.value);
             setIsOpen(true);
-            if (e.target.value === '') onChange(''); // Limpia si se borra todo
+            if (e.target.value === '') onChange('');
           }}
           onFocus={() => setIsOpen(true)}
           required={required && !value}
           style={{
-            width: '100%',
-            padding: '10px 35px 10px 12px',
-            border: '1px solid #cbd5e1',
-            borderRadius: '6px',
-            fontSize: '0.95rem',
-            outline: 'none',
-            color: '#334155'
+            width: '100%', padding: '10px 35px 10px 12px', border: '1px solid #cbd5e1',
+            borderRadius: '6px', fontSize: '0.95rem', outline: 'none', color: '#334155'
           }}
         />
         <Search size={16} color="#94a3b8" style={{ position: 'absolute', right: '12px' }} />
@@ -245,10 +240,9 @@ const SearchableSelect: React.FC<{
       
       {isOpen && (
         <ul style={{
-          position: 'absolute', top: '100%', left: 0, right: 0,
-          background: 'white', border: '1px solid #e2e8f0', borderRadius: '6px',
-          marginTop: '4px', maxHeight: '220px', overflowY: 'auto', zIndex: 100,
-          listStyle: 'none', padding: 0, boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
+          position: 'absolute', top: '100%', left: 0, right: 0, background: 'white', 
+          border: '1px solid #e2e8f0', borderRadius: '6px', marginTop: '4px', maxHeight: '220px', 
+          overflowY: 'auto', zIndex: 100, listStyle: 'none', padding: 0, boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
         }}>
           {filteredOptions.length > 0 ? (
             filteredOptions.map(opt => (
@@ -259,10 +253,7 @@ const SearchableSelect: React.FC<{
                   setSearchTerm(opt.label);
                   setIsOpen(false);
                 }}
-                style={{ 
-                  padding: '10px 12px', cursor: 'pointer', 
-                  borderBottom: '1px solid #f1f5f9', fontSize: '0.9rem', color: '#334155'
-                }}
+                style={{ padding: '10px 12px', cursor: 'pointer', borderBottom: '1px solid #f1f5f9', fontSize: '0.9rem', color: '#334155' }}
                 onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8fafc'}
                 onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'white'}
               >
@@ -283,33 +274,14 @@ const SearchableSelect: React.FC<{
 // =========================================
 const SearchBar: React.FC<{ value: string, onChange: (val: string) => void }> = ({ value, onChange }) => (
   <div style={{ 
-    display: 'flex', 
-    alignItems: 'center', 
-    backgroundColor: '#ffffff', 
-    border: '1px solid #e2e8f0', 
-    borderRadius: '24px', 
-    padding: '6px 16px', 
-    gap: '8px', 
-    width: '100%',
-    maxWidth: '450px',
-    boxShadow: '0 2px 5px rgba(0,0,0,0.02), 0 1px 3px rgba(0,0,0,0.04)',
-    transition: 'all 0.2s ease'
+    display: 'flex', alignItems: 'center', backgroundColor: '#ffffff', border: '1px solid #e2e8f0', 
+    borderRadius: '24px', padding: '6px 16px', gap: '8px', width: '100%', maxWidth: '450px',
+    boxShadow: '0 2px 5px rgba(0,0,0,0.02), 0 1px 3px rgba(0,0,0,0.04)', transition: 'all 0.2s ease'
   }}>
     <Search size={16} color="#94a3b8" />
     <input 
-      type="text" 
-      placeholder="Search records..." 
-      value={value} 
-      onChange={e => onChange(e.target.value)} 
-      style={{ 
-        border: 'none', 
-        background: 'transparent', 
-        outline: 'none', 
-        color: '#334155', 
-        fontSize: '0.85rem', 
-        width: '100%',
-        height: '20px'
-      }} 
+      type="text" placeholder="Search records..." value={value} onChange={e => onChange(e.target.value)} 
+      style={{ border: 'none', background: 'transparent', outline: 'none', color: '#334155', fontSize: '0.85rem', width: '100%', height: '20px' }} 
     />
   </div>
 );
@@ -340,9 +312,7 @@ const FieldConfigModal: React.FC<{
             {fields.map(f => (
               <label key={f.name} style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', fontSize: '0.95rem' }}>
                 <input 
-                  type="checkbox" 
-                  checked={requiredFields.includes(f.name)} 
-                  onChange={() => toggleRequired(f.name)} 
+                  type="checkbox" checked={requiredFields.includes(f.name)} onChange={() => toggleRequired(f.name)} 
                   style={{ width: '18px', height: '18px', accentColor: 'var(--primary-color)' }}
                 />
                 {f.label}
@@ -403,11 +373,9 @@ const CatalogsModule: React.FC = () => {
     if (!selectedCatalog) return;
     const unsubscribe = onSnapshot(collection(db, `catalog_${selectedCatalog.id}`), (snapshot) => {
       const fetched = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as any));
-      
       fetched.sort((a: any, b: any) => new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime());
       const mapped = fetched.map((item: any, idx: number) => ({ ...item, visualSeq: item.seq || (idx + 1) }));
       mapped.reverse(); 
-      
       setRecords(mapped);
     });
     return () => unsubscribe();
@@ -564,6 +532,7 @@ const CatalogsModule: React.FC = () => {
 // =========================================
 const ItemEntrance: React.FC = () => {
   const [items, setItems] = useState<ItemEntranceRecord[]>([]);
+  const [allJobProducts, setAllJobProducts] = useState<JobProduct[]>([]); // Para cálculos de stock
   const [searchTerm, setSearchTerm] = useState(''); 
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
   const [isConfigOpen, setIsConfigOpen] = useState<boolean>(false);
@@ -579,8 +548,7 @@ const ItemEntrance: React.FC = () => {
     { name: 'po', label: 'PO #' },
     { name: 'supplyCompany', label: 'Supply Company' },
     { name: 'orderDate', label: 'Order Date' },
-    { name: 'quantityOrdered', label: 'Quantity Ordered' },
-    { name: 'itemsArrived', label: 'Items Arrived' }
+    { name: 'quantityOrdered', label: 'Quantity Ordered' }
   ];
   const { requiredFields, toggleRequired, isRequired } = useFormConfig('itemEntrance', ['date', 'itemName', 'supplyCompany', 'quantityOrdered']);
 
@@ -595,15 +563,22 @@ const ItemEntrance: React.FC = () => {
   const fetchItems = async () => {
     const data = await getDocs(collectionRef);
     const fetched = data.docs.map(doc => ({ ...doc.data(), id: doc.id } as any));
-    
     fetched.sort((a: any, b: any) => new Date(a.createdAt || a.date).getTime() - new Date(b.createdAt || b.date).getTime());
     const mapped = fetched.map((item: any, idx: number) => ({ ...item, visualSeq: item.seq || (idx + 1) }));
     mapped.reverse(); 
-    
     setItems(mapped as ItemEntranceRecord[]);
+
+    // Consultamos los productos usados para calcular el stock en tiempo real
+    const prodData = await getDocs(collection(db, "jobProducts"));
+    setAllJobProducts(prodData.docs.map(doc => doc.data() as JobProduct));
   };
 
   useEffect(() => { fetchItems(); }, []);
+
+  const getStock = (itemId: string, initialArrived: number) => {
+    const used = allJobProducts.filter(p => p.itemEntranceId === itemId).reduce((acc, p) => acc + p.quantity, 0);
+    return initialArrived - used;
+  };
 
   const handleOpenModal = (item: ItemEntranceRecord | null = null) => {
     if (item) { 
@@ -670,32 +645,37 @@ const ItemEntrance: React.FC = () => {
               <th style={thStyle}>PO #</th>
               <th style={thStyle}>Company</th>
               <th style={thStyle}>Qty</th>
-              <th style={thStyle}>Arrived</th>
+              <th style={thStyle}>Arrived (Stock)</th>
               <th style={thStyle}>Order Date</th>
               <th style={{ textAlign: 'center', ...thStyle }}>Actions</th>
             </tr>
           </thead>
           <tbody>
             {filteredItems.length === 0 && <tr><td colSpan={11} className="empty-state">No records found.</td></tr>}
-            {filteredItems.map(item => (
-              <tr key={item.id}>
-                <td><SeqBadge seq={item.visualSeq} /></td>
-                <td>{formatDateDisplay(item.date)}</td>
-                <td style={{fontWeight: 'bold'}}>{item.itemName}</td>
-                <td>{item.modelPart || '-'}</td>
-                <td style={{fontWeight: '600'}}>{item.serial || '-'}</td>
-                <td style={{fontWeight: '600'}}>{item.po || '-'}</td>
-                <td>{item.supplyCompany || '-'}</td>
-                <td>{item.quantityOrdered}</td>
-                <td>{item.itemsArrived}</td>
-                <td>{formatDateDisplay(item.orderDate)}</td>
-                <td style={{ textAlign: 'center' }}>
-                  <div className="action-btns">
-                    <button className="icon-btn edit" onClick={() => handleOpenModal(item)}><Edit2 size={16}/></button>
-                  </div>
-                </td>
-              </tr>
-            ))}
+            {filteredItems.map(item => {
+              const currentStock = getStock(item.id, item.itemsArrived);
+              return (
+                <tr key={item.id}>
+                  <td><SeqBadge seq={item.visualSeq} /></td>
+                  <td>{formatDateDisplay(item.date)}</td>
+                  <td style={{fontWeight: 'bold'}}>{item.itemName}</td>
+                  <td>{item.modelPart || '-'}</td>
+                  <td style={{fontWeight: '600'}}>{item.serial || '-'}</td>
+                  <td style={{fontWeight: '600'}}>{item.po || '-'}</td>
+                  <td>{item.supplyCompany || '-'}</td>
+                  <td>{item.quantityOrdered}</td>
+                  <td style={{ color: currentStock <= 0 ? '#ef4444' : 'inherit', fontWeight: currentStock <= 0 ? 'bold' : 'normal' }}>
+                    {currentStock}
+                  </td>
+                  <td>{formatDateDisplay(item.orderDate)}</td>
+                  <td style={{ textAlign: 'center' }}>
+                    <div className="action-btns">
+                      <button className="icon-btn edit" onClick={() => handleOpenModal(item)}><Edit2 size={16}/></button>
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
@@ -729,7 +709,7 @@ const ItemEntrance: React.FC = () => {
                 </div>
                 <div className="form-group"><label>Order Date {isRequired('orderDate') && '*'}</label><input type="date" value={formData.orderDate} onChange={e => setFormData({...formData, orderDate: e.target.value})} required={isRequired('orderDate')} /></div>
                 <div className="form-group"><label>Quantity Ordered {isRequired('quantityOrdered') && '*'}</label><input type="number" value={formData.quantityOrdered} onChange={e => setFormData({...formData, quantityOrdered: Number(e.target.value)})} required={isRequired('quantityOrdered')} /></div>
-                <div className="form-group"><label>Items Arrived {isRequired('itemsArrived') && '*'}</label><input type="number" value={formData.itemsArrived} onChange={e => setFormData({...formData, itemsArrived: Number(e.target.value)})} required={isRequired('itemsArrived')} /></div>
+                <div className="form-group"><label>Items Arrived (Initial Total)</label><input type="number" value={formData.itemsArrived} onChange={e => setFormData({...formData, itemsArrived: Number(e.target.value)})} /></div>
               </div>
             </form>
           </div>
@@ -745,6 +725,8 @@ const ItemEntrance: React.FC = () => {
 const WorkActivity: React.FC<{currentUser: User}> = ({ currentUser }) => {
   const [orders, setOrders] = useState<JobOrder[]>([]);
   const [entranceList, setEntranceList] = useState<ItemEntranceRecord[]>([]); 
+  const [allJobProducts, setAllJobProducts] = useState<JobProduct[]>([]); // Para validación de stock
+
   const [searchTerm, setSearchTerm] = useState(''); 
   const [isJobModalOpen, setIsJobModalOpen] = useState<boolean>(false);
   const [isProductModalOpen, setIsProductModalOpen] = useState<boolean>(false);
@@ -792,7 +774,6 @@ const WorkActivity: React.FC<{currentUser: User}> = ({ currentUser }) => {
     try {
       const orderData = await getDocs(ordersCollectionRef);
       const fetchedOrders = orderData.docs.map((doc) => ({ ...doc.data(), id: doc.id } as any));
-      
       fetchedOrders.sort((a: any, b: any) => new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime());
       const mappedOrders = fetchedOrders.map((o: any, idx: number) => ({ ...o, visualSeq: o.seq || (idx + 1) }));
       mappedOrders.reverse(); 
@@ -800,10 +781,22 @@ const WorkActivity: React.FC<{currentUser: User}> = ({ currentUser }) => {
 
       const entranceData = await getDocs(entranceCollectionRef);
       setEntranceList(entranceData.docs.map(doc => ({ ...doc.data(), id: doc.id })) as ItemEntranceRecord[]);
+
+      const productsData = await getDocs(productsCollectionRef);
+      setAllJobProducts(productsData.docs.map(doc => ({ ...doc.data(), id: doc.id })) as JobProduct[]);
     } catch (error) { console.error("Error", error); }
   };
 
   useEffect(() => { fetchData(); }, []);
+
+  // Lógica de cálculo de stock dinámico
+  const getAvailableStock = (itemId: string) => {
+    const item = entranceList.find(i => i.id === itemId);
+    if (!item) return 0;
+    const usedInDB = allJobProducts.filter(p => p.itemEntranceId === itemId).reduce((acc, p) => acc + p.quantity, 0);
+    const usedInForm = formProducts.filter(p => p.itemEntranceId === itemId).reduce((acc, p) => acc + p.quantity, 0);
+    return item.itemsArrived - usedInDB - usedInForm;
+  };
 
   const handleViewDetails = async (job: JobOrder) => {
     setViewingJob(job);
@@ -874,12 +867,31 @@ const WorkActivity: React.FC<{currentUser: User}> = ({ currentUser }) => {
 
   const handleAddProductSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+
+    // Validación estricta de Stock
+    const availableStock = getAvailableStock(currentProduct.itemEntranceId);
+    if (availableStock <= 0 || currentProduct.quantity > availableStock) {
+      alert("There is no stock of this product. Please update the stock.");
+      return;
+    }
+
     if (viewingJob) {
       const docRef = await addDoc(productsCollectionRef, { ...currentProduct, jobOrderId: viewingJob.id });
       setViewProducts([...viewProducts, { ...currentProduct, id: docRef.id, jobOrderId: viewingJob.id }]);
-    } else setFormProducts([...formProducts, { ...currentProduct, jobOrderId: 'pending' }]); 
+      fetchData(); // Actualiza inventario global en DB
+    } else {
+      setFormProducts([...formProducts, { ...currentProduct, jobOrderId: 'pending' }]); 
+    }
     setCurrentProduct({ itemEntranceId: '', modelPart: '', serial: '', po: '', quantity: 1, itemName: '' });
     setIsProductModalOpen(false);
+  };
+
+  const handleRemoveProductFromDetails = async (productId: string) => {
+    if(window.confirm("Delete product?")) {
+      await deleteDoc(doc(db, "jobProducts", productId));
+      setViewProducts(viewProducts.filter(p => p.id !== productId));
+      fetchData(); // Devuelve el stock al borrar de BD
+    }
   };
 
   const displayedOrders = (showHistoric 
@@ -985,6 +997,7 @@ const WorkActivity: React.FC<{currentUser: User}> = ({ currentUser }) => {
                 <table>
                   <thead><tr><th style={{ width: '50px', ...thStyle }}>#</th><th style={thStyle}>Item Name</th><th style={thStyle}>Model</th><th style={thStyle}>Serial</th><th style={thStyle}>Qty</th></tr></thead>
                   <tbody>
+                    {viewProducts.length === 0 && <tr><td colSpan={5} className="empty-state">No products attached.</td></tr>}
                     {viewProducts.map((p, i) => (
                       <tr key={p.id}>
                         <td style={{ color: 'var(--text-muted)' }}>{formatSeq(i + 1)}</td>
@@ -1037,6 +1050,7 @@ const WorkActivity: React.FC<{currentUser: User}> = ({ currentUser }) => {
                   <table>
                     <thead><tr><th style={{ width: '50px', ...thStyle }}>#</th><th style={thStyle}>Item</th><th style={thStyle}>Model</th><th style={thStyle}>Qty</th><th style={thStyle}>Action</th></tr></thead>
                     <tbody>
+                      {formProducts.length === 0 && <tr><td colSpan={5} className="empty-state">No products added. Click "+ Add Product".</td></tr>}
                       {formProducts.map((p, index) => (
                         <tr key={index}>
                           <td style={{ color: 'var(--text-muted)' }}>{formatSeq(index + 1)}</td>
@@ -1069,7 +1083,10 @@ const WorkActivity: React.FC<{currentUser: User}> = ({ currentUser }) => {
                 <div className="form-group" style={{ gridColumn: 'span 2' }}>
                   <label>Select Item {isProdReq('itemEntranceId') && '*'}</label>
                   <SearchableSelect 
-                    options={entranceList.map(item => ({ id: item.id, label: `${item.itemName} (${item.modelPart || 'No Model'})` }))}
+                    options={entranceList.map(item => ({ 
+                      id: item.id, 
+                      label: `${item.itemName} (${item.modelPart || 'No Model'}) - Stock: ${getAvailableStock(item.id)}` 
+                    }))}
                     value={currentProduct.itemEntranceId} 
                     onChange={handleItemEntranceSelection} 
                     placeholder="-- Type to search item --"
