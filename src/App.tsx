@@ -549,7 +549,7 @@ const CatalogsModule: React.FC = () => {
 const ItemEntrance: React.FC = () => {
   const [items, setItems] = useState<ItemEntranceRecord[]>([]);
   const [allJobProducts, setAllJobProducts] = useState<JobProduct[]>([]);
-  const [allOrders, setAllOrders] = useState<JobOrder[]>([]); // Para el historial expandido
+  const [allOrders, setAllOrders] = useState<JobOrder[]>([]); 
   
   const [searchTerm, setSearchTerm] = useState(''); 
   const [stockFilter, setStockFilter] = useState<'ALL' | 'AVAILABLE' | 'UNAVAILABLE'>('ALL'); 
@@ -1237,7 +1237,7 @@ const WorkActivity: React.FC<{currentUser: User}> = ({ currentUser }) => {
 
       {isProductModalOpen && (
         <div className="modal-overlay active" style={{ zIndex: 1100 }}>
-          <div className="modal-content" style={{ maxWidth: '800px' }}>
+          <div className="modal-content modal-large">
             <form onSubmit={handleAddProductSubmit}>
               <div className="modal-header">
                 <h3>Add Product</h3>
