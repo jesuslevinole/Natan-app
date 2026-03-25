@@ -117,6 +117,19 @@ const getStatusStyles = (status: 'YES' | 'NO' | string) => ({
   boxShadow: '0 2px 4px rgba(0,0,0,0.05)'
 });
 
+// Estilos del nuevo Status Badge (Disponible / No Disponible)
+const getInventoryStatusStyles = (isAvailable: boolean) => ({
+  backgroundColor: isAvailable ? '#10b981' : '#ef4444', 
+  color: '#ffffff',
+  padding: '4px 10px',
+  borderRadius: '12px',
+  fontSize: '0.7rem',
+  fontWeight: 'bold',
+  display: 'inline-block',
+  boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+  letterSpacing: '0.5px'
+});
+
 const getTodayString = () => {
   const d = new Date();
   const year = d.getFullYear();
@@ -533,7 +546,10 @@ const CatalogsModule: React.FC = () => {
 const ItemEntrance: React.FC = () => {
   const [items, setItems] = useState<ItemEntranceRecord[]>([]);
   const [allJobProducts, setAllJobProducts] = useState<JobProduct[]>([]);
+  
   const [searchTerm, setSearchTerm] = useState(''); 
+  const [stockFilter, setStockFilter] = useState<'ALL' | 'AVAILABLE' | 'UNAVAILABLE'>('ALL'); // Nuevo Filtro
+  
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
   const [isConfigOpen, setIsConfigOpen] = useState<boolean>(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -548,7 +564,8 @@ const ItemEntrance: React.FC = () => {
     { name: 'po', label: 'PO #' },
     { name: 'supplyCompany', label: 'Supply Company' },
     { name: 'orderDate', label: 'Order Date' },
-    { name: 'quantityOrdered', label: 'Quantity Ordered' }
+    { name: 'quantityOrdered', label: 'Quantity Ordered' },
+    { name: 'itemsArrived', label: 'Items Arrived' }
   ];
   const { requiredFields, toggleRequired, isRequired } = useFormConfig('itemEntrance', ['date', 'itemName', 'supplyCompany', 'quantityOrdered']);
 
@@ -605,8 +622,16 @@ const ItemEntrance: React.FC = () => {
   };
 
   const filteredItems = items.filter(item => {
+    const currentStock = getStock(item.id, item.itemsArrived);
+    
+    // Filtro por Estatus
+    let matchStock = true;
+    if (stockFilter === 'AVAILABLE') matchStock = currentStock > 0;
+    if (stockFilter === 'UNAVAILABLE') matchStock = currentStock <= 0;
+
+    // Filtro por Buscador
     const searchLower = searchTerm.toLowerCase();
-    return (
+    const matchSearch = (
       String(item.itemName || '').toLowerCase().includes(searchLower) ||
       String(item.modelPart || '').toLowerCase().includes(searchLower) ||
       String(item.serial || '').toLowerCase().includes(searchLower) ||
@@ -614,6 +639,8 @@ const ItemEntrance: React.FC = () => {
       String(item.supplyCompany || '').toLowerCase().includes(searchLower) ||
       formatDateDisplay(item.date).includes(searchLower)
     );
+
+    return matchStock && matchSearch;
   });
 
   return (
@@ -623,10 +650,35 @@ const ItemEntrance: React.FC = () => {
           <h2 style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><PackageSearch size={24}/> Item Entrance</h2>
           <p>Register incoming products</p>
         </div>
-        <div style={{ flex: 2, display: 'flex', justifyContent: 'center', minWidth: '250px' }}>
+        
+        {/* Contenedor central: Buscador + Filtros */}
+        <div style={{ flex: 2, display: 'flex', flexDirection: 'column', gap: '10px', alignItems: 'center', minWidth: '250px' }}>
           <SearchBar value={searchTerm} onChange={setSearchTerm} />
+          
+          {/* Botones de Filtro Segmentados */}
+          <div style={{ display: 'flex', backgroundColor: '#f1f5f9', padding: '4px', borderRadius: '8px', gap: '4px' }}>
+            <button 
+              type="button" 
+              onClick={() => setStockFilter('ALL')} 
+              style={{ padding: '4px 16px', borderRadius: '6px', border: 'none', backgroundColor: stockFilter === 'ALL' ? '#ffffff' : 'transparent', boxShadow: stockFilter === 'ALL' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none', cursor: 'pointer', fontWeight: stockFilter === 'ALL' ? 'bold' : 'normal', color: '#334155', fontSize: '0.85rem', transition: 'all 0.2s' }}>
+              All
+            </button>
+            <button 
+              type="button" 
+              onClick={() => setStockFilter('AVAILABLE')} 
+              style={{ padding: '4px 16px', borderRadius: '6px', border: 'none', backgroundColor: stockFilter === 'AVAILABLE' ? '#ffffff' : 'transparent', boxShadow: stockFilter === 'AVAILABLE' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none', cursor: 'pointer', fontWeight: stockFilter === 'AVAILABLE' ? 'bold' : 'normal', color: '#10b981', fontSize: '0.85rem', transition: 'all 0.2s' }}>
+              Available
+            </button>
+            <button 
+              type="button" 
+              onClick={() => setStockFilter('UNAVAILABLE')} 
+              style={{ padding: '4px 16px', borderRadius: '6px', border: 'none', backgroundColor: stockFilter === 'UNAVAILABLE' ? '#ffffff' : 'transparent', boxShadow: stockFilter === 'UNAVAILABLE' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none', cursor: 'pointer', fontWeight: stockFilter === 'UNAVAILABLE' ? 'bold' : 'normal', color: '#ef4444', fontSize: '0.85rem', transition: 'all 0.2s' }}>
+              Unavailable
+            </button>
+          </div>
         </div>
-        <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flex: 1, justifyContent: 'flex-end', minWidth: '150px' }}>
+
+        <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start', flex: 1, justifyContent: 'flex-end', minWidth: '150px' }}>
           <button className="action btn-primary" style={{ height: '42px', padding: '0 20px', whiteSpace: 'nowrap' }} onClick={() => handleOpenModal(null)}>
             <Plus size={18}/> New Entrance
           </button>
@@ -637,6 +689,7 @@ const ItemEntrance: React.FC = () => {
           <thead>
             <tr>
               <th style={{ width: '60px', ...thStyle }}>#</th>
+              <th style={{ textAlign: 'center', ...thStyle }}>Status</th>
               <th style={thStyle}>Date</th>
               <th style={thStyle}>Item Name</th>
               <th style={thStyle}>Model/Part #</th>
@@ -644,8 +697,7 @@ const ItemEntrance: React.FC = () => {
               <th style={thStyle}>PO #</th>
               <th style={thStyle}>Company</th>
               <th style={thStyle}>Qty</th>
-              <th style={thStyle}>Arrived (Stock)</th>
-              <th style={thStyle}>Order Date</th>
+              <th style={thStyle}>Stock</th>
               <th style={{ textAlign: 'center', ...thStyle }}>Actions</th>
             </tr>
           </thead>
@@ -653,9 +705,15 @@ const ItemEntrance: React.FC = () => {
             {filteredItems.length === 0 && <tr><td colSpan={11} className="empty-state">No records found.</td></tr>}
             {filteredItems.map(item => {
               const currentStock = getStock(item.id, item.itemsArrived);
+              const isAvailable = currentStock > 0;
               return (
                 <tr key={item.id}>
                   <td><SeqBadge seq={item.visualSeq} /></td>
+                  <td style={{ textAlign: 'center' }}>
+                    <span style={getInventoryStatusStyles(isAvailable)}>
+                      {isAvailable ? 'AVAILABLE' : 'UNAVAILABLE'}
+                    </span>
+                  </td>
                   <td>{formatDateDisplay(item.date)}</td>
                   <td style={{fontWeight: 'bold'}}>{item.itemName}</td>
                   <td>{item.modelPart || '-'}</td>
@@ -663,10 +721,9 @@ const ItemEntrance: React.FC = () => {
                   <td style={{fontWeight: '600'}}>{item.po || '-'}</td>
                   <td>{item.supplyCompany || '-'}</td>
                   <td>{item.quantityOrdered}</td>
-                  <td style={{ color: currentStock <= 0 ? '#ef4444' : 'inherit', fontWeight: currentStock <= 0 ? 'bold' : 'normal' }}>
+                  <td style={{ color: isAvailable ? 'inherit' : '#ef4444', fontWeight: isAvailable ? 'normal' : 'bold' }}>
                     {currentStock}
                   </td>
-                  <td>{formatDateDisplay(item.orderDate)}</td>
                   <td style={{ textAlign: 'center' }}>
                     <div className="action-btns">
                       <button className="icon-btn edit" onClick={() => handleOpenModal(item)}><Edit2 size={16}/></button>
@@ -992,16 +1049,7 @@ const WorkActivity: React.FC<{currentUser: User}> = ({ currentUser }) => {
               </div>
               <div className="table-container large-table">
                 <table>
-                  <thead>
-                    <tr>
-                      <th style={{ width: '50px', ...thStyle }}>#</th>
-                      <th style={thStyle}>Item Name</th>
-                      <th style={thStyle}>Model</th>
-                      <th style={thStyle}>Serial</th>
-                      <th style={thStyle}>Qty</th>
-                      <th style={{ textAlign: 'center', ...thStyle }}>Action</th>
-                    </tr>
-                  </thead>
+                  <thead><tr><th style={{ width: '50px', ...thStyle }}>#</th><th style={thStyle}>Item Name</th><th style={thStyle}>Model</th><th style={thStyle}>Serial</th><th style={thStyle}>Qty</th><th style={{ textAlign: 'center', ...thStyle }}>Action</th></tr></thead>
                   <tbody>
                     {viewProducts.length === 0 && <tr><td colSpan={6} className="empty-state">No products attached.</td></tr>}
                     {viewProducts.map((p, i) => (
@@ -1059,7 +1107,6 @@ const WorkActivity: React.FC<{currentUser: User}> = ({ currentUser }) => {
                   <table>
                     <thead><tr><th style={{ width: '50px', ...thStyle }}>#</th><th style={thStyle}>Item</th><th style={thStyle}>Model</th><th style={thStyle}>Qty</th><th style={thStyle}>Action</th></tr></thead>
                     <tbody>
-                      {formProducts.length === 0 && <tr><td colSpan={5} className="empty-state">No products added. Click "+ Add Product".</td></tr>}
                       {formProducts.map((p, index) => (
                         <tr key={index}>
                           <td style={{ color: 'var(--text-muted)' }}>{formatSeq(index + 1)}</td>
