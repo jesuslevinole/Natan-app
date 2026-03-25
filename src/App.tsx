@@ -532,7 +532,7 @@ const CatalogsModule: React.FC = () => {
 // =========================================
 const ItemEntrance: React.FC = () => {
   const [items, setItems] = useState<ItemEntranceRecord[]>([]);
-  const [allJobProducts, setAllJobProducts] = useState<JobProduct[]>([]); // Para cálculos de stock
+  const [allJobProducts, setAllJobProducts] = useState<JobProduct[]>([]);
   const [searchTerm, setSearchTerm] = useState(''); 
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
   const [isConfigOpen, setIsConfigOpen] = useState<boolean>(false);
@@ -568,7 +568,6 @@ const ItemEntrance: React.FC = () => {
     mapped.reverse(); 
     setItems(mapped as ItemEntranceRecord[]);
 
-    // Consultamos los productos usados para calcular el stock en tiempo real
     const prodData = await getDocs(collection(db, "jobProducts"));
     setAllJobProducts(prodData.docs.map(doc => doc.data() as JobProduct));
   };
@@ -725,7 +724,7 @@ const ItemEntrance: React.FC = () => {
 const WorkActivity: React.FC<{currentUser: User}> = ({ currentUser }) => {
   const [orders, setOrders] = useState<JobOrder[]>([]);
   const [entranceList, setEntranceList] = useState<ItemEntranceRecord[]>([]); 
-  const [allJobProducts, setAllJobProducts] = useState<JobProduct[]>([]); // Para validación de stock
+  const [allJobProducts, setAllJobProducts] = useState<JobProduct[]>([]);
 
   const [searchTerm, setSearchTerm] = useState(''); 
   const [isJobModalOpen, setIsJobModalOpen] = useState<boolean>(false);
@@ -789,7 +788,6 @@ const WorkActivity: React.FC<{currentUser: User}> = ({ currentUser }) => {
 
   useEffect(() => { fetchData(); }, []);
 
-  // Lógica de cálculo de stock dinámico
   const getAvailableStock = (itemId: string) => {
     const item = entranceList.find(i => i.id === itemId);
     if (!item) return 0;
@@ -868,7 +866,6 @@ const WorkActivity: React.FC<{currentUser: User}> = ({ currentUser }) => {
   const handleAddProductSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
 
-    // Validación estricta de Stock
     const availableStock = getAvailableStock(currentProduct.itemEntranceId);
     if (availableStock <= 0 || currentProduct.quantity > availableStock) {
       alert("There is no stock of this product. Please update the stock.");
@@ -878,7 +875,7 @@ const WorkActivity: React.FC<{currentUser: User}> = ({ currentUser }) => {
     if (viewingJob) {
       const docRef = await addDoc(productsCollectionRef, { ...currentProduct, jobOrderId: viewingJob.id });
       setViewProducts([...viewProducts, { ...currentProduct, id: docRef.id, jobOrderId: viewingJob.id }]);
-      fetchData(); // Actualiza inventario global en DB
+      fetchData();
     } else {
       setFormProducts([...formProducts, { ...currentProduct, jobOrderId: 'pending' }]); 
     }
@@ -890,7 +887,7 @@ const WorkActivity: React.FC<{currentUser: User}> = ({ currentUser }) => {
     if(window.confirm("Delete product?")) {
       await deleteDoc(doc(db, "jobProducts", productId));
       setViewProducts(viewProducts.filter(p => p.id !== productId));
-      fetchData(); // Devuelve el stock al borrar de BD
+      fetchData(); 
     }
   };
 
@@ -995,13 +992,25 @@ const WorkActivity: React.FC<{currentUser: User}> = ({ currentUser }) => {
               </div>
               <div className="table-container large-table">
                 <table>
-                  <thead><tr><th style={{ width: '50px', ...thStyle }}>#</th><th style={thStyle}>Item Name</th><th style={thStyle}>Model</th><th style={thStyle}>Serial</th><th style={thStyle}>Qty</th></tr></thead>
+                  <thead>
+                    <tr>
+                      <th style={{ width: '50px', ...thStyle }}>#</th>
+                      <th style={thStyle}>Item Name</th>
+                      <th style={thStyle}>Model</th>
+                      <th style={thStyle}>Serial</th>
+                      <th style={thStyle}>Qty</th>
+                      <th style={{ textAlign: 'center', ...thStyle }}>Action</th>
+                    </tr>
+                  </thead>
                   <tbody>
-                    {viewProducts.length === 0 && <tr><td colSpan={5} className="empty-state">No products attached.</td></tr>}
+                    {viewProducts.length === 0 && <tr><td colSpan={6} className="empty-state">No products attached.</td></tr>}
                     {viewProducts.map((p, i) => (
                       <tr key={p.id}>
                         <td style={{ color: 'var(--text-muted)' }}>{formatSeq(i + 1)}</td>
                         <td>{p.itemName}</td><td>{p.modelPart}</td><td>{p.serial || '-'}</td><td>{p.quantity}</td>
+                        <td style={{ textAlign: 'center' }}>
+                          <button type="button" className="btn-text-danger" onClick={() => handleRemoveProductFromDetails(p.id!)}>Remove</button>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
