@@ -198,7 +198,7 @@ const useFormConfig = (formKey: string, defaultRequired: string[]) => {
 // COMPONENTE: SELECTOR CON BUSCADOR
 // =========================================
 const SearchableSelect: React.FC<{
-  options: { id: string; label: string }[];
+  options: { id: string; label: string; searchKeywords: string }[];
   value: string;
   onChange: (id: string) => void;
   placeholder?: string;
@@ -225,7 +225,7 @@ const SearchableSelect: React.FC<{
   }, []);
 
   const filteredOptions = options.filter(o => 
-    o.label.toLowerCase().includes(searchTerm.toLowerCase())
+    o.searchKeywords.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   return (
@@ -1136,7 +1136,8 @@ const WorkActivity: React.FC<{currentUser: User}> = ({ currentUser }) => {
                   <SearchableSelect 
                     options={entranceList.map(item => ({ 
                       id: item.id, 
-                      label: `${item.itemName} (${item.modelPart || 'No Model'}) - Stock: ${getAvailableStock(item.id)}` 
+                      label: `${item.itemName} | Model: ${item.modelPart || '-'} | Serial: ${item.serial || '-'} | PO: ${item.po || '-'} | Co: ${item.supplyCompany || '-'}`,
+                      searchKeywords: `${item.itemName} ${item.modelPart} ${item.serial} ${item.po} ${item.supplyCompany}`
                     }))}
                     value={currentProduct.itemEntranceId} 
                     onChange={handleItemEntranceSelection} 
@@ -1145,7 +1146,6 @@ const WorkActivity: React.FC<{currentUser: User}> = ({ currentUser }) => {
                   />
                 </div>
                 
-                {/* Lógica Estricta de Cantidad Máxima */}
                 <div className="form-group">
                   <label>Quantity {isProdReq('quantity') && '*'}</label>
                   <input 
