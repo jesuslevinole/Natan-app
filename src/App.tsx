@@ -161,6 +161,7 @@ const SeqBadge: React.FC<{ seq?: number }> = ({ seq }) => (
 );
 
 const thStyle = { color: '#64748b', fontWeight: '600', fontSize: '0.85rem', textTransform: 'uppercase' as const };
+const tableResponsiveStyle = { minWidth: '100%', wordBreak: 'break-word' as const, whiteSpace: 'normal' as const };
 
 const useCatalogOptions = (catalogId: string, labelField: string) => {
   const [options, setOptions] = useState<{id: string, label: string}[]>([]);
@@ -469,7 +470,7 @@ const CatalogsModule: React.FC = () => {
       </div>
 
       <div className="table-container">
-        <table>
+        <table style={tableResponsiveStyle}>
           <thead>
             <tr>
               <th style={{ width: '60px', ...thStyle }}>#</th>
@@ -654,6 +655,13 @@ const ItemEntrance: React.FC = () => {
     } catch (error) { console.error("Error saving data", error); }
   };
 
+  const handleDeleteEntrance = async (id: string) => {
+    if (window.confirm("Are you sure you want to delete this entrance record permanently?")) {
+      await deleteDoc(doc(db, "itemEntrance", id));
+      fetchItems();
+    }
+  };
+
   const filteredItems = items.filter(item => {
     const currentStock = getStock(item.id, item.itemsArrived);
     let matchStock = true;
@@ -704,7 +712,7 @@ const ItemEntrance: React.FC = () => {
         </div>
       </div>
       <div className="table-container">
-        <table>
+        <table style={tableResponsiveStyle}>
           <thead>
             <tr>
               <th style={{ width: '60px', ...thStyle }}>#</th>
@@ -717,30 +725,37 @@ const ItemEntrance: React.FC = () => {
               <th style={thStyle}>Company</th>
               <th style={thStyle}>Qty</th>
               <th style={thStyle}>Stock</th>
+              <th style={{ textAlign: 'center', ...thStyle }}>Actions</th>
             </tr>
           </thead>
           <tbody>
-            {filteredItems.length === 0 && <tr><td colSpan={10} className="empty-state">No records found.</td></tr>}
+            {filteredItems.length === 0 && <tr><td colSpan={11} className="empty-state">No records found.</td></tr>}
             {filteredItems.map(item => {
               const currentStock = getStock(item.id, item.itemsArrived);
               const isAvailable = currentStock > 0;
               return (
-                <tr key={item.id} className="clickable-row" onClick={() => handleOpenModal(item)}>
-                  <td><SeqBadge seq={item.visualSeq} /></td>
-                  <td style={{ textAlign: 'center' }}>
+                <tr key={item.id} className="clickable-row">
+                  <td onClick={() => handleOpenModal(item)}><SeqBadge seq={item.visualSeq} /></td>
+                  <td style={{ textAlign: 'center' }} onClick={() => handleOpenModal(item)}>
                     <span style={getInventoryStatusStyles(isAvailable)}>
                       {isAvailable ? 'AVAILABLE' : 'UNAVAILABLE'}
                     </span>
                   </td>
-                  <td>{formatDateDisplay(item.date)}</td>
-                  <td style={{fontWeight: 'bold'}}>{item.itemName}</td>
-                  <td>{item.modelPart || '-'}</td>
-                  <td style={{fontWeight: '600'}}>{item.serial || '-'}</td>
-                  <td style={{fontWeight: '600'}}>{item.po || '-'}</td>
-                  <td>{item.supplyCompany || '-'}</td>
-                  <td>{item.quantityOrdered}</td>
-                  <td style={{ color: isAvailable ? 'inherit' : '#ef4444', fontWeight: isAvailable ? 'normal' : 'bold' }}>
+                  <td onClick={() => handleOpenModal(item)}>{formatDateDisplay(item.date)}</td>
+                  <td style={{fontWeight: 'bold'}} onClick={() => handleOpenModal(item)}>{item.itemName}</td>
+                  <td onClick={() => handleOpenModal(item)}>{item.modelPart || '-'}</td>
+                  <td style={{fontWeight: '600'}} onClick={() => handleOpenModal(item)}>{item.serial || '-'}</td>
+                  <td style={{fontWeight: '600'}} onClick={() => handleOpenModal(item)}>{item.po || '-'}</td>
+                  <td onClick={() => handleOpenModal(item)}>{item.supplyCompany || '-'}</td>
+                  <td onClick={() => handleOpenModal(item)}>{item.quantityOrdered}</td>
+                  <td style={{ color: isAvailable ? 'inherit' : '#ef4444', fontWeight: isAvailable ? 'normal' : 'bold' }} onClick={() => handleOpenModal(item)}>
                     {currentStock}
+                  </td>
+                  <td style={{ textAlign: 'center' }}>
+                    <div className="action-btns">
+                      <button className="icon-btn edit" onClick={() => handleOpenModal(item)}><Edit2 size={16}/></button>
+                      <button className="icon-btn delete" onClick={() => handleDeleteEntrance(item.id)}><Trash2 size={16}/></button>
+                    </div>
                   </td>
                 </tr>
               );
@@ -760,13 +775,6 @@ const ItemEntrance: React.FC = () => {
                 <div style={{ display: 'flex', gap: '10px' }}>
                   <button type="button" className="icon-btn" onClick={() => setIsConfigOpen(true)} title="Configure Required Fields"><Settings size={20}/></button>
                   <button type="submit" className="action btn-primary">Save Changes</button>
-                  <button type="button" className="action btn-danger" onClick={async () => {
-                    if (editingId && window.confirm("Delete this record permanently?")) {
-                      await deleteDoc(doc(db, "itemEntrance", editingId));
-                      setIsModalOpen(false);
-                      fetchItems();
-                    }
-                  }}><Trash2 size={16}/> Delete</button>
                   <button type="button" className="close-modal" onClick={() => setIsModalOpen(false)}><X size={24}/></button>
                 </div>
               </div>
@@ -789,6 +797,7 @@ const ItemEntrance: React.FC = () => {
               </div>
             </form>
 
+            {/* SECCIÓN DE HISTORIAL DE INSTALACIONES */}
             {editingId && (
               <div className="products-section" style={{ marginTop: '20px', borderTop: '1px solid #e2e8f0', paddingTop: '20px' }}>
                 <div className="products-header">
@@ -801,7 +810,7 @@ const ItemEntrance: React.FC = () => {
                   </button>
                 </div>
                 <div className="table-container large-table" style={{ maxHeight: '200px', overflowY: 'auto' }}>
-                  <table>
+                  <table style={tableResponsiveStyle}>
                     <thead>
                       <tr>
                         <th style={thStyle}>Date</th>
@@ -834,6 +843,7 @@ const ItemEntrance: React.FC = () => {
         </div>
       )}
 
+      {/* MODAL EXPANDIDO DEL HISTORIAL */}
       {isExpandHistoryOpen && (
         <div className="modal-overlay active" style={{ zIndex: 1200 }}>
           <div className="modal-content modal-large">
@@ -845,7 +855,7 @@ const ItemEntrance: React.FC = () => {
               </div>
             </div>
             <div className="table-container large-table" style={{ marginTop: '15px', maxHeight: '60vh', overflowY: 'auto' }}>
-              <table>
+              <table style={tableResponsiveStyle}>
                 <thead>
                   <tr>
                     <th style={thStyle}>Date</th>
@@ -1095,7 +1105,7 @@ const WorkActivity: React.FC<{currentUser: User}> = ({ currentUser }) => {
         </div>
       </div>
       <div className="table-container">
-        <table>
+        <table style={tableResponsiveStyle}>
           <thead>
             <tr>
               <th style={{ width: '60px', ...thStyle }}>#</th>
@@ -1156,7 +1166,7 @@ const WorkActivity: React.FC<{currentUser: User}> = ({ currentUser }) => {
                 <button type="button" className="action btn-secondary btn-sm" onClick={() => setIsProductModalOpen(true)}><Plus size={16}/> Add Product</button>
               </div>
               <div className="table-container large-table">
-                <table>
+                <table style={tableResponsiveStyle}>
                   <thead><tr><th style={{ width: '50px', ...thStyle }}>#</th><th style={thStyle}>Item Name</th><th style={thStyle}>Model</th><th style={thStyle}>Serial</th><th style={thStyle}>Qty</th><th style={{ textAlign: 'center', ...thStyle }}>Action</th></tr></thead>
                   <tbody>
                     {viewProducts.length === 0 && <tr><td colSpan={6} className="empty-state">No products attached.</td></tr>}
@@ -1212,7 +1222,7 @@ const WorkActivity: React.FC<{currentUser: User}> = ({ currentUser }) => {
                   <button type="button" className="action btn-secondary btn-sm" onClick={() => setIsProductModalOpen(true)}><Plus size={16}/> Add Product</button>
                 </div>
                 <div className="table-container large-table">
-                  <table>
+                  <table style={tableResponsiveStyle}>
                     <thead><tr><th style={{ width: '50px', ...thStyle }}>#</th><th style={thStyle}>Item</th><th style={thStyle}>Model</th><th style={thStyle}>Qty</th><th style={thStyle}>Action</th></tr></thead>
                     <tbody>
                       {formProducts.length === 0 && <tr><td colSpan={5} className="empty-state">No products added. Click "+ Add Product".</td></tr>}
@@ -1234,7 +1244,6 @@ const WorkActivity: React.FC<{currentUser: User}> = ({ currentUser }) => {
 
       {isProductModalOpen && (
         <div className="modal-overlay active" style={{ zIndex: 1100 }}>
-          {/* Se ha cambiado el maxWidth a 'modal-large' equivalente */}
           <div className="modal-content modal-large">
             <form onSubmit={handleAddProductSubmit}>
               <div className="modal-header">
