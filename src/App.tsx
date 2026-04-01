@@ -245,17 +245,17 @@ const SearchableSelect: React.FC<{
           onFocus={() => setIsOpen(true)}
           required={required && !value}
           style={{
-            width: '100%', padding: '12px 40px 12px 14px', border: '1px solid #cbd5e1',
-            borderRadius: '8px', fontSize: '1rem', outline: 'none', color: '#334155'
+            width: '100%', padding: '14px 40px 14px 16px', border: '1px solid #cbd5e1',
+            borderRadius: '8px', fontSize: '1.05rem', outline: 'none', color: '#334155'
           }}
         />
-        <Search size={18} color="#94a3b8" style={{ position: 'absolute', right: '14px' }} />
+        <Search size={20} color="#94a3b8" style={{ position: 'absolute', right: '14px' }} />
       </div>
       
       {isOpen && (
         <ul style={{
           position: 'absolute', top: '100%', left: 0, right: 0, background: 'white', 
-          border: '1px solid #e2e8f0', borderRadius: '8px', marginTop: '6px', maxHeight: '350px', 
+          border: '1px solid #e2e8f0', borderRadius: '8px', marginTop: '6px', maxHeight: '400px', 
           overflowY: 'auto', zIndex: 100, listStyle: 'none', padding: '6px', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)'
         }}>
           {filteredOptions.length > 0 ? (
@@ -268,7 +268,7 @@ const SearchableSelect: React.FC<{
                   setIsOpen(false);
                 }}
                 style={{ 
-                  padding: '12px 14px', cursor: 'pointer', borderBottom: '1px solid #f1f5f9', 
+                  padding: '14px 16px', cursor: 'pointer', borderBottom: '1px solid #f1f5f9', 
                   borderRadius: '6px', transition: 'background-color 0.2s'
                 }}
                 onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8fafc'}
@@ -775,6 +775,13 @@ const ItemEntrance: React.FC = () => {
                 <div style={{ display: 'flex', gap: '10px' }}>
                   <button type="button" className="icon-btn" onClick={() => setIsConfigOpen(true)} title="Configure Required Fields"><Settings size={20}/></button>
                   <button type="submit" className="action btn-primary">Save Changes</button>
+                  <button type="button" className="action btn-danger" onClick={async () => {
+                    if (editingId && window.confirm("Delete this record permanently?")) {
+                      await deleteDoc(doc(db, "itemEntrance", editingId));
+                      setIsModalOpen(false);
+                      fetchItems();
+                    }
+                  }}><Trash2 size={16}/> Delete</button>
                   <button type="button" className="close-modal" onClick={() => setIsModalOpen(false)}><X size={24}/></button>
                 </div>
               </div>
@@ -1244,7 +1251,7 @@ const WorkActivity: React.FC<{currentUser: User}> = ({ currentUser }) => {
 
       {isProductModalOpen && (
         <div className="modal-overlay active" style={{ zIndex: 1100 }}>
-          <div className="modal-content modal-large">
+          <div className="modal-content modal-large" style={{ maxWidth: '1000px', width: '100%', minHeight: '500px' }}>
             <form onSubmit={handleAddProductSubmit}>
               <div className="modal-header">
                 <h3>Add Product</h3>
@@ -1254,7 +1261,7 @@ const WorkActivity: React.FC<{currentUser: User}> = ({ currentUser }) => {
                   <button type="button" className="close-modal" onClick={() => setIsProductModalOpen(false)}><X size={24}/></button>
                 </div>
               </div>
-              <div className="form-grid" style={{ gridTemplateColumns: '3fr 1fr' }}>
+              <div className="form-grid" style={{ gridTemplateColumns: '4fr 1fr' }}>
                 <div className="form-group">
                   <label>Select Item {isProdReq('itemEntranceId') && '*'}</label>
                   <SearchableSelect 
