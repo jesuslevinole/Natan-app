@@ -163,14 +163,12 @@ const SeqBadge: React.FC<{ seq?: number }> = ({ seq }) => (
 const thStyle = { color: '#64748b', fontWeight: '600', fontSize: '0.85rem', textTransform: 'uppercase' as const };
 const tableResponsiveStyle = { width: '100%', minWidth: '950px', whiteSpace: 'nowrap' as const };
 
-// Hook mejorado: valueField define qué se guarda, displayField define qué se muestra.
 const useCatalogOptions = (catalogId: string, displayField: string, valueField: string = displayField) => {
   const [options, setOptions] = useState<{id: string, value: string, label: string}[]>([]);
   useEffect(() => {
     const unsubscribe = onSnapshot(collection(db, `catalog_${catalogId}`), (snapshot) => {
       const fetched = snapshot.docs.map(doc => {
         const data = doc.data();
-        // Si el displayField no existe (por ejemplo, description vacía), mostramos el valueField (property_name) como respaldo
         const labelText = data[displayField] && data[displayField] !== '-' ? data[displayField] : data[valueField];
         return { 
           id: doc.id, 
@@ -914,12 +912,16 @@ const WorkActivity: React.FC<{currentUser: User}> = ({ currentUser }) => {
   const [isProductModalOpen, setIsProductModalOpen] = useState<boolean>(false);
   const [isJobConfigOpen, setIsJobConfigOpen] = useState<boolean>(false);
   const [isProductConfigOpen, setIsProductConfigOpen] = useState<boolean>(false);
+  
+  // Novedad: Estado para la creación rápida de Destinos
+  const [isQuickDestOpen, setIsQuickDestOpen] = useState<boolean>(false);
+  const [newDestData, setNewDestData] = useState({ property_name: '', description: '', contact: '' });
+
   const [editingJob, setEditingJob] = useState<string | null>(null);
   const [viewingJob, setViewingJob] = useState<JobOrder | null>(null);
   const [viewProducts, setViewProducts] = useState<JobProduct[]>([]);
   const [showHistoric, setShowHistoric] = useState<boolean>(false); 
 
-  // 🔥 AQUÍ ESTÁ EL CAMBIO SOLICITADO: Muestra la 'description' en el dropdown, pero guarda 'property_name'
   const destinations = useCatalogOptions('destinations', 'description', 'property_name');
 
   const jobFields = [
@@ -1040,6 +1042,35 @@ const WorkActivity: React.FC<{currentUser: User}> = ({ currentUser }) => {
     } catch (error) { console.error("Error", error); }
   };
 
+  // Función para guardar el destino rápido
+  const handleSaveQuickDestination = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      // Determinamos el máximo consecutivo para el catálogo de destinos
+      const destSnap = await getDocs(collection(db, 'catalog_destinations'));
+      let maxSeq = 0;
+      destSnap.forEach(d => {
+        const data = d.data();
+        if (data.seq > maxSeq) maxSeq = data.seq;
+      });
+
+      // Guardamos en Firebase
+      await addDoc(collection(db, 'catalog_destinations'), {
+        ...newDestData,
+        seq: maxSeq + 1,
+        createdAt: new Date().toISOString()
+      });
+      
+      // Auto-seleccionamos el nuevo destino en el formulario de la Orden
+      setFormData({ ...formData, destination: newDestData.property_name });
+      setIsQuickDestOpen(false);
+      setNewDestData({ property_name: '', description: '', contact: '' });
+    } catch (error) {
+      console.error("Error adding quick destination", error);
+      alert("Error adding destination");
+    }
+  };
+
   const handleItemEntranceSelection = (selectedId: string) => {
     if (selectedId) {
       const item = entranceList.find(i => i.id === selectedId);
@@ -1139,7 +1170,6 @@ const WorkActivity: React.FC<{currentUser: User}> = ({ currentUser }) => {
           <tbody>
             {displayedOrders.length === 0 && <tr><td colSpan={8} className="empty-state">No records found.</td></tr>}
             {displayedOrders.map(order => {
-              // Convertir el property_name guardado al 'description' visual del catálogo
               const destObj = destinations.find(d => d.value === order.destination);
               const displayDestination = destObj ? destObj.label : order.destination;
 
@@ -1229,12 +1259,33 @@ const WorkActivity: React.FC<{currentUser: User}> = ({ currentUser }) => {
               <div className="form-grid">
                 <div className="form-group"><label>Registration Date {isJobReq('createdAt') && '*'}</label><input type="date" value={formData.createdAt} onChange={e => setFormData({...formData, createdAt: e.target.value})} required={isJobReq('createdAt')} /></div>
                 
+                {/* NUEVO CAMPO DESTINATION CON BUSCADOR Y BOTÓN */}
                 <div className="form-group">
                   <label>Destination {isJobReq('destination') && '*'}</label>
-                  <select value={formData.destination} onChange={e => setFormData({...formData, destination: e.target.value})} required={isJobReq('destination')}>
-                    <option value="">-- Select Destination --</option>
-                    {destinations.map(d => <option key={d.id} value={d.value}>{d.label}</option>)}
-                  </select>
+                  <div style={{ display: 'flex', gap: '8px', alignItems: 'stretch' }}>
+                    <div style={{ flex: 1 }}>
+                      <SearchableSelect 
+                        options={destinations.map(d => ({
+                          id: d.value,
+                          label: d.label !== d.value ? `${d.label} (${d.value})` : d.label,
+                          searchKeywords: `${d.label} ${d.value}`
+                        }))}
+                        value={formData.destination}
+                        onChange={val => setFormData({...formData, destination: val})}
+                        placeholder="-- Search destination --"
+                        required={isJobReq('destination')}
+                      />
+                    </div>
+                    <button 
+                      type="button" 
+                      className="action btn-secondary" 
+                      style={{ padding: '0 14px', height: '46px' }}
+                      onClick={() => setIsQuickDestOpen(true)}
+                      title="Add New Destination"
+                    >
+                      <Plus size={20} />
+                    </button>
+                  </div>
                 </div>
 
                 <div className="form-group"><label>Ordered by {isJobReq('jobOrder') && '*'}</label><input type="text" value={formData.jobOrder} onChange={e => setFormData({...formData, jobOrder: e.target.value})} required={isJobReq('jobOrder')} /></div>
@@ -1263,6 +1314,51 @@ const WorkActivity: React.FC<{currentUser: User}> = ({ currentUser }) => {
                     </tbody>
                   </table>
                 </div>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL PARA AÑADIR UN NUEVO DESTINO RÁPIDO */}
+      {isQuickDestOpen && (
+        <div className="modal-overlay active" style={{ zIndex: 1300 }}>
+          <div className="modal-content" style={{ maxWidth: '500px' }}>
+            <form onSubmit={handleSaveQuickDestination}>
+              <div className="modal-header">
+                <h3>Quick Add Destination</h3>
+                <button type="button" className="close-modal" onClick={() => setIsQuickDestOpen(false)}><X size={24}/></button>
+              </div>
+              <div className="form-grid">
+                <div className="form-group full-width">
+                  <label>Property Name * (Ej. 260)</label>
+                  <input 
+                    type="text" 
+                    required 
+                    value={newDestData.property_name} 
+                    onChange={e => setNewDestData({...newDestData, property_name: e.target.value})} 
+                  />
+                </div>
+                <div className="form-group full-width">
+                  <label>Description * (Visible Name)</label>
+                  <input 
+                    type="text" 
+                    required 
+                    value={newDestData.description} 
+                    onChange={e => setNewDestData({...newDestData, description: e.target.value})} 
+                  />
+                </div>
+                <div className="form-group full-width">
+                  <label>Contact (Optional)</label>
+                  <input 
+                    type="text" 
+                    value={newDestData.contact} 
+                    onChange={e => setNewDestData({...newDestData, contact: e.target.value})} 
+                  />
+                </div>
+              </div>
+              <div className="modal-footer-actions" style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '20px' }}>
+                <button type="submit" className="action btn-primary">Save Destination</button>
               </div>
             </form>
           </div>
