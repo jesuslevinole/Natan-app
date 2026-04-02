@@ -161,19 +161,28 @@ const SeqBadge: React.FC<{ seq?: number }> = ({ seq }) => (
 );
 
 const thStyle = { color: '#64748b', fontWeight: '600', fontSize: '0.85rem', textTransform: 'uppercase' as const };
-// SOLUCIÓN DE LA TABLA: Ancho mínimo para garantizar que el texto NUNCA se deforme y permita scroll horizontal limpio
 const tableResponsiveStyle = { width: '100%', minWidth: '950px', whiteSpace: 'nowrap' as const };
 
-const useCatalogOptions = (catalogId: string, labelField: string) => {
-  const [options, setOptions] = useState<{id: string, label: string}[]>([]);
+// Hook mejorado: valueField define qué se guarda, displayField define qué se muestra.
+const useCatalogOptions = (catalogId: string, displayField: string, valueField: string = displayField) => {
+  const [options, setOptions] = useState<{id: string, value: string, label: string}[]>([]);
   useEffect(() => {
     const unsubscribe = onSnapshot(collection(db, `catalog_${catalogId}`), (snapshot) => {
-      const fetched = snapshot.docs.map(doc => ({ id: doc.id, label: doc.data()[labelField] }));
+      const fetched = snapshot.docs.map(doc => {
+        const data = doc.data();
+        // Si el displayField no existe (por ejemplo, description vacía), mostramos el valueField (property_name) como respaldo
+        const labelText = data[displayField] && data[displayField] !== '-' ? data[displayField] : data[valueField];
+        return { 
+          id: doc.id, 
+          value: data[valueField] || '', 
+          label: labelText || '' 
+        };
+      });
       fetched.sort((a, b) => a.label.localeCompare(b.label));
       setOptions(fetched);
     });
     return () => unsubscribe();
-  }, [catalogId, labelField]);
+  }, [catalogId, displayField, valueField]);
   return options;
 };
 
@@ -776,6 +785,13 @@ const ItemEntrance: React.FC = () => {
                 <div style={{ display: 'flex', gap: '10px' }}>
                   <button type="button" className="icon-btn" onClick={() => setIsConfigOpen(true)} title="Configure Required Fields"><Settings size={20}/></button>
                   <button type="submit" className="action btn-primary">Save Changes</button>
+                  <button type="button" className="action btn-danger" onClick={async () => {
+                    if (editingId && window.confirm("Delete this record permanently?")) {
+                      await deleteDoc(doc(db, "itemEntrance", editingId));
+                      setIsModalOpen(false);
+                      fetchItems();
+                    }
+                  }}><Trash2 size={16}/> Delete</button>
                   <button type="button" className="close-modal" onClick={() => setIsModalOpen(false)}><X size={24}/></button>
                 </div>
               </div>
@@ -903,7 +919,8 @@ const WorkActivity: React.FC<{currentUser: User}> = ({ currentUser }) => {
   const [viewProducts, setViewProducts] = useState<JobProduct[]>([]);
   const [showHistoric, setShowHistoric] = useState<boolean>(false); 
 
-  const destinations = useCatalogOptions('destinations', 'property_name');
+  // 🔥 AQUÍ ESTÁ EL CAMBIO SOLICITADO: Muestra la 'description' en el dropdown, pero guarda 'property_name'
+  const destinations = useCatalogOptions('destinations', 'description', 'property_name');
 
   const jobFields = [
     { name: 'createdAt', label: 'Registration Date' },
@@ -1121,18 +1138,24 @@ const WorkActivity: React.FC<{currentUser: User}> = ({ currentUser }) => {
           </thead>
           <tbody>
             {displayedOrders.length === 0 && <tr><td colSpan={8} className="empty-state">No records found.</td></tr>}
-            {displayedOrders.map(order => (
-              <tr key={order.id} className="clickable-row" onClick={() => handleViewDetails(order)}>
-                <td><SeqBadge seq={order.visualSeq} /></td>
-                <td>{formatDateDisplay(order.createdAt)}</td>
-                <td style={{ fontWeight: 'bold' }}>{order.jobOrder}</td>
-                <td>{order.destination}</td>
-                <td>{order.description}</td>
-                <td style={{ textAlign: 'center' }}><span style={getStatusStyles(order.workFinish)}>{order.workFinish}</span></td>
-                <td>{order.pendingWork || '-'}</td>
-                <td>{formatDateDisplay(order.schedule)}</td>
-              </tr>
-            ))}
+            {displayedOrders.map(order => {
+              // Convertir el property_name guardado al 'description' visual del catálogo
+              const destObj = destinations.find(d => d.value === order.destination);
+              const displayDestination = destObj ? destObj.label : order.destination;
+
+              return (
+                <tr key={order.id} className="clickable-row" onClick={() => handleViewDetails(order)}>
+                  <td><SeqBadge seq={order.visualSeq} /></td>
+                  <td>{formatDateDisplay(order.createdAt)}</td>
+                  <td style={{ fontWeight: 'bold' }}>{order.jobOrder}</td>
+                  <td>{displayDestination}</td>
+                  <td>{order.description}</td>
+                  <td style={{ textAlign: 'center' }}><span style={getStatusStyles(order.workFinish)}>{order.workFinish}</span></td>
+                  <td>{order.pendingWork || '-'}</td>
+                  <td>{formatDateDisplay(order.schedule)}</td>
+                </tr>
+              )
+            })}
           </tbody>
         </table>
       </div>
@@ -1155,7 +1178,10 @@ const WorkActivity: React.FC<{currentUser: User}> = ({ currentUser }) => {
             </div>
             <div className="details-grid">
               <div className="detail-item"><span>Registration Date:</span> <p>{formatDateDisplay(viewingJob.createdAt)}</p></div>
-              <div className="detail-item"><span>Destination:</span> <p>{viewingJob.destination}</p></div>
+              <div className="detail-item">
+                <span>Destination:</span> 
+                <p>{destinations.find(d => d.value === viewingJob.destination)?.label || viewingJob.destination}</p>
+              </div>
               <div className="detail-item"><span>Ordered by:</span> <p>{viewingJob.jobOrder}</p></div>
               <div className="detail-item"><span>Schedule:</span> <p>{formatDateDisplay(viewingJob.schedule)}</p></div>
               <div className="detail-item"><span>Status:</span> <p><span style={getStatusStyles(viewingJob.workFinish)}>{viewingJob.workFinish}</span></p></div>
@@ -1207,7 +1233,7 @@ const WorkActivity: React.FC<{currentUser: User}> = ({ currentUser }) => {
                   <label>Destination {isJobReq('destination') && '*'}</label>
                   <select value={formData.destination} onChange={e => setFormData({...formData, destination: e.target.value})} required={isJobReq('destination')}>
                     <option value="">-- Select Destination --</option>
-                    {destinations.map(d => <option key={d.id} value={d.label}>{d.label}</option>)}
+                    {destinations.map(d => <option key={d.id} value={d.value}>{d.label}</option>)}
                   </select>
                 </div>
 
