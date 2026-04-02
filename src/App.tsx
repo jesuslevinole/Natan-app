@@ -5,7 +5,7 @@ import {
   PackageSearch, Briefcase, LogOut, Settings,
   MapPin, ChevronLeft, ChevronRight, Edit2, Trash2, Plus, 
   X, ArrowLeft, Menu, Building2, BookOpen, Search, Maximize2,
-  BarChart2, Calendar, Filter, Award, Activity
+  BarChart2, Filter, Award, Activity
 } from 'lucide-react';
 import './App.css';
 
@@ -1480,6 +1480,7 @@ const WorkActivity: React.FC<{currentUser: User}> = ({ currentUser }) => {
               <div className="form-grid">
                 <div className="form-group"><label>Registration Date {isJobReq('createdAt') && '*'}</label><input type="date" value={formData.createdAt} onChange={e => setFormData({...formData, createdAt: e.target.value})} required={isJobReq('createdAt')} /></div>
                 
+                {/* NUEVO CAMPO DESTINATION CON BUSCADOR Y BOTÓN */}
                 <div className="form-group">
                   <label>Destination {isJobReq('destination') && '*'}</label>
                   <div style={{ display: 'flex', gap: '8px', alignItems: 'stretch' }}>
@@ -1540,6 +1541,7 @@ const WorkActivity: React.FC<{currentUser: User}> = ({ currentUser }) => {
         </div>
       )}
 
+      {/* MODAL PARA AÑADIR UN NUEVO DESTINO RÁPIDO */}
       {isQuickDestOpen && (
         <div className="modal-overlay active" style={{ zIndex: 1300 }}>
           <div className="modal-content" style={{ maxWidth: '500px' }}>
@@ -1717,7 +1719,6 @@ export default function App() {
           <li className={activeModule === 'catalogs' ? 'active' : ''} onClick={() => handleModuleChange('catalogs')}>
             <BookOpen size={20}/> <span>Catalogs</span>
           </li>
-          {/* NUEVO BOTÓN DE REPORTES */}
           <li className={activeModule === 'reports' ? 'active' : ''} onClick={() => handleModuleChange('reports')}>
             <BarChart2 size={20}/> <span>Reports</span>
           </li>
