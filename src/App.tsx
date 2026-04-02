@@ -4,7 +4,8 @@ import { db } from './firebase';
 import { 
   PackageSearch, Briefcase, LogOut, Settings,
   MapPin, ChevronLeft, ChevronRight, Edit2, Trash2, Plus, 
-  X, ArrowLeft, Menu, Building2, BookOpen, Search, Maximize2
+  X, ArrowLeft, Menu, Building2, BookOpen, Search, Maximize2,
+  BarChart2, Calendar, Filter, Award, Activity
 } from 'lucide-react';
 import './App.css';
 
@@ -162,6 +163,7 @@ const SeqBadge: React.FC<{ seq?: number }> = ({ seq }) => (
 
 const thStyle = { color: '#64748b', fontWeight: '600', fontSize: '0.85rem', textTransform: 'uppercase' as const };
 const tableResponsiveStyle = { width: '100%', minWidth: '950px', whiteSpace: 'nowrap' as const };
+const tableResponsiveSmallStyle = { width: '100%', minWidth: '600px', whiteSpace: 'nowrap' as const };
 
 const useCatalogOptions = (catalogId: string, displayField: string, valueField: string = displayField) => {
   const [options, setOptions] = useState<{id: string, value: string, label: string}[]>([]);
@@ -354,7 +356,7 @@ const FieldConfigModal: React.FC<{
 };
 
 // =========================================
-// COMPONENTE: PANTALLA DE AUTENTICACIÓN
+// PANTALLA DE AUTENTICACIÓN
 // =========================================
 const AuthScreen: React.FC<{ onLogin: (u: string, p: string) => void }> = ({ onLogin }) => {
   const [isLogin, setIsLogin] = useState(true);
@@ -378,6 +380,230 @@ const AuthScreen: React.FC<{ onLogin: (u: string, p: string) => void }> = ({ onL
           <div className="form-group"><label>Password</label><input type="password" value={password} onChange={e => setPassword(e.target.value)} required /></div>
           <button type="submit" className="auth-btn">{isLogin ? 'Log In' : 'Sign Up'}</button>
         </form>
+      </div>
+    </div>
+  );
+};
+
+// =========================================
+// MÓDULO: REPORTES (NUEVO)
+// =========================================
+const ReportsModule: React.FC = () => {
+  const [orders, setOrders] = useState<JobOrder[]>([]);
+  const destinations = useCatalogOptions('destinations', 'description', 'property_name');
+  const [workers, setWorkers] = useState<string[]>([]);
+  
+  // Filtros
+  const [startDate, setStartDate] = useState<string>('');
+  const [endDate, setEndDate] = useState<string>('');
+  const [selectedDest, setSelectedDest] = useState<string>('');
+  const [selectedWorker, setSelectedWorker] = useState<string>('');
+
+  useEffect(() => {
+    const fetchOrders = async () => {
+      const orderData = await getDocs(collection(db, "jobOrders"));
+      const fetchedOrders = orderData.docs.map(doc => ({ ...doc.data(), id: doc.id } as any));
+      setOrders(fetchedOrders);
+
+      // Extraer trabajadores únicos
+      const uniqueWorkers = Array.from(new Set(fetchedOrders.map(o => o.jobOrder))).filter(Boolean);
+      setWorkers(uniqueWorkers as string[]);
+    };
+    fetchOrders();
+  }, []);
+
+  // Lógica de Filtrado
+  const filteredOrders = orders.filter(o => {
+    let match = true;
+    
+    // Filtro por Fechas (usando createdAt o la fecha que elijas, aquí usamos createdAt)
+    const orderDateStr = o.createdAt.split('T')[0]; // asumiendo YYYY-MM-DD
+    if (startDate && orderDateStr < startDate) match = false;
+    if (endDate && orderDateStr > endDate) match = false;
+    
+    // Filtro por Destino
+    if (selectedDest && o.destination !== selectedDest) match = false;
+    
+    // Filtro por Trabajador
+    if (selectedWorker && o.jobOrder !== selectedWorker) match = false;
+
+    return match;
+  });
+
+  // Cálculos de Métricas
+  const totalWorks = filteredOrders.length;
+  
+  // 1. Trabajos por Departamento (Destination)
+  const aptCounts: Record<string, number> = {};
+  filteredOrders.forEach(o => {
+    aptCounts[o.destination] = (aptCounts[o.destination] || 0) + 1;
+  });
+  const aptList = Object.entries(aptCounts)
+    .map(([dest, count]) => ({ dest, count }))
+    .sort((a, b) => b.count - a.count);
+
+  const mostWorkedApt = aptList.length > 0 ? aptList[0] : null;
+
+  // 2. Trabajos Repetidos por Departamento
+  const repeatedWorksCounts: Record<string, number> = {};
+  filteredOrders.forEach(o => {
+    const key = `${o.destination} ||| ${o.description}`;
+    repeatedWorksCounts[key] = (repeatedWorksCounts[key] || 0) + 1;
+  });
+  const repeatedList = Object.entries(repeatedWorksCounts)
+    .map(([key, count]) => {
+      const [dest, desc] = key.split(' ||| ');
+      return { dest, desc, count };
+    })
+    .sort((a, b) => b.count - a.count);
+
+  // 3. Trabajador con más actividades
+  const workerCounts: Record<string, number> = {};
+  filteredOrders.forEach(o => {
+    workerCounts[o.jobOrder] = (workerCounts[o.jobOrder] || 0) + 1;
+  });
+  const topWorkerEntry = Object.entries(workerCounts).sort((a, b) => b[1] - a[1])[0];
+
+  // Helper para obtener el label del destino
+  const getDestLabel = (val: string) => {
+    const d = destinations.find(x => x.value === val);
+    return d ? d.label : val;
+  };
+
+  return (
+    <div className="card catalog-manager-anim">
+      <div className="card-header" style={{ borderBottom: 'none', paddingBottom: 0 }}>
+        <div className="card-header-text">
+          <h2 style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><BarChart2 size={28}/> Analytics & Reports</h2>
+          <p>Analyze work activity metrics and trends.</p>
+        </div>
+      </div>
+
+      {/* PANEL DE FILTROS */}
+      <div style={{ backgroundColor: '#f8fafc', padding: '20px', borderRadius: '12px', border: '1px solid #e2e8f0', marginBottom: '30px', marginTop: '15px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '15px', color: '#475569', fontWeight: 'bold' }}>
+          <Filter size={18} /> <span>Report Filters</span>
+        </div>
+        <div className="form-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))' }}>
+          <div className="form-group">
+            <label>Start Date</label>
+            <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} />
+          </div>
+          <div className="form-group">
+            <label>End Date</label>
+            <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} />
+          </div>
+          <div className="form-group">
+            <label>Destination (Apt)</label>
+            <SearchableSelect 
+              options={[{id: '', label: 'All Destinations', searchKeywords: ''}, ...destinations.map(d => ({id: d.value, label: d.label, searchKeywords: `${d.label} ${d.value}`}))]}
+              value={selectedDest}
+              onChange={setSelectedDest}
+              placeholder="-- Select Apt --"
+            />
+          </div>
+          <div className="form-group">
+            <label>Worker</label>
+            <select value={selectedWorker} onChange={e => setSelectedWorker(e.target.value)}>
+              <option value="">All Workers</option>
+              {workers.map(w => <option key={w} value={w}>{w}</option>)}
+            </select>
+          </div>
+        </div>
+      </div>
+
+      {/* TARJETAS DE KPIs */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '20px', marginBottom: '30px' }}>
+        <div style={{ backgroundColor: '#eff6ff', padding: '25px', borderRadius: '16px', border: '1px solid #bfdbfe', display: 'flex', alignItems: 'center', gap: '15px' }}>
+          <div style={{ backgroundColor: '#3b82f6', color: 'white', padding: '15px', borderRadius: '12px' }}><Activity size={28}/></div>
+          <div>
+            <p style={{ margin: 0, fontSize: '0.9rem', color: '#64748b', fontWeight: 'bold', textTransform: 'uppercase' }}>Total Activities</p>
+            <h3 style={{ margin: 0, fontSize: '2rem', color: '#1e293b' }}>{totalWorks}</h3>
+          </div>
+        </div>
+        <div style={{ backgroundColor: '#f0fdf4', padding: '25px', borderRadius: '16px', border: '1px solid #bbf7d0', display: 'flex', alignItems: 'center', gap: '15px' }}>
+          <div style={{ backgroundColor: '#22c55e', color: 'white', padding: '15px', borderRadius: '12px' }}><MapPin size={28}/></div>
+          <div>
+            <p style={{ margin: 0, fontSize: '0.9rem', color: '#64748b', fontWeight: 'bold', textTransform: 'uppercase' }}>Most Worked Apt.</p>
+            <h3 style={{ margin: 0, fontSize: '1.2rem', color: '#1e293b', lineHeight: '1.2' }}>{mostWorkedApt ? getDestLabel(mostWorkedApt.dest) : '-'}</h3>
+            {mostWorkedApt && <span style={{ fontSize: '0.85rem', color: '#16a34a', fontWeight: 'bold' }}>{mostWorkedApt.count} tasks</span>}
+          </div>
+        </div>
+        <div style={{ backgroundColor: '#fff7ed', padding: '25px', borderRadius: '16px', border: '1px solid #fed7aa', display: 'flex', alignItems: 'center', gap: '15px' }}>
+          <div style={{ backgroundColor: '#f97316', color: 'white', padding: '15px', borderRadius: '12px' }}><Award size={28}/></div>
+          <div>
+            <p style={{ margin: 0, fontSize: '0.9rem', color: '#64748b', fontWeight: 'bold', textTransform: 'uppercase' }}>Top Worker</p>
+            <h3 style={{ margin: 0, fontSize: '1.3rem', color: '#1e293b' }}>{topWorkerEntry ? topWorkerEntry[0] : '-'}</h3>
+            {topWorkerEntry && <span style={{ fontSize: '0.85rem', color: '#ea580c', fontWeight: 'bold' }}>{topWorkerEntry[1]} tasks completed</span>}
+          </div>
+        </div>
+      </div>
+
+      {/* SECCIÓN DE TABLAS DETALLADAS */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))', gap: '30px' }}>
+        
+        {/* Tabla 1: Frecuencia de Apartamentos */}
+        <div style={{ border: '1px solid #e2e8f0', borderRadius: '12px', overflow: 'hidden' }}>
+          <div style={{ backgroundColor: '#f8fafc', padding: '15px 20px', borderBottom: '1px solid #e2e8f0' }}>
+            <h4 style={{ margin: 0, color: '#334155', display: 'flex', alignItems: 'center', gap: '8px' }}>Works per Apartment</h4>
+          </div>
+          <div className="table-container" style={{ border: 'none', borderRadius: 0, maxHeight: '400px', overflowY: 'auto' }}>
+            <table style={tableResponsiveSmallStyle}>
+              <thead>
+                <tr>
+                  <th style={thStyle}>Destination (Apt)</th>
+                  <th style={{ textAlign: 'center', ...thStyle }}>Total Interventions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {aptList.length === 0 && <tr><td colSpan={2} className="empty-state">No data available for these filters.</td></tr>}
+                {aptList.map((item, i) => (
+                  <tr key={i}>
+                    <td style={{ fontWeight: 'bold' }}>{getDestLabel(item.dest)}</td>
+                    <td style={{ textAlign: 'center' }}>
+                      <span style={{ backgroundColor: '#eff6ff', color: '#2563eb', padding: '4px 12px', borderRadius: '12px', fontWeight: 'bold' }}>
+                        {item.count}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* Tabla 2: Trabajos Repetidos */}
+        <div style={{ border: '1px solid #e2e8f0', borderRadius: '12px', overflow: 'hidden' }}>
+          <div style={{ backgroundColor: '#f8fafc', padding: '15px 20px', borderBottom: '1px solid #e2e8f0' }}>
+            <h4 style={{ margin: 0, color: '#334155', display: 'flex', alignItems: 'center', gap: '8px' }}>Repeated Tasks per Apartment</h4>
+          </div>
+          <div className="table-container" style={{ border: 'none', borderRadius: 0, maxHeight: '400px', overflowY: 'auto' }}>
+            <table style={tableResponsiveSmallStyle}>
+              <thead>
+                <tr>
+                  <th style={thStyle}>Destination</th>
+                  <th style={thStyle}>Description (Task)</th>
+                  <th style={{ textAlign: 'center', ...thStyle }}>Times Done</th>
+                </tr>
+              </thead>
+              <tbody>
+                {repeatedList.length === 0 && <tr><td colSpan={3} className="empty-state">No data available for these filters.</td></tr>}
+                {repeatedList.map((item, i) => (
+                  <tr key={i}>
+                    <td>{getDestLabel(item.dest)}</td>
+                    <td style={{ color: '#475569' }}>{item.desc}</td>
+                    <td style={{ textAlign: 'center' }}>
+                      <span style={{ backgroundColor: item.count > 1 ? '#fef2f2' : '#f0fdf4', color: item.count > 1 ? '#ef4444' : '#22c55e', padding: '4px 12px', borderRadius: '12px', fontWeight: 'bold' }}>
+                        {item.count}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
       </div>
     </div>
   );
@@ -913,7 +1139,6 @@ const WorkActivity: React.FC<{currentUser: User}> = ({ currentUser }) => {
   const [isJobConfigOpen, setIsJobConfigOpen] = useState<boolean>(false);
   const [isProductConfigOpen, setIsProductConfigOpen] = useState<boolean>(false);
   
-  // Novedad: Estado para la creación rápida de Destinos
   const [isQuickDestOpen, setIsQuickDestOpen] = useState<boolean>(false);
   const [newDestData, setNewDestData] = useState({ property_name: '', description: '', contact: '' });
 
@@ -1042,11 +1267,9 @@ const WorkActivity: React.FC<{currentUser: User}> = ({ currentUser }) => {
     } catch (error) { console.error("Error", error); }
   };
 
-  // Función para guardar el destino rápido
   const handleSaveQuickDestination = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      // Determinamos el máximo consecutivo para el catálogo de destinos
       const destSnap = await getDocs(collection(db, 'catalog_destinations'));
       let maxSeq = 0;
       destSnap.forEach(d => {
@@ -1054,14 +1277,12 @@ const WorkActivity: React.FC<{currentUser: User}> = ({ currentUser }) => {
         if (data.seq > maxSeq) maxSeq = data.seq;
       });
 
-      // Guardamos en Firebase
       await addDoc(collection(db, 'catalog_destinations'), {
         ...newDestData,
         seq: maxSeq + 1,
         createdAt: new Date().toISOString()
       });
       
-      // Auto-seleccionamos el nuevo destino en el formulario de la Orden
       setFormData({ ...formData, destination: newDestData.property_name });
       setIsQuickDestOpen(false);
       setNewDestData({ property_name: '', description: '', contact: '' });
@@ -1259,7 +1480,6 @@ const WorkActivity: React.FC<{currentUser: User}> = ({ currentUser }) => {
               <div className="form-grid">
                 <div className="form-group"><label>Registration Date {isJobReq('createdAt') && '*'}</label><input type="date" value={formData.createdAt} onChange={e => setFormData({...formData, createdAt: e.target.value})} required={isJobReq('createdAt')} /></div>
                 
-                {/* NUEVO CAMPO DESTINATION CON BUSCADOR Y BOTÓN */}
                 <div className="form-group">
                   <label>Destination {isJobReq('destination') && '*'}</label>
                   <div style={{ display: 'flex', gap: '8px', alignItems: 'stretch' }}>
@@ -1320,7 +1540,6 @@ const WorkActivity: React.FC<{currentUser: User}> = ({ currentUser }) => {
         </div>
       )}
 
-      {/* MODAL PARA AÑADIR UN NUEVO DESTINO RÁPIDO */}
       {isQuickDestOpen && (
         <div className="modal-overlay active" style={{ zIndex: 1300 }}>
           <div className="modal-content" style={{ maxWidth: '500px' }}>
@@ -1498,6 +1717,10 @@ export default function App() {
           <li className={activeModule === 'catalogs' ? 'active' : ''} onClick={() => handleModuleChange('catalogs')}>
             <BookOpen size={20}/> <span>Catalogs</span>
           </li>
+          {/* NUEVO BOTÓN DE REPORTES */}
+          <li className={activeModule === 'reports' ? 'active' : ''} onClick={() => handleModuleChange('reports')}>
+            <BarChart2 size={20}/> <span>Reports</span>
+          </li>
         </ul>
         <div className="sidebar-footer">
           <button type="button" className="action logout-btn" onClick={() => setCurrentUser(null)}>
@@ -1520,6 +1743,7 @@ export default function App() {
           {activeModule === 'workActivity' && <WorkActivity currentUser={currentUser} />}
           {activeModule === 'itemEntrance' && <ItemEntrance />}
           {activeModule === 'catalogs' && <CatalogsModule />}
+          {activeModule === 'reports' && <ReportsModule />}
         </main>
       </div>
     </div>
