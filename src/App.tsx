@@ -206,7 +206,7 @@ const useFormConfig = (formKey: string, defaultRequired: string[]) => {
 };
 
 // =========================================
-// COMPONENTE: SELECTOR CON BUSCADOR (Soporta Dark Mode)
+// COMPONENTE: SELECTOR CON BUSCADOR
 // =========================================
 const SearchableSelect: React.FC<{
   options: { id: string; label: string; searchKeywords?: string; render?: React.ReactNode }[];
@@ -214,7 +214,7 @@ const SearchableSelect: React.FC<{
   onChange: (id: string) => void;
   placeholder?: string;
   required?: boolean;
-  theme?: 'light' | 'dark'; // NUEVO: Permite adaptar el diseño a fondos oscuros
+  theme?: 'light' | 'dark';
 }> = ({ options, value, onChange, placeholder = "Search...", required, theme = 'light' }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [isOpen, setIsOpen] = useState(false);
@@ -259,22 +259,22 @@ const SearchableSelect: React.FC<{
           required={required && !value}
           style={{
             width: '100%', padding: '12px 40px 12px 14px', 
-            border: isDark ? '1px solid rgba(255,255,255,0.2)' : '1px solid #cbd5e1',
-            backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : '#ffffff',
+            border: isDark ? '1px solid rgba(255,255,255,0.3)' : '1px solid #cbd5e1',
+            backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : '#ffffff',
             color: isDark ? '#ffffff' : '#334155',
             borderRadius: '8px', fontSize: '0.95rem', outline: 'none',
             transition: 'all 0.2s'
           }}
           className={isDark ? "searchable-input-dark" : "searchable-input-light"}
         />
-        <Search size={18} color={isDark ? "#94a3b8" : "#94a3b8"} style={{ position: 'absolute', right: '14px' }} />
+        <Search size={18} color={isDark ? "#cbd5e1" : "#94a3b8"} style={{ position: 'absolute', right: '14px' }} />
       </div>
       
       {isOpen && (
         <ul style={{
           position: 'absolute', top: '100%', left: 0, right: 0, 
-          background: isDark ? '#1e293b' : 'white', 
-          border: isDark ? '1px solid #334155' : '1px solid #e2e8f0', 
+          background: isDark ? '#475569' : 'white', 
+          border: isDark ? '1px solid #64748b' : '1px solid #e2e8f0', 
           borderRadius: '8px', marginTop: '6px', maxHeight: '350px', 
           overflowY: 'auto', zIndex: 100, listStyle: 'none', padding: '6px', 
           boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.25)'
@@ -290,18 +290,18 @@ const SearchableSelect: React.FC<{
                 }}
                 style={{ 
                   padding: '12px 14px', cursor: 'pointer', 
-                  borderBottom: isDark ? '1px solid #334155' : '1px solid #f1f5f9', 
+                  borderBottom: isDark ? '1px solid #64748b' : '1px solid #f1f5f9', 
                   color: isDark ? '#f8fafc' : '#334155',
                   borderRadius: '6px', transition: 'background-color 0.2s'
                 }}
-                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = isDark ? '#334155' : '#f8fafc'}
+                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = isDark ? '#64748b' : '#f8fafc'}
                 onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
               >
                 {opt.render ? opt.render : opt.label}
               </li>
             ))
           ) : (
-            <li style={{ padding: '15px', color: '#94a3b8', fontSize: '0.95rem', textAlign: 'center' }}>No results found...</li>
+            <li style={{ padding: '15px', color: isDark ? '#cbd5e1' : '#94a3b8', fontSize: '0.95rem', textAlign: 'center' }}>No results found...</li>
           )}
         </ul>
       )}
@@ -399,7 +399,7 @@ const AuthScreen: React.FC<{ onLogin: (u: string, p: string) => void }> = ({ onL
 };
 
 // =========================================
-// MÓDULO: REPORTES (NUEVO Y ELEGANTE)
+// MÓDULO: REPORTES (Gris Elegante y Suave)
 // =========================================
 const ReportsModule: React.FC = () => {
   const [orders, setOrders] = useState<JobOrder[]>([]);
@@ -407,40 +407,48 @@ const ReportsModule: React.FC = () => {
   const destinations = useCatalogOptions('destinations', 'description', 'property_name');
   const [workers, setWorkers] = useState<string[]>([]);
   
-  // Filtros
+  // Filtros de Ordenes
   const [startDate, setStartDate] = useState<string>('');
   const [endDate, setEndDate] = useState<string>('');
   const [selectedDest, setSelectedDest] = useState<string>('');
   const [selectedWorker, setSelectedWorker] = useState<string>('');
+
+  // Nuevos Filtros de Producto
   const [filterItemName, setFilterItemName] = useState<string>('');
   const [filterPO, setFilterPO] = useState<string>('');
   const [filterSerial, setFilterSerial] = useState<string>('');
 
   useEffect(() => {
     const fetchOrders = async () => {
+      // Traer Órdenes
       const orderData = await getDocs(collection(db, "jobOrders"));
       const fetchedOrders = orderData.docs.map(doc => ({ ...doc.data(), id: doc.id } as JobOrder));
       setOrders(fetchedOrders);
 
+      // Traer Productos
       const prodData = await getDocs(collection(db, "jobProducts"));
       const fetchedProducts = prodData.docs.map(doc => ({ ...doc.data(), id: doc.id } as JobProduct));
       setAllProducts(fetchedProducts);
 
+      // Extraer trabajadores únicos
       const uniqueWorkers = Array.from(new Set(fetchedOrders.map(o => o.jobOrder))).filter(Boolean);
       setWorkers(uniqueWorkers as string[]);
     };
     fetchOrders();
   }, []);
 
-  // Lógica de Filtrado Central
+  // Lógica de Filtrado Central: Combinando Órdenes y sus Productos
   const filteredOrders = orders.filter(o => {
     let match = true;
+    
+    // Filtros Nivel 1: Fechas y Orden
     const orderDateStr = o.createdAt.split('T')[0]; 
     if (startDate && orderDateStr < startDate) match = false;
     if (endDate && orderDateStr > endDate) match = false;
     if (selectedDest && o.destination !== selectedDest) match = false;
     if (selectedWorker && o.jobOrder !== selectedWorker) match = false;
 
+    // Filtros Nivel 2: Si escriben un producto, PO o Serial, la orden debe contenerlo
     if (match && (filterItemName || filterPO || filterSerial)) {
       const orderProducts = allProducts.filter(p => p.jobOrderId === o.id);
       const hasMatchingProduct = orderProducts.some(p => {
@@ -452,12 +460,15 @@ const ReportsModule: React.FC = () => {
       });
       if (!hasMatchingProduct) match = false;
     }
+
     return match;
   });
 
+  // Lista detallada de productos que pertenecen SOLO a las órdenes filtradas y cruzan los filtros de producto
   const filteredProductsDetailed = allProducts.filter(p => {
     const order = filteredOrders.find(o => o.id === p.jobOrderId);
     if (!order) return false;
+
     let pMatch = true;
     if (filterItemName && !(p.itemName || '').toLowerCase().includes(filterItemName.toLowerCase())) pMatch = false;
     if (filterPO && !(p.po || '').toLowerCase().includes(filterPO.toLowerCase())) pMatch = false;
@@ -473,29 +484,42 @@ const ReportsModule: React.FC = () => {
     };
   }).sort((a, b) => new Date(b.orderDate).getTime() - new Date(a.orderDate).getTime());
 
-  // Cálculos de Métricas
+  // Cálculos de Métricas Generales
   const totalWorks = filteredOrders.length;
   const totalItemsInstalled = filteredProductsDetailed.reduce((sum, p) => sum + p.quantity, 0);
   
+  // 1. Trabajos por Departamento (Destination)
   const aptCounts: Record<string, number> = {};
-  filteredOrders.forEach(o => { aptCounts[o.destination] = (aptCounts[o.destination] || 0) + 1; });
-  const aptList = Object.entries(aptCounts).map(([dest, count]) => ({ dest, count })).sort((a, b) => b.count - a.count);
+  filteredOrders.forEach(o => {
+    aptCounts[o.destination] = (aptCounts[o.destination] || 0) + 1;
+  });
+  const aptList = Object.entries(aptCounts)
+    .map(([dest, count]) => ({ dest, count }))
+    .sort((a, b) => b.count - a.count);
+
   const mostWorkedApt = aptList.length > 0 ? aptList[0] : null;
 
+  // 2. Trabajos Repetidos por Departamento
   const repeatedWorksCounts: Record<string, number> = {};
   filteredOrders.forEach(o => {
     const key = `${o.destination} ||| ${o.description}`;
     repeatedWorksCounts[key] = (repeatedWorksCounts[key] || 0) + 1;
   });
-  const repeatedList = Object.entries(repeatedWorksCounts).map(([key, count]) => {
-    const [dest, desc] = key.split(' ||| ');
-    return { dest, desc, count };
-  }).sort((a, b) => b.count - a.count);
+  const repeatedList = Object.entries(repeatedWorksCounts)
+    .map(([key, count]) => {
+      const [dest, desc] = key.split(' ||| ');
+      return { dest, desc, count };
+    })
+    .sort((a, b) => b.count - a.count);
 
+  // 3. Trabajador con más actividades
   const workerCounts: Record<string, number> = {};
-  filteredOrders.forEach(o => { workerCounts[o.jobOrder] = (workerCounts[o.jobOrder] || 0) + 1; });
+  filteredOrders.forEach(o => {
+    workerCounts[o.jobOrder] = (workerCounts[o.jobOrder] || 0) + 1;
+  });
   const topWorkerEntry = Object.entries(workerCounts).sort((a, b) => b[1] - a[1])[0];
 
+  // Helper para obtener el label del destino
   const getDestLabel = (val: string) => {
     const d = destinations.find(x => x.value === val);
     return d ? d.label : val;
@@ -503,27 +527,27 @@ const ReportsModule: React.FC = () => {
 
   return (
     <div className="card catalog-manager-anim" style={{ maxWidth: '1400px' }}>
-      {/* ESTILOS INYECTADOS PARA EL TEMA OSCURO DE LOS FILTROS */}
+      {/* ESTILOS INYECTADOS PARA EL NUEVO GRIS ELEGANTE */}
       <style>{`
         .dark-filter-panel label {
-          color: #94a3b8 !important;
+          color: #e2e8f0 !important;
           font-size: 0.75rem !important;
           text-transform: uppercase;
           letter-spacing: 0.5px;
         }
         .dark-filter-panel input, .dark-filter-panel select {
-          background-color: rgba(255, 255, 255, 0.05) !important;
-          border: 1px solid rgba(255, 255, 255, 0.1) !important;
+          background-color: rgba(255, 255, 255, 0.1) !important;
+          border: 1px solid rgba(255, 255, 255, 0.3) !important;
           color: white !important;
           border-radius: 8px;
         }
         .dark-filter-panel input:focus, .dark-filter-panel select:focus, .searchable-input-dark:focus {
-          border-color: #3b82f6 !important;
-          box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.25) !important;
-          background-color: rgba(255, 255, 255, 0.1) !important;
+          border-color: #60a5fa !important;
+          box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.3) !important;
+          background-color: rgba(255, 255, 255, 0.15) !important;
         }
         .dark-filter-panel input::placeholder {
-          color: #64748b !important;
+          color: #cbd5e1 !important;
         }
         .dark-filter-panel input[type="date"]::-webkit-calendar-picker-indicator {
           filter: invert(1);
@@ -538,32 +562,32 @@ const ReportsModule: React.FC = () => {
         </div>
       </div>
 
-      {/* PANEL DE FILTROS OSCURO Y ELEGANTE */}
+      {/* PANEL DE FILTROS GRIS ELEGANTE */}
       <div className="dark-filter-panel" style={{ 
-        backgroundColor: '#0f172a', 
+        backgroundColor: '#475569', // Slate 600 - Gris medio elegante
         padding: '25px', 
         borderRadius: '16px', 
-        boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1), 0 10px 10px -5px rgba(0,0,0,0.04)', 
+        boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -2px rgba(0,0,0,0.05)', 
         marginBottom: '30px', 
         marginTop: '15px',
-        border: '1px solid #1e293b'
+        border: '1px solid #64748b' // Slate 500
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '20px' }}>
-          <div style={{ background: 'rgba(59, 130, 246, 0.2)', padding: '8px', borderRadius: '8px', color: '#60a5fa' }}>
+          <div style={{ background: 'rgba(255, 255, 255, 0.15)', padding: '8px', borderRadius: '8px', color: '#ffffff' }}>
             <Filter size={20} /> 
           </div>
           <h3 style={{ margin: 0, color: 'white', fontSize: '1.2rem', fontWeight: 600 }}>Command Center Filters</h3>
         </div>
 
         {/* Bloque 1: General */}
-        <div className="form-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '15px' }}>
+        <div className="form-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '15px' }}>
           <div className="form-group">
             <label>Start Date</label>
-            <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} />
+            <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} style={{ padding: '8px' }}/>
           </div>
           <div className="form-group">
             <label>End Date</label>
-            <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} />
+            <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} style={{ padding: '8px' }}/>
           </div>
           <div className="form-group">
             <label>Destination (Apt)</label>
@@ -577,34 +601,27 @@ const ReportsModule: React.FC = () => {
           </div>
           <div className="form-group">
             <label>Worker</label>
-            <select value={selectedWorker} onChange={e => setSelectedWorker(e.target.value)}>
+            <select value={selectedWorker} onChange={e => setSelectedWorker(e.target.value)} style={{ padding: '8px' }}>
               <option value="" style={{color: 'black'}}>All Workers</option>
               {workers.map(w => <option key={w} value={w} style={{color: 'black'}}>{w}</option>)}
             </select>
           </div>
-        </div>
-
-        {/* Separador */}
-        <div style={{ height: '1px', backgroundColor: 'rgba(255,255,255,0.1)', margin: '20px 0' }} />
-
-        {/* Bloque 2: Productos */}
-        <div className="form-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '15px' }}>
           <div className="form-group">
             <label>Item Name</label>
-            <input type="text" placeholder="Search by name..." value={filterItemName} onChange={e => setFilterItemName(e.target.value)} />
+            <input type="text" placeholder="Search by name..." value={filterItemName} onChange={e => setFilterItemName(e.target.value)} style={{ padding: '8px' }}/>
           </div>
           <div className="form-group">
             <label>PO #</label>
-            <input type="text" placeholder="Search PO..." value={filterPO} onChange={e => setFilterPO(e.target.value)} />
+            <input type="text" placeholder="Search PO..." value={filterPO} onChange={e => setFilterPO(e.target.value)} style={{ padding: '8px' }}/>
           </div>
           <div className="form-group">
             <label>Serial #</label>
-            <input type="text" placeholder="Search serial..." value={filterSerial} onChange={e => setFilterSerial(e.target.value)} />
+            <input type="text" placeholder="Search serial..." value={filterSerial} onChange={e => setFilterSerial(e.target.value)} style={{ padding: '8px' }}/>
           </div>
         </div>
       </div>
 
-      {/* TARJETAS DE KPIs */}
+      {/* TARJETAS DE KPIs (4 Columnas) */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '20px', marginBottom: '30px' }}>
         <div style={{ backgroundColor: '#eff6ff', padding: '20px', borderRadius: '16px', border: '1px solid #bfdbfe', display: 'flex', alignItems: 'center', gap: '15px' }}>
           <div style={{ backgroundColor: '#3b82f6', color: 'white', padding: '12px', borderRadius: '12px' }}><Activity size={24}/></div>
@@ -1620,6 +1637,7 @@ const WorkActivity: React.FC<{currentUser: User}> = ({ currentUser }) => {
               <div className="form-grid">
                 <div className="form-group"><label>Registration Date {isJobReq('createdAt') && '*'}</label><input type="date" value={formData.createdAt} onChange={e => setFormData({...formData, createdAt: e.target.value})} required={isJobReq('createdAt')} /></div>
                 
+                {/* NUEVO CAMPO DESTINATION CON BUSCADOR Y BOTÓN */}
                 <div className="form-group">
                   <label>Destination {isJobReq('destination') && '*'}</label>
                   <div style={{ display: 'flex', gap: '8px', alignItems: 'stretch' }}>
