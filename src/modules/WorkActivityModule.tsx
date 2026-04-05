@@ -26,6 +26,7 @@ export const WorkActivity: React.FC<{currentUser: User}> = ({ currentUser }) => 
   const [viewProducts, setViewProducts] = useState<JobProduct[]>([]);
   const [showHistoric, setShowHistoric] = useState<boolean>(false); 
 
+  // Traemos el catálogo indicando que la descripción será la etiqueta principal
   const destinations = useCatalogOptions('destinations', 'description', 'property_name');
 
   const jobFields = [
@@ -362,7 +363,7 @@ export const WorkActivity: React.FC<{currentUser: User}> = ({ currentUser }) => 
               <div className="form-grid">
                 <div className="form-group"><label>Registration Date {isJobReq('createdAt') && '*'}</label><input type="date" value={formData.createdAt} onChange={e => setFormData({...formData, createdAt: e.target.value})} required={isJobReq('createdAt')} /></div>
                 
-                {/* NUEVO CAMPO DESTINATION CON BUSCADOR Y BOTÓN */}
+                {/* 🔥 SOLUCIÓN: BUSCADOR EXCLUSIVO DE DESCRIPCIÓN */}
                 <div className="form-group">
                   <label>Destination {isJobReq('destination') && '*'}</label>
                   <div style={{ display: 'flex', gap: '8px', alignItems: 'stretch' }}>
@@ -370,12 +371,18 @@ export const WorkActivity: React.FC<{currentUser: User}> = ({ currentUser }) => 
                       <SearchableSelect 
                         options={destinations.map(d => ({
                           id: d.value,
-                          label: d.label !== d.value ? `${d.label} (${d.value})` : d.label,
-                          searchKeywords: `${d.label} ${d.value}`
+                          label: d.label, // Restringimos el label puramente a la descripción
+                          searchKeywords: d.label, // Aseguramos que solo filtre lo que escribes por descripción
+                          render: (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                              <span style={{ fontWeight: 'bold', color: '#1e293b' }}>{d.label}</span>
+                              <span style={{ fontSize: '0.75rem', color: '#64748b' }}>Apt / Prop: {d.value}</span>
+                            </div>
+                          )
                         }))}
                         value={formData.destination}
                         onChange={val => setFormData({...formData, destination: val})}
-                        placeholder="-- Search destination --"
+                        placeholder="Search by description..."
                         required={isJobReq('destination')}
                       />
                     </div>
