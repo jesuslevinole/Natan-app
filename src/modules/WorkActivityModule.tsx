@@ -6,13 +6,10 @@ import { JobOrder, JobProduct, ItemEntranceRecord, JobFormData, ProductFormData 
 import { SearchBar, FieldConfigModal, SeqBadge, SearchableSelect } from '../components/SharedUI';
 import { useCatalogOptions, useFormConfig } from '../hooks/useAppHooks';
 import { getTodayString, formatDateDisplay, getStatusStyles, formatSeq } from '../utils/helpers';
-
-// 🔥 Inyecciones de Seguridad y Auditoría
 import { AuditLogger } from '../utils/logger';
 import { useAuth, RequirePermission } from '../hooks/useAuth';
 
 export const WorkActivity: React.FC = () => {
-  // Extraemos al usuario logueado desde el contexto global de seguridad
   const { currentUser } = useAuth();
   
   const [orders, setOrders] = useState<JobOrder[]>([]);
@@ -130,10 +127,7 @@ export const WorkActivity: React.FC = () => {
     if (window.confirm("⚠️ Delete record?")) {
       const orderToDelete = orders.find(o => o.id === id);
       await deleteDoc(doc(db, "jobOrders", id));
-      
-      // 🔥 AUDITORÍA: Registro de Eliminación
       AuditLogger.logDelete('WorkActivity', currentUser?.username || 'Unknown', id, orderToDelete);
-      
       setViewingJob(null);
       fetchData(); 
     }
@@ -145,13 +139,11 @@ export const WorkActivity: React.FC = () => {
       let savedJobId = editingJob;
       if (editingJob) {
         await updateDoc(doc(db, "jobOrders", editingJob), { ...formData });
-        // 🔥 AUDITORÍA: Registro de Actualización
         AuditLogger.logUpdate('WorkActivity', currentUser?.username || 'Unknown', editingJob, formData);
       } else {
         const nextSeq = orders.length > 0 ? Math.max(...orders.map(o => o.visualSeq || 0)) + 1 : 1;
         const docRef = await addDoc(ordersCollectionRef, { ...formData, createdBy: currentUser?.username, seq: nextSeq });
         savedJobId = docRef.id;
-        // 🔥 AUDITORÍA: Registro de Creación
         AuditLogger.logCreate('WorkActivity', currentUser?.username || 'Unknown', docRef.id, formData);
       }
       
@@ -179,7 +171,6 @@ export const WorkActivity: React.FC = () => {
         createdAt: new Date().toISOString()
       });
       
-      // 🔥 AUDITORÍA
       AuditLogger.logCreate('Catalogs (Destinations)', currentUser?.username || 'Unknown', docRef.id, newDestData);
       
       setFormData({ ...formData, destination: newDestData.property_name });
@@ -207,7 +198,6 @@ export const WorkActivity: React.FC = () => {
     } else setCurrentProduct({ ...currentProduct, itemEntranceId: '', itemName: '', modelPart: '', serial: '', po: '', quantity: 1 });
   };
 
-  // 🔥 Este es el manejador que te marcaba TS(6133) no usado porque se había cortado en la respuesta anterior
   const handleAddProductSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
 
@@ -220,7 +210,6 @@ export const WorkActivity: React.FC = () => {
     if (viewingJob) {
       const docRef = await addDoc(productsCollectionRef, { ...currentProduct, jobOrderId: viewingJob.id });
       setViewProducts([...viewProducts, { ...currentProduct, id: docRef.id, jobOrderId: viewingJob.id }]);
-      // 🔥 AUDITORÍA: Adición de producto a una orden existente
       AuditLogger.logUpdate('WorkActivity Products', currentUser?.username || 'Unknown', viewingJob.id, { addedProduct: currentProduct });
       fetchData();
     } else {
@@ -235,7 +224,6 @@ export const WorkActivity: React.FC = () => {
       const prodToDelete = viewProducts.find(p => p.id === productId);
       await deleteDoc(doc(db, "jobProducts", productId));
       
-      // 🔥 AUDITORÍA
       if (viewingJob) {
         AuditLogger.logUpdate('WorkActivity Products', currentUser?.username || 'Unknown', viewingJob.id, { removedProduct: prodToDelete });
       }
@@ -277,7 +265,6 @@ export const WorkActivity: React.FC = () => {
             {showHistoric ? 'View Active' : 'Record'}
           </button>
           
-          {/* 🔥 PROTECCIÓN RBAC: Solo visible si tiene permiso de crear */}
           <RequirePermission permission="add_work_activity">
             {!showHistoric && (
               <button className="action btn-primary" style={{ height: '42px', padding: '0 20px', whiteSpace: 'nowrap' }} onClick={() => handleOpenModal(null)}>
@@ -335,14 +322,13 @@ export const WorkActivity: React.FC = () => {
                 <SeqBadge seq={viewingJob.visualSeq} /> Order Details
               </h3>
               <div style={{ display: 'flex', gap: '10px' }}>
-                {/* 🔥 PROTECCIÓN RBAC: Botones ocultos si no tiene el permiso */}
                 <RequirePermission permission="edit_work_activity">
-                  <button type="button" className="action btn-primary" onClick={() => handleOpenModal(viewingJob)}><Edit2 size={16}/> Edit</button>
+                  <button className="action btn-primary" onClick={() => handleOpenModal(viewingJob)}><Edit2 size={16}/> Edit</button>
                 </RequirePermission>
                 <RequirePermission permission="delete_work_activity">
-                  <button type="button" className="action btn-danger" onClick={() => handleDelete(viewingJob.id)}><Trash2 size={16}/> Delete</button>
+                  <button className="action btn-danger" onClick={() => handleDelete(viewingJob.id)}><Trash2 size={16}/> Delete</button>
                 </RequirePermission>
-                <button type="button" className="close-modal" onClick={() => setViewingJob(null)}><X size={24}/></button>
+                <button className="close-modal" onClick={() => setViewingJob(null)}><X size={24}/></button>
               </div>
             </div>
             
@@ -408,6 +394,7 @@ export const WorkActivity: React.FC = () => {
               <div className="form-grid">
                 <div className="form-group"><label>Registration Date {isJobReq('createdAt') && '*'}</label><input type="date" value={formData.createdAt} onChange={e => setFormData({...formData, createdAt: e.target.value})} required={isJobReq('createdAt')} /></div>
                 
+                {/* 🔥 BUSCADOR DE DESTINATION ROBUSTO */}
                 <div className="form-group">
                   <label>Destination (Description) {isJobReq('destination') && '*'}</label>
                   <div style={{ display: 'flex', gap: '8px', alignItems: 'stretch' }}>
@@ -415,8 +402,8 @@ export const WorkActivity: React.FC = () => {
                       <SearchableSelect 
                         options={destinations.map(d => ({
                           id: d.value,
-                          label: d.label, 
-                          searchKeywords: d.label,
+                          label: d.label, // Este es el campo visible (la descripción)
+                          searchKeywords: d.label, // Búsqueda estricta sobre la descripción
                           render: (
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
                               <span style={{ fontWeight: 'bold', color: '#1e293b' }}>{d.label}</span>
@@ -426,7 +413,7 @@ export const WorkActivity: React.FC = () => {
                         }))}
                         value={formData.destination}
                         onChange={val => setFormData({...formData, destination: val})}
-                        placeholder="Search by description..."
+                        placeholder="Search by description (ej. 48 Staysail)..."
                         required={isJobReq('destination')}
                       />
                     </div>
@@ -520,7 +507,6 @@ export const WorkActivity: React.FC = () => {
         </div>
       )}
 
-      {/* 🔥 AQUÍ ESTÁ LA SOLUCIÓN AL TS(6133): SE RENDERIZA EL FORM Y SE LEE LA FUNCIÓN */}
       {isProductModalOpen && (
         <div className="modal-overlay active" style={{ zIndex: 1100 }}>
           <div className="modal-content modal-large" style={{ maxWidth: '950px', width: '95%' }}>

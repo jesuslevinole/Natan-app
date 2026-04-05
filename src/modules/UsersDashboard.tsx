@@ -1,16 +1,37 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { collection, getDocs } from 'firebase/firestore';
+import { db } from '../firebase'; 
 import { Users, Plus } from 'lucide-react';
 import { SearchBar } from '../components/SharedUI';
+import { Role } from '../types';
 
 export const UsersDashboard: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [newUserEmail, setNewUserEmail] = useState('');
   const [newUserRole, setNewUserRole] = useState('');
+  
+  // Estado para almacenar los roles traídos desde Firebase
+  const [availableRoles, setAvailableRoles] = useState<Role[]>([]);
+
+  // Fetch de roles dinámico al cargar el componente
+  useEffect(() => {
+    const fetchRoles = async () => {
+      try {
+        const snap = await getDocs(collection(db, 'roles'));
+        const fetchedRoles = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Role));
+        setAvailableRoles(fetchedRoles);
+      } catch (error) {
+        console.error("Error fetching roles:", error);
+      }
+    };
+    fetchRoles();
+  }, []);
 
   const handleRegisterUser = (e: React.FormEvent) => {
     e.preventDefault();
-    alert(`Invitation sent to ${newUserEmail} with role ${newUserRole}.`);
+    const roleName = availableRoles.find(r => r.id === newUserRole)?.name || 'Unknown Role';
+    alert(`Invitation sent to ${newUserEmail} with role ${roleName}.`);
     setIsModalOpen(false);
     setNewUserEmail('');
     setNewUserRole('');
@@ -38,7 +59,7 @@ export const UsersDashboard: React.FC = () => {
           <thead>
             <tr>
               <th>User Email</th>
-              <th>Role</th>
+              <th>Assigned Role</th>
               <th style={{ textAlign: 'center' }}>Status</th>
             </tr>
           </thead>
@@ -64,13 +85,15 @@ export const UsersDashboard: React.FC = () => {
                 <label>Assign Role *</label>
                 <select required value={newUserRole} onChange={e => setNewUserRole(e.target.value)}>
                   <option value="">Select a Role...</option>
-                  <option value="admin_role">Super Admin</option>
-                  <option value="editor_role">Standard Editor</option>
-                  <option value="viewer_role">Read Only</option>
+                  {/* 🔥 Renderizado Dinámico de Roles desde Firebase */}
+                  {availableRoles.map(role => (
+                    <option key={role.id} value={role.id}>{role.name}</option>
+                  ))}
                 </select>
               </div>
-              <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
-                <button type="button" className="btn-secondary" onClick={() => setIsModalOpen(false)}>Cancel</button>
+              {/* 🔥 Corrección UI: Añadida la clase 'action' al botón Cancel para estilo perfecto */}
+              <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '20px' }}>
+                <button type="button" className="action btn-secondary" onClick={() => setIsModalOpen(false)}>Cancel</button>
                 <button type="submit" className="action btn-primary">Send Invitation</button>
               </div>
             </form>

@@ -1,17 +1,15 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Search, Settings, X, Briefcase, ArrowLeft } from 'lucide-react';
 import { formatSeq } from '../utils/helpers';
-import { User } from '../types'; // Importamos el tipo User
-import { AuditLogger } from '../utils/logger'; // Importamos el logger
+import { User } from '../types';
+import { AuditLogger } from '../utils/logger';
 
-/** Badge elegante para los números de consecutivo (#) */
 export const SeqBadge: React.FC<{ seq?: number }> = ({ seq }) => (
   <span style={{ color: '#64748b', fontWeight: 'bold', fontSize: '0.9rem' }}>
     {formatSeq(seq)}
   </span>
 );
 
-/** Select con Buscador Integrado y Filtro Optimizado */
 export const SearchableSelect: React.FC<{
   options: { id: string; label: string; searchKeywords?: string; render?: React.ReactNode }[];
   value: string;
@@ -44,12 +42,15 @@ export const SearchableSelect: React.FC<{
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+  // 🔥 SOLUCIÓN: Filtro estricto por palabras exactas y orden alfabético
   const filteredOptions = options.filter(o => {
     if (!searchTerm) return true; 
     const target = String(o.searchKeywords || o.label || '').toLowerCase();
-    const term = String(searchTerm).trim().toLowerCase();
-    return target.includes(term);
-  }).sort((a, b) => String(a.label).localeCompare(String(b.label))); 
+    const searchTerms = String(searchTerm).toLowerCase().trim().split(/\s+/);
+    
+    // Todas las palabras escritas deben existir en el target
+    return searchTerms.every(term => target.includes(term));
+  }).sort((a, b) => String(a.label).localeCompare(String(b.label))); // Orden alfabético forzado
 
   return (
     <div ref={containerRef} style={{ position: 'relative', width: '100%' }}>
@@ -116,7 +117,6 @@ export const SearchableSelect: React.FC<{
   );
 };
 
-/** Buscador elegante para tablas */
 export const SearchBar: React.FC<{ value: string, onChange: (val: string) => void }> = ({ value, onChange }) => (
   <div style={{ 
     display: 'flex', alignItems: 'center', backgroundColor: '#ffffff', border: '1px solid #e2e8f0', 
@@ -131,7 +131,6 @@ export const SearchBar: React.FC<{ value: string, onChange: (val: string) => voi
   </div>
 );
 
-/** Modal para Configurar Campos Obligatorios */
 export const FieldConfigModal: React.FC<{
   isOpen: boolean; onClose: () => void; fields: { name: string; label: string }[];
   requiredFields: string[]; toggleRequired: (f: string) => void;
@@ -168,7 +167,6 @@ export const FieldConfigModal: React.FC<{
   );
 };
 
-/** Pantalla de Autenticación con nueva interfaz `onLoginSuccess: (user: User) => void` */
 export const AuthScreen: React.FC<{ onLoginSuccess: (user: User) => void }> = ({ onLoginSuccess }) => {
   const [view, setView] = useState<'login' | 'forgot'>('login');
   const [email, setEmail] = useState('');
@@ -178,8 +176,6 @@ export const AuthScreen: React.FC<{ onLoginSuccess: (user: User) => void }> = ({
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      // Simulamos la autenticación de Firebase devolviendo un objeto User
-      // Por defecto, simulamos que el primer usuario es un Admin (roleId: 'admin_role')
       const fakeUser: User = { 
         uid: 'uid_123', 
         username: email.split('@')[0], 
