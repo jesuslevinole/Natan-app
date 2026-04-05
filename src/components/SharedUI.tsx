@@ -9,22 +9,7 @@ export const SeqBadge: React.FC<{ seq?: number }> = ({ seq }) => (
   </span>
 );
 
-/** Buscador elegante para tablas */
-export const SearchBar: React.FC<{ value: string, onChange: (val: string) => void }> = ({ value, onChange }) => (
-  <div style={{ 
-    display: 'flex', alignItems: 'center', backgroundColor: '#ffffff', border: '1px solid #e2e8f0', 
-    borderRadius: '24px', padding: '6px 16px', gap: '8px', width: '100%', maxWidth: '450px',
-    boxShadow: '0 2px 5px rgba(0,0,0,0.02), 0 1px 3px rgba(0,0,0,0.04)', transition: 'all 0.2s ease'
-  }}>
-    <Search size={16} color="#94a3b8" />
-    <input 
-      type="text" placeholder="Search records..." value={value} onChange={e => onChange(e.target.value)} 
-      style={{ border: 'none', background: 'transparent', outline: 'none', color: '#334155', fontSize: '0.85rem', width: '100%', height: '20px' }} 
-    />
-  </div>
-);
-
-/** Select con Buscador Integrado y Soporte para Dark Mode */
+/** Select con Buscador Integrado y Filtro Optimizado */
 export const SearchableSelect: React.FC<{
   options: { id: string; label: string; searchKeywords?: string; render?: React.ReactNode }[];
   value: string;
@@ -39,11 +24,15 @@ export const SearchableSelect: React.FC<{
 
   const isDark = theme === 'dark';
 
+  // 🔥 SOLUCIÓN DEL BUG: Sincronizar solo cuando está cerrado.
+  // Evita que el componente borre lo que el usuario está escribiendo al actualizarse el estado padre.
   useEffect(() => {
-    const selectedOpt = options.find(o => o.id === value);
-    if (selectedOpt) setSearchTerm(selectedOpt.label);
-    else setSearchTerm('');
-  }, [value, options]);
+    if (!isOpen) {
+      const selectedOpt = options.find(o => o.id === value);
+      if (selectedOpt) setSearchTerm(selectedOpt.label);
+      else setSearchTerm('');
+    }
+  }, [value, options, isOpen]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -55,10 +44,13 @@ export const SearchableSelect: React.FC<{
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+  // 🔥 FILTRO ESTRICTO Y ORDEN ALFABÉTICO
   const filteredOptions = options.filter(o => {
-    const target = o.searchKeywords || o.label;
-    return target.toLowerCase().includes(searchTerm.toLowerCase());
-  });
+    if (!searchTerm) return true; // Mostrar todo si no hay búsqueda
+    const target = String(o.searchKeywords || o.label || '').toLowerCase();
+    const term = String(searchTerm).trim().toLowerCase();
+    return target.includes(term);
+  }).sort((a, b) => String(a.label).localeCompare(String(b.label))); // Orden elegante (A-Z)
 
   return (
     <div ref={containerRef} style={{ position: 'relative', width: '100%' }}>
@@ -126,13 +118,25 @@ export const SearchableSelect: React.FC<{
   );
 };
 
+/** Buscador elegante para tablas */
+export const SearchBar: React.FC<{ value: string, onChange: (val: string) => void }> = ({ value, onChange }) => (
+  <div style={{ 
+    display: 'flex', alignItems: 'center', backgroundColor: '#ffffff', border: '1px solid #e2e8f0', 
+    borderRadius: '24px', padding: '6px 16px', gap: '8px', width: '100%', maxWidth: '450px',
+    boxShadow: '0 2px 5px rgba(0,0,0,0.02), 0 1px 3px rgba(0,0,0,0.04)', transition: 'all 0.2s ease'
+  }}>
+    <Search size={16} color="#94a3b8" />
+    <input 
+      type="text" placeholder="Search records..." value={value} onChange={e => onChange(e.target.value)} 
+      style={{ border: 'none', background: 'transparent', outline: 'none', color: '#334155', fontSize: '0.85rem', width: '100%', height: '20px' }} 
+    />
+  </div>
+);
+
 /** Modal para Configurar Campos Obligatorios */
 export const FieldConfigModal: React.FC<{
-  isOpen: boolean;
-  onClose: () => void;
-  fields: { name: string; label: string }[];
-  requiredFields: string[];
-  toggleRequired: (f: string) => void;
+  isOpen: boolean; onClose: () => void; fields: { name: string; label: string }[];
+  requiredFields: string[]; toggleRequired: (f: string) => void;
 }> = ({ isOpen, onClose, fields, requiredFields, toggleRequired }) => {
   if (!isOpen) return null;
   return (

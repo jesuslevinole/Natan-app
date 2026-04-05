@@ -26,7 +26,6 @@ export const WorkActivity: React.FC<{currentUser: User}> = ({ currentUser }) => 
   const [viewProducts, setViewProducts] = useState<JobProduct[]>([]);
   const [showHistoric, setShowHistoric] = useState<boolean>(false); 
 
-  // Traemos el catálogo indicando que la descripción será la etiqueta principal
   const destinations = useCatalogOptions('destinations', 'description', 'property_name');
 
   const jobFields = [
@@ -363,7 +362,7 @@ export const WorkActivity: React.FC<{currentUser: User}> = ({ currentUser }) => 
               <div className="form-grid">
                 <div className="form-group"><label>Registration Date {isJobReq('createdAt') && '*'}</label><input type="date" value={formData.createdAt} onChange={e => setFormData({...formData, createdAt: e.target.value})} required={isJobReq('createdAt')} /></div>
                 
-                {/* 🔥 SOLUCIÓN: BUSCADOR EXCLUSIVO DE DESCRIPCIÓN */}
+                {/* BUSCADOR DE DESTINATION (Aseguramos que filtre por descripción estrictamente) */}
                 <div className="form-group">
                   <label>Destination {isJobReq('destination') && '*'}</label>
                   <div style={{ display: 'flex', gap: '8px', alignItems: 'stretch' }}>
@@ -371,8 +370,8 @@ export const WorkActivity: React.FC<{currentUser: User}> = ({ currentUser }) => 
                       <SearchableSelect 
                         options={destinations.map(d => ({
                           id: d.value,
-                          label: d.label, // Restringimos el label puramente a la descripción
-                          searchKeywords: d.label, // Aseguramos que solo filtre lo que escribes por descripción
+                          label: d.label, // Mostramos estrictamente la descripción
+                          searchKeywords: d.label, // Filtramos estrictamente por la descripción
                           render: (
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
                               <span style={{ fontWeight: 'bold', color: '#1e293b' }}>{d.label}</span>

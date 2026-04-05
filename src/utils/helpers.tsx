@@ -7,7 +7,7 @@ export const catalogsConfig: Record<string, CatalogSchema> = {
   destinations: {
     id: 'destinations', 
     title: 'Destinations',
-    // Usamos React.createElement para evitar errores de JSX en archivos puramente .ts o .tsx de utilidades
+    // Usamos React.createElement para evitar errores de compilación en utilidades
     icon: React.createElement(MapPin, { size: 32 }),
     fields: [
       { name: 'property_name', label: 'Property Name', type: 'text', required: true },
@@ -24,7 +24,7 @@ export const catalogsConfig: Record<string, CatalogSchema> = {
       { name: 'address', label: 'Address', type: 'text' }
     ]
   },
-  // 🔥 NUEVO CATÁLOGO AGREGADO: Item Names
+  // 🔥 NUEVO CATÁLOGO: Item Names
   item_names: {
     id: 'item_names',
     title: 'Item Names',
@@ -36,7 +36,6 @@ export const catalogsConfig: Record<string, CatalogSchema> = {
   }
 };
 
-/** Devuelve los estilos dinámicos para el estado YES/NO */
 export const getStatusStyles = (status: 'YES' | 'NO' | string): React.CSSProperties => ({
   backgroundColor: status === 'YES' ? '#edf7ed' : '#fdf0f0', 
   color: status === 'YES' ? '#1e4620' : '#d32f2f',
@@ -49,7 +48,6 @@ export const getStatusStyles = (status: 'YES' | 'NO' | string): React.CSSPropert
   boxShadow: '0 2px 4px rgba(0,0,0,0.05)'
 });
 
-/** Devuelve los estilos dinámicos para el inventario */
 export const getInventoryStatusStyles = (isAvailable: boolean): React.CSSProperties => ({
   backgroundColor: isAvailable ? '#10b981' : '#ef4444', 
   color: '#ffffff',
