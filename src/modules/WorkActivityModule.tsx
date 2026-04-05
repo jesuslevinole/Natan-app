@@ -26,6 +26,7 @@ export const WorkActivity: React.FC<{currentUser: User}> = ({ currentUser }) => 
   const [viewProducts, setViewProducts] = useState<JobProduct[]>([]);
   const [showHistoric, setShowHistoric] = useState<boolean>(false); 
 
+  // Cargamos el catálogo donde la 'description' es el label visual principal
   const destinations = useCatalogOptions('destinations', 'description', 'property_name');
 
   const jobFields = [
@@ -271,6 +272,7 @@ export const WorkActivity: React.FC<{currentUser: User}> = ({ currentUser }) => 
             {displayedOrders.length === 0 && <tr><td colSpan={8} className="empty-state">No records found.</td></tr>}
             {displayedOrders.map(order => {
               const destObj = destinations.find(d => d.value === order.destination);
+              // Mostramos la descripción visual en la tabla principal
               const displayDestination = destObj ? destObj.label : order.destination;
 
               return (
@@ -362,26 +364,23 @@ export const WorkActivity: React.FC<{currentUser: User}> = ({ currentUser }) => 
               <div className="form-grid">
                 <div className="form-group"><label>Registration Date {isJobReq('createdAt') && '*'}</label><input type="date" value={formData.createdAt} onChange={e => setFormData({...formData, createdAt: e.target.value})} required={isJobReq('createdAt')} /></div>
                 
-                {/* BUSCADOR DE DESTINATION (Aseguramos que filtre por descripción estrictamente) */}
+                {/* 🔥 BUSCADOR CORREGIDO: Muestra y filtra puramente por Description */}
                 <div className="form-group">
-                  <label>Destination {isJobReq('destination') && '*'}</label>
+                  <label>Destination (Description) {isJobReq('destination') && '*'}</label>
                   <div style={{ display: 'flex', gap: '8px', alignItems: 'stretch' }}>
                     <div style={{ flex: 1 }}>
                       <SearchableSelect 
                         options={destinations.map(d => ({
                           id: d.value,
-                          label: d.label, // Mostramos estrictamente la descripción
-                          searchKeywords: d.label, // Filtramos estrictamente por la descripción
+                          label: d.label, // El label visible es puramente la Description
+                          searchKeywords: d.label, // Solo filtramos por Description
                           render: (
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                              <span style={{ fontWeight: 'bold', color: '#1e293b' }}>{d.label}</span>
-                              <span style={{ fontSize: '0.75rem', color: '#64748b' }}>Apt / Prop: {d.value}</span>
-                            </div>
+                            <span style={{ fontWeight: 'bold', color: '#1e293b' }}>{d.label}</span>
                           )
                         }))}
                         value={formData.destination}
                         onChange={val => setFormData({...formData, destination: val})}
-                        placeholder="Search by description..."
+                        placeholder="Search by description (ej. 48 Staysail)..."
                         required={isJobReq('destination')}
                       />
                     </div>
