@@ -1,6 +1,28 @@
 import { ReactNode } from 'react';
 
-export interface User { username: string; role: 'admin' | 'user'; }
+export interface User { 
+  uid: string;
+  username: string; 
+  email: string;
+  roleId: string; 
+}
+
+export interface Role {
+  id: string;
+  name: string; 
+  permissions: string[]; 
+}
+
+export interface LogEntry {
+  id?: string;
+  timestamp: string;
+  user: string;
+  action: 'LOGIN' | 'CREATE' | 'UPDATE' | 'DELETE';
+  module: string; 
+  targetId?: string; 
+  details: string; 
+  payload?: any; 
+}
 
 export interface JobOrder {
   id: string; 
@@ -46,7 +68,6 @@ export interface ItemEntranceRecord {
 export type JobFormData = Omit<JobOrder, 'id' | 'createdBy' | 'seq' | 'visualSeq'>;
 export type ProductFormData = Omit<JobProduct, 'id' | 'jobOrderId'>;
 export type ItemEntranceFormData = Omit<ItemEntranceRecord, 'id' | 'seq' | 'visualSeq' | 'createdAt'>;
-
 export type FieldType = 'text' | 'number' | 'select';
 
 export interface CatalogField {

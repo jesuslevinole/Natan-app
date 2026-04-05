@@ -1,25 +1,23 @@
 import { useState } from 'react';
-import { PackageSearch, Briefcase, LogOut, BookOpen, BarChart2, Menu, ChevronRight, ChevronLeft } from 'lucide-react';
-import { AuthScreen } from './components/SharedUI';
-import { User } from './types';
+import { PackageSearch, Briefcase, LogOut, BookOpen, BarChart2, Menu, ChevronRight, ChevronLeft, ShieldAlert, Users as UsersIcon } from 'lucide-react';
+import { AuthScreen } from './components/AuthScreen'; 
+import { AuthProvider, useAuth, RequirePermission } from './hooks/useAuth';
 
-// Importación de módulos refactorizados
+// Módulos
 import { CatalogsModule } from './modules/CatalogsModule';
 import { ItemEntrance } from './modules/ItemEntranceModule';
 import { WorkActivity } from './modules/WorkActivityModule';
 import { ReportsModule } from './modules/ReportsModule';
+import { LogsDashboard } from './modules/LogsDashboard';
+import { UsersDashboard } from './modules/UsersDashboard';
 
 import './App.css';
 
-export default function App() {
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
+function AppShell() {
+  const { currentUser, logout } = useAuth();
   const [activeModule, setActiveModule] = useState<string>('workActivity'); 
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState<boolean>(false);
-
-  const handleLogin = (u: string) => setCurrentUser({ username: u, role: 'user' });
-
-  if (!currentUser) return <AuthScreen onLogin={handleLogin} />;
 
   const handleModuleChange = (module: string) => {
     setActiveModule(module);
@@ -40,6 +38,7 @@ export default function App() {
             {isSidebarCollapsed ? <ChevronRight size={20}/> : <ChevronLeft size={20}/>}
           </button>
         </div>
+        
         <ul className="nav-links">
           <li className={activeModule === 'workActivity' ? 'active' : ''} onClick={() => handleModuleChange('workActivity')}>
             <Briefcase size={20}/> <span>Work Activity</span>
@@ -53,9 +52,25 @@ export default function App() {
           <li className={activeModule === 'reports' ? 'active' : ''} onClick={() => handleModuleChange('reports')}>
             <BarChart2 size={20}/> <span>Reports</span>
           </li>
+          
+          {/* 🔥 RBAC: Rutas Protegidas de Administración */}
+          <RequirePermission permission="can_manage_security">
+            <>
+              <li className={activeModule === 'users' ? 'active' : ''} onClick={() => handleModuleChange('users')}>
+                <UsersIcon size={20}/> <span>Account Users</span>
+              </li>
+              <li className={activeModule === 'audit_logs' ? 'active' : ''} onClick={() => handleModuleChange('audit_logs')}>
+                <ShieldAlert size={20}/> <span>Audit Logs</span>
+              </li>
+            </>
+          </RequirePermission>
         </ul>
+        
         <div className="sidebar-footer">
-          <button type="button" className="action logout-btn" onClick={() => setCurrentUser(null)}>
+          <div style={{ paddingBottom: '15px', color: '#94a3b8', fontSize: '0.8rem', textAlign: 'center', display: isSidebarCollapsed ? 'none' : 'block' }}>
+            Logged in as <b>{currentUser?.username}</b>
+          </div>
+          <button type="button" className="action logout-btn" onClick={logout}>
             <LogOut size={20}/> <span>Log Out</span>
           </button>
         </div>
@@ -72,12 +87,28 @@ export default function App() {
         </div>
 
         <main className="main-content">
-          {activeModule === 'workActivity' && <WorkActivity currentUser={currentUser} />}
+          {activeModule === 'workActivity' && <WorkActivity currentUser={currentUser!} />}
           {activeModule === 'itemEntrance' && <ItemEntrance />}
           {activeModule === 'catalogs' && <CatalogsModule />}
           {activeModule === 'reports' && <ReportsModule />}
+          {activeModule === 'users' && <UsersDashboard />}
+          {activeModule === 'audit_logs' && <LogsDashboard />}
         </main>
       </div>
     </div>
   );
 }
+
+// Punto de entrada real: Inyecta el AuthContext antes de cargar la app
+export default function App() {
+  return (
+    <AuthProvider>
+      <AuthConsumer />
+    </AuthProvider>
+  );
+}
+
+const AuthConsumer = () => {
+  const { currentUser, login } = useAuth();
+  return currentUser ? <AppShell /> : <AuthScreen onLoginSuccess={login} />;
+};
