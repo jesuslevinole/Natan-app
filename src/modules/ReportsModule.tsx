@@ -141,14 +141,15 @@ export const ReportsModule: React.FC = () => {
             <label>Destination (Apt)</label>
             <SearchableSelect 
               theme="dark"
-              options={[{id: '', label: 'All Destinations', searchKeywords: ''}, ...destinations.map(d => ({id: d.value, label: d.label, searchKeywords: `${d.label} ${d.value}`}))]}
+              // Removido "All Destinations" del label para que actúe el placeholder por defecto
+              options={[{id: '', label: '', searchKeywords: ''}, ...destinations.map(d => ({id: d.value, label: d.label, searchKeywords: `${d.label} ${d.value}`}))]}
               value={selectedDest} onChange={setSelectedDest} placeholder="-- Select Apt --"
             />
           </div>
           <div className="form-group">
-            <label>Worker</label>
+            <label>Account User</label>
             <select value={selectedWorker} onChange={e => setSelectedWorker(e.target.value)} style={{ padding: '8px' }}>
-              <option value="" style={{color: 'black'}}>All Workers</option>
+              <option value="" style={{color: 'black'}}>All Account Users</option>
               {workers.map(w => <option key={w} value={w} style={{color: 'black'}}>{w}</option>)}
             </select>
           </div>
@@ -183,7 +184,7 @@ export const ReportsModule: React.FC = () => {
         <div style={{ backgroundColor: '#fff7ed', padding: '20px', borderRadius: '16px', border: '1px solid #fed7aa', display: 'flex', alignItems: 'center', gap: '15px' }}>
           <div style={{ backgroundColor: '#f97316', color: 'white', padding: '12px', borderRadius: '12px' }}><Award size={24}/></div>
           <div>
-            <p style={{ margin: 0, fontSize: '0.85rem', color: '#64748b', fontWeight: 'bold', textTransform: 'uppercase' }}>Top Worker</p>
+            <p style={{ margin: 0, fontSize: '0.85rem', color: '#64748b', fontWeight: 'bold', textTransform: 'uppercase' }}>Top Account User</p>
             <h3 style={{ margin: 0, fontSize: '1.1rem', color: '#1e293b' }}>{topWorkerEntry ? topWorkerEntry[0] : '-'}</h3>
           </div>
         </div>
@@ -239,7 +240,7 @@ export const ReportsModule: React.FC = () => {
         <div className="table-container" style={{ border: 'none', borderRadius: 0, maxHeight: '450px', overflowY: 'auto' }}>
           <table className="responsive-table">
             <thead>
-              <tr><th>Date</th><th>Apt / Dest</th><th>Worker</th><th>Item Name</th><th>Model #</th><th>Serial #</th><th>PO #</th><th style={{ textAlign: 'center' }}>Qty Installed</th></tr>
+              <tr><th>Date</th><th>Apt / Dest</th><th>Account User</th><th>Item Name</th><th>Model #</th><th>Serial #</th><th>PO #</th><th style={{ textAlign: 'center' }}>Qty Installed</th></tr>
             </thead>
             <tbody>
               {filteredProductsDetailed.length === 0 && <tr><td colSpan={8} className="empty-state">No products found for current filters.</td></tr>}
@@ -247,7 +248,7 @@ export const ReportsModule: React.FC = () => {
                 <tr key={i}>
                   <td data-label="Date">{formatDateDisplay(p.orderDate)}</td>
                   <td data-label="Apt">{getDestLabel(p.orderDestination)}</td>
-                  <td data-label="Worker" style={{ fontWeight: 'bold', color: '#334155' }}>{p.orderWorker}</td>
+                  <td data-label="Account User" style={{ fontWeight: 'bold', color: '#334155' }}>{p.orderWorker}</td>
                   <td data-label="Item" style={{ fontWeight: 'bold' }}>{p.itemName}</td>
                   <td data-label="Model" style={{ color: '#475569' }}>{p.modelPart || '-'}</td>
                   <td data-label="Serial" style={{ color: '#475569' }}>{p.serial || '-'}</td>
