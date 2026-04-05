@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Search, Settings, X, Briefcase } from 'lucide-react';
+import { Search, Settings, X, Briefcase, ArrowLeft } from 'lucide-react';
 import { formatSeq } from '../utils/helpers';
+import { User } from '../types'; // Importamos el tipo User
+import { AuditLogger } from '../utils/logger'; // Importamos el logger
 
 /** Badge elegante para los números de consecutivo (#) */
 export const SeqBadge: React.FC<{ seq?: number }> = ({ seq }) => (
@@ -24,8 +26,6 @@ export const SearchableSelect: React.FC<{
 
   const isDark = theme === 'dark';
 
-  // 🔥 SOLUCIÓN DEL BUG: Sincronizar solo cuando está cerrado.
-  // Evita que el componente borre lo que el usuario está escribiendo al actualizarse el estado padre.
   useEffect(() => {
     if (!isOpen) {
       const selectedOpt = options.find(o => o.id === value);
@@ -44,13 +44,12 @@ export const SearchableSelect: React.FC<{
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // 🔥 FILTRO ESTRICTO Y ORDEN ALFABÉTICO
   const filteredOptions = options.filter(o => {
-    if (!searchTerm) return true; // Mostrar todo si no hay búsqueda
+    if (!searchTerm) return true; 
     const target = String(o.searchKeywords || o.label || '').toLowerCase();
     const term = String(searchTerm).trim().toLowerCase();
     return target.includes(term);
-  }).sort((a, b) => String(a.label).localeCompare(String(b.label))); // Orden elegante (A-Z)
+  }).sort((a, b) => String(a.label).localeCompare(String(b.label))); 
 
   return (
     <div ref={containerRef} style={{ position: 'relative', width: '100%' }}>
@@ -74,7 +73,6 @@ export const SearchableSelect: React.FC<{
             borderRadius: '8px', fontSize: '0.95rem', outline: 'none',
             transition: 'all 0.2s'
           }}
-          className={isDark ? "searchable-input-dark" : "searchable-input-light"}
         />
         <Search size={18} color={isDark ? "#cbd5e1" : "#94a3b8"} style={{ position: 'absolute', right: '14px' }} />
       </div>
@@ -170,16 +168,36 @@ export const FieldConfigModal: React.FC<{
   );
 };
 
-/** Pantalla de Login */
-export const AuthScreen: React.FC<{ onLogin: (u: string, p: string) => void }> = ({ onLogin }) => {
-  const [isLogin, setIsLogin] = useState(true);
-  const [username, setUsername] = useState('');
+/** Pantalla de Autenticación con nueva interfaz `onLoginSuccess: (user: User) => void` */
+export const AuthScreen: React.FC<{ onLoginSuccess: (user: User) => void }> = ({ onLoginSuccess }) => {
+  const [view, setView] = useState<'login' | 'forgot'>('login');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [message, setMessage] = useState('');
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (isLogin) onLogin(username, password);
-    else { alert("Registration submitted!\nWait for Admin approval."); setIsLogin(true); }
+    try {
+      // Simulamos la autenticación de Firebase devolviendo un objeto User
+      // Por defecto, simulamos que el primer usuario es un Admin (roleId: 'admin_role')
+      const fakeUser: User = { 
+        uid: 'uid_123', 
+        username: email.split('@')[0], 
+        email, 
+        roleId: 'admin_role' 
+      };
+      
+      AuditLogger.logLogin(fakeUser.username);
+      onLoginSuccess(fakeUser);
+    } catch (error: any) {
+      setMessage('Invalid credentials.');
+    }
+  };
+
+  const handleForgot = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setMessage(`Password reset link sent to ${email}`);
+    setTimeout(() => { setView('login'); setMessage(''); }, 3000);
   };
 
   return (
@@ -187,12 +205,40 @@ export const AuthScreen: React.FC<{ onLogin: (u: string, p: string) => void }> =
       <div className="auth-card">
         <div className="catalog-icon" style={{ marginBottom: '15px' }}><Briefcase size={32} /></div>
         <h2>App Mr Natan</h2>
-        <p className="subtitle">{isLogin ? "Welcome Back" : "Create Account"}</p>
-        <form onSubmit={handleSubmit}>
-          <div className="form-group" style={{ marginBottom: '15px' }}><label>Username</label><input type="text" value={username} onChange={e => setUsername(e.target.value)} required /></div>
-          <div className="form-group"><label>Password</label><input type="password" value={password} onChange={e => setPassword(e.target.value)} required /></div>
-          <button type="submit" className="auth-btn">{isLogin ? 'Log In' : 'Sign Up'}</button>
-        </form>
+        
+        {view === 'login' ? (
+          <>
+            <p className="subtitle">Secure System Login</p>
+            {message && <p style={{ color: '#ef4444', fontSize: '0.85rem' }}>{message}</p>}
+            <form onSubmit={handleLogin}>
+              <div className="form-group" style={{ marginBottom: '15px' }}>
+                <label>Email Address</label>
+                <input type="email" value={email} onChange={e => setEmail(e.target.value)} required />
+              </div>
+              <div className="form-group">
+                <label>Password</label>
+                <input type="password" value={password} onChange={e => setPassword(e.target.value)} required />
+              </div>
+              <button type="submit" className="auth-btn">Authenticate</button>
+            </form>
+            <p className="toggle-auth" onClick={() => { setView('forgot'); setMessage(''); }}>Forgot your password?</p>
+          </>
+        ) : (
+          <>
+            <p className="subtitle">Reset your password</p>
+            {message && <p style={{ color: '#10b981', fontSize: '0.85rem', marginBottom: '10px', fontWeight: 'bold' }}>{message}</p>}
+            <form onSubmit={handleForgot}>
+              <div className="form-group" style={{ marginBottom: '20px' }}>
+                <label>Email Address</label>
+                <input type="email" value={email} onChange={e => setEmail(e.target.value)} required placeholder="Enter your email" />
+              </div>
+              <button type="submit" className="auth-btn" style={{ marginBottom: '15px' }}>Send Reset Link</button>
+              <button type="button" className="btn-secondary" style={{ width: '100%', padding: '12px', borderRadius: '8px', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px' }} onClick={() => setView('login')}>
+                <ArrowLeft size={16} /> Back to Login
+              </button>
+            </form>
+          </>
+        )}
       </div>
     </div>
   );
