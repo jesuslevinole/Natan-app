@@ -2,17 +2,17 @@
    VARIABLES & RESET
    ========================================= */
 :root {
-    --primary-color: #2563eb;
-    --primary-hover: #1d4ed8;
-    --sidebar-bg: #0f172a; 
-    --sidebar-hover: #1e293b;
-    --bg-color: #f8fafc;
-    --card-bg: #ffffff;
-    --text-main: #334155;
-    --text-muted: #64748b;
-    --border-color: #e2e8f0;
-    --danger-color: #ef4444;
-    --excel-color: #16a34a;
+  --primary-color: #2563eb;
+  --primary-hover: #1d4ed8;
+  --sidebar-bg: #0f172a; 
+  --sidebar-hover: #1e293b;
+  --bg-color: #f8fafc;
+  --card-bg: #ffffff;
+  --text-main: #334155;
+  --text-muted: #64748b;
+  --border-color: #e2e8f0;
+  --danger-color: #ef4444;
+  --excel-color: #16a34a;
 }
 
 * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Inter', 'Segoe UI', system-ui, sans-serif; }
@@ -32,45 +32,45 @@ body { background-color: var(--bg-color); color: var(--text-main); height: 100vh
 .toggle-auth:hover { color: var(--primary-hover); text-decoration: underline; }
 
 /* =========================================
-   APP LAYOUT & SIDEBAR (EXPANDIBLE/CONTRÁIBLE)
+   APP LAYOUT & SIDEBAR
    ========================================= */
 .app-layout { width: 100vw; height: 100vh; position: relative; display: flex; }
 .main-wrapper { flex: 1; display: flex; flex-direction: column; height: 100vh; overflow: hidden; transition: all 0.3s ease; }
 .main-content { flex: 1; padding: 30px 40px; overflow-y: auto; position: relative; background-color: var(--bg-color); }
 
 .sidebar { 
-    width: 260px; background-color: var(--sidebar-bg); color: #f8fafc; 
-    display: flex; flex-direction: column; justify-content: space-between; 
-    transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1); z-index: 50; overflow-x: hidden;
-    box-shadow: 2px 0 8px rgba(0,0,0,0.1);
+  width: 260px; background-color: var(--sidebar-bg); color: #f8fafc; 
+  display: flex; flex-direction: column; justify-content: space-between; 
+  transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1); z-index: 50; overflow-x: hidden;
+  box-shadow: 2px 0 8px rgba(0,0,0,0.1);
 }
 
 .sidebar-header { 
-    padding: 24px 20px; display: flex; justify-content: space-between; align-items: center;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.05); white-space: nowrap;
+  padding: 24px 20px; display: flex; justify-content: space-between; align-items: center;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05); white-space: nowrap;
 }
 .sidebar-logo { display: flex; align-items: center; gap: 12px; font-size: 1.2rem; font-weight: bold; }
 .logo-icon { background: var(--primary-color); padding: 6px; border-radius: 8px; display: flex; align-items: center; justify-content: center; }
 
 .collapse-btn { 
-    background: transparent; border: none; color: #94a3b8; cursor: pointer; 
-    padding: 4px; border-radius: 4px; transition: 0.2s; display: flex; align-items: center; justify-content: center;
+  background: transparent; border: none; color: #94a3b8; cursor: pointer; 
+  padding: 4px; border-radius: 4px; transition: 0.2s; display: flex; align-items: center; justify-content: center;
 }
 .collapse-btn:hover { background: rgba(255,255,255,0.1); color: white; }
 
 .nav-links { list-style: none; padding: 20px 0; display: flex; flex-direction: column; gap: 5px; flex: 1; overflow-y: auto;}
 .nav-links li { 
-    padding: 12px 20px; cursor: pointer; transition: all 0.2s; font-size: 0.95rem; 
-    border-left: 4px solid transparent; display: flex; align-items: center; gap: 15px; color: #cbd5e1; white-space: nowrap;
+  padding: 12px 20px; cursor: pointer; transition: all 0.2s; font-size: 0.95rem; 
+  border-left: 4px solid transparent; display: flex; align-items: center; gap: 15px; color: #cbd5e1; white-space: nowrap;
 }
 .nav-links li:hover, .nav-links li.active { background-color: var(--sidebar-hover); color: white; }
 .nav-links li.active { border-left-color: var(--primary-color); font-weight: 600; }
 
 .sidebar-footer { padding: 20px; border-top: 1px solid rgba(255, 255, 255, 0.05); white-space: nowrap;}
 .logout-btn { 
-    width: 100%; padding: 10px; background-color: transparent; color: #f87171; 
-    border: 1px solid #f87171; border-radius: 8px; cursor: pointer; 
-    transition: all 0.2s; font-weight: 600; display: flex; justify-content: center; align-items: center; gap: 10px;
+  width: 100%; padding: 10px; background-color: transparent; color: #f87171; 
+  border: 1px solid #f87171; border-radius: 8px; cursor: pointer; 
+  transition: all 0.2s; font-weight: 600; display: flex; justify-content: center; align-items: center; gap: 10px;
 }
 .logout-btn:hover { background-color: rgba(248, 113, 113, 0.1); }
 
@@ -85,9 +85,9 @@ body { background-color: var(--bg-color); color: var(--text-main); height: 100vh
    ========================================= */
 .catalog-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 24px; margin-top: 20px; }
 .catalog-card { 
-    background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 16px; 
-    padding: 35px 20px; text-align: center; cursor: pointer; transition: all 0.2s ease;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.02); display: flex; flex-direction: column; align-items: center;
+  background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 16px; 
+  padding: 35px 20px; text-align: center; cursor: pointer; transition: all 0.2s ease;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.02); display: flex; flex-direction: column; align-items: center;
 }
 .catalog-card:hover { border-color: var(--primary-color); box-shadow: 0 10px 25px -5px rgba(37, 99, 235, 0.1); transform: translateY(-3px); }
 .catalog-icon { background: #eff6ff; color: var(--primary-color); padding: 16px; border-radius: 14px; display: flex; align-items: center; justify-content: center; margin-bottom: 18px; transition: all 0.2s; }
@@ -128,8 +128,10 @@ button.action { padding: 12px 24px; border: none; border-radius: 8px; font-size:
 .icon-btn.edit:hover { color: var(--primary-color); border-color: #bfdbfe; background-color: #eff6ff; }
 .icon-btn.delete:hover { color: var(--danger-color); border-color: #fecaca; background-color: #fef2f2; }
 
+/* TABLAS RESPONSIVAS */
 .table-container { overflow-x: auto; border-radius: 12px; border: 1px solid var(--border-color); }
-table { width: 100%; border-collapse: collapse; text-align: left; min-width: 800px; }
+table { width: 100%; border-collapse: collapse; text-align: left; }
+.responsive-table { min-width: 950px; white-space: nowrap; }
 th, td { padding: 16px 20px; border-bottom: 1px solid var(--border-color); font-size: 0.95rem; vertical-align: middle; }
 th { background-color: #f8fafc; font-weight: 600; color: var(--text-muted); text-transform: uppercase; font-size: 0.75rem; letter-spacing: 0.5px; }
 tr:last-child td { border-bottom: none; }
@@ -153,44 +155,48 @@ tr:hover { background-color: #f8fafc; }
 .detail-item span { font-size: 0.8rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
 .detail-item p { font-size: 1.05rem; color: var(--text-main); font-weight: 500; }
 
-/* NUEVO DISEÑO PARA LA SECCIÓN DE PRODUCTOS (Separación Visual) */
-.products-section { 
-    margin-top: 40px; 
-    background-color: #f8fafc; 
-    border: 1px solid #e2e8f0; 
-    border-radius: 16px; 
-    padding: 30px; 
-}
+.products-section { margin-top: 40px; background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 16px; padding: 30px; }
 .products-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding-bottom: 15px; border-bottom: 1px solid #cbd5e1; }
-.large-table table { min-width: 900px; background: white; } 
 .empty-state { text-align: center; padding: 40px !important; color: var(--text-muted); font-style: italic; font-size: 1rem; }
-.modal-footer-actions { justify-content: space-between; margin-top: 40px; border-top: none; padding-top: 0;}
-
-/* Botones de texto para acciones en tablas */
-.btn-text-primary { background: none; border: none; color: var(--primary-color); font-weight: 600; font-size: 0.85rem; cursor: pointer; text-decoration: underline; margin-right: 10px;}
-.btn-text-primary:hover { color: var(--primary-hover); }
 .btn-text-danger { background: none; border: none; color: var(--danger-color); font-weight: 600; font-size: 0.85rem; cursor: pointer; text-decoration: underline; }
 .btn-text-danger:hover { color: #b91c1c; }
 
 /* =========================================
-   RESPONSIVE
+   RESPONSIVE (MAGIA CSS DE TABLAS A TARJETAS)
    ========================================= */
 .mobile-header { display: none; background-color: var(--sidebar-bg); color: white; padding: 15px 20px; align-items: center; justify-content: space-between; box-shadow: 0 2px 4px rgba(0,0,0,0.1); z-index: 40; }
 .mobile-header button { background: none; border: none; color: white; cursor: pointer; display: flex; align-items: center; }
 
 @media (max-width: 900px) {
-    .card-header { flex-direction: column; }
-    .header-actions { width: 100%; justify-content: flex-end; }
-    .products-section { padding: 20px; }
+  .card-header { flex-direction: column; }
 }
+
 @media (max-width: 768px) {
-    .desktop-only { display: none; }
-    .mobile-header { display: flex; }
-    .sidebar { position: fixed; top: 0; left: 0; height: 100vh; transform: translateX(-100%); width: 280px; }
-    .sidebar.open { transform: translateX(0); }
-    .sidebar.collapsed { width: 280px; } 
-    .sidebar.collapsed .logo-text, .sidebar.collapsed .nav-links span, .sidebar.collapsed .logout-btn span { display: inline; }
-    .main-content { padding: 15px; }
-    .card { padding: 20px; }
-    .modal-content { padding: 20px; }
+  .desktop-only { display: none; }
+  .mobile-header { display: flex; }
+  .sidebar { position: fixed; top: 0; left: 0; height: 100vh; transform: translateX(-100%); width: 280px; }
+  .sidebar.open { transform: translateX(0); }
+  .main-content { padding: 15px; }
+  .card { padding: 20px; }
+  .modal-content { padding: 20px; }
+  
+  /* Técnica UI de Tablas a Tarjetas Verticales */
+  .responsive-table { min-width: 100%; white-space: normal; }
+  .table-container { border: none; background: transparent; }
+  .table-container table, .table-container thead, .table-container tbody, .table-container th, .table-container td, .table-container tr { display: block; width: 100%; }
+  .table-container thead tr { display: none; } 
+  .table-container tr { 
+      background: var(--card-bg); border: 1px solid var(--border-color); 
+      border-radius: 12px; margin-bottom: 16px; padding: 12px; 
+      box-shadow: 0 2px 4px rgba(0,0,0,0.02); 
+  }
+  .table-container td { 
+      display: flex; justify-content: space-between; align-items: center; 
+      padding: 10px 0; border-bottom: 1px solid #f1f5f9; text-align: right; font-size: 0.9rem;
+  }
+  .table-container td:last-child { border-bottom: none; justify-content: center; padding-top: 15px; }
+  .table-container td:before { 
+      content: attr(data-label); font-weight: 600; color: var(--text-muted); 
+      font-size: 0.75rem; text-transform: uppercase; text-align: left; margin-right: 15px;
+  }
 }
