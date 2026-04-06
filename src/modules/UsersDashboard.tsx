@@ -1,10 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { collection, getDocs, addDoc, deleteDoc, doc } from 'firebase/firestore';
-// 🔥 SOLUCIÓN: Importamos 'getApp' para no depender de la exportación de tu firebase.ts
 import { initializeApp, getApp } from 'firebase/app';
 import { getAuth, createUserWithEmailAndPassword, sendPasswordResetEmail, signOut } from 'firebase/auth';
-import { db } from '../firebase'; // 🔥 Importación limpia sin 'app'
-import { Users, Plus, Trash2, X } from 'lucide-react';
+import { db } from '../firebase'; 
+import { Users, Plus, Trash2, X, User as UserIcon } from 'lucide-react';
 import { SearchBar } from '../components/SharedUI';
 import { Role, SystemUser } from '../types';
 import { AuditLogger } from '../utils/logger';
@@ -17,6 +16,9 @@ export const UsersDashboard: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false); 
   
+  // 🔥 NUEVOS ESTADOS DE FORMULARIO
+  const [newUserFirstName, setNewUserFirstName] = useState('');
+  const [newUserLastName, setNewUserLastName] = useState('');
   const [newUserEmail, setNewUserEmail] = useState('');
   const [newUserRole, setNewUserRole] = useState('');
   
@@ -48,27 +50,29 @@ export const UsersDashboard: React.FC = () => {
     setIsProcessing(true);
     
     try {
-      // 🔥 OBTENEMOS LA APP NATIVA DE MEMORIA PARA EVITAR EL ERROR DE IMPORTACIÓN
+      // 1. Obtener la App Principal de Firebase
       const mainApp = getApp();
       
-      // Creamos la instancia secundaria usando las opciones de la app principal
+      // 2. Instancia Secundaria para Auth Segura
       const secondaryAppName = `SecondaryApp_${Date.now()}`;
       const secondaryApp = initializeApp(mainApp.options, secondaryAppName);
       const secondaryAuth = getAuth(secondaryApp);
 
-      // Creamos la cuenta con una contraseña temporal super segura
+      // 3. Crear usuario con contraseña temporal
       const tempPassword = `Temp@${Math.random().toString(36).slice(-8)}!`;
       await createUserWithEmailAndPassword(secondaryAuth, newUserEmail, tempPassword);
 
-      // Disparamos el correo real de Firebase para restablecer contraseña
+      // 4. Enviar correo de restablecimiento (Invitación real)
       await sendPasswordResetEmail(secondaryAuth, newUserEmail);
 
-      // Limpiamos y cerramos la instancia secundaria
+      // 5. Cerrar sesión secundaria para no afectar al admin
       await signOut(secondaryAuth);
 
-      // Guardamos en Firestore el registro del usuario
+      // 6. Guardar el registro completo en Firestore
       const newUser: SystemUser = {
-        email: newUserEmail,
+        firstName: newUserFirstName.trim(),
+        lastName: newUserLastName.trim(),
+        email: newUserEmail.trim(),
         roleId: newUserRole,
         status: 'Pending', 
         createdAt: new Date().toISOString()
@@ -76,11 +80,15 @@ export const UsersDashboard: React.FC = () => {
 
       const docRef = await addDoc(collection(db, 'users'), newUser);
       
-      // Registro en Auditoría
+      // 7. Registro de Auditoría
       AuditLogger.logCreate('Account Users', currentUser?.username || 'System', docRef.id, newUser);
 
       alert(`Success! An invitation email has been sent to ${newUserEmail}.`);
       setIsModalOpen(false);
+      
+      // Limpieza de Estados
+      setNewUserFirstName('');
+      setNewUserLastName('');
       setNewUserEmail('');
       setNewUserRole('');
       fetchData();
@@ -102,7 +110,9 @@ export const UsersDashboard: React.FC = () => {
   };
 
   const filteredUsers = systemUsers.filter(u => 
-    u.email.toLowerCase().includes(searchTerm.toLowerCase())
+    u.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    u.firstName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    u.lastName.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   return (
@@ -126,20 +136,31 @@ export const UsersDashboard: React.FC = () => {
         <table className="responsive-table">
           <thead>
             <tr>
-              <th>User Email</th>
+              <th>Account User</th>
               <th>Assigned Role</th>
               <th style={{ textAlign: 'center' }}>Status</th>
               <th style={{ textAlign: 'center' }}>Action</th>
             </tr>
           </thead>
           <tbody>
-            {filteredUsers.length === 0 && <tr><td colSpan={4} className="empty-state">No users invited yet. Click "Invite User".</td></tr>}
+            {filteredUsers.length === 0 && <tr><td colSpan={4} className="empty-state">No users found.</td></tr>}
             {filteredUsers.map(user => {
               const roleName = availableRoles.find(r => r.id === user.roleId)?.name || 'Unknown Role';
               
               return (
                 <tr key={user.id} className="clickable-row">
-                  <td data-label="User Email" style={{ fontWeight: 'bold' }}>{user.email}</td>
+                  {/* 🔥 UI MEJORADA: Mostramos Nombre Completo con Correo abajo */}
+                  <td data-label="User">
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                      <div style={{ backgroundColor: '#f1f5f9', padding: '8px', borderRadius: '50%', color: '#64748b' }}>
+                        <UserIcon size={18} />
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column' }}>
+                        <span style={{ fontWeight: 'bold', color: '#1e293b' }}>{user.firstName} {user.lastName}</span>
+                        <span style={{ fontSize: '0.8rem', color: '#64748b' }}>{user.email}</span>
+                      </div>
+                    </div>
+                  </td>
                   <td data-label="Role" style={{ color: '#475569' }}>{roleName}</td>
                   <td data-label="Status" style={{ textAlign: 'center' }}>
                     <span style={{ 
@@ -169,19 +190,55 @@ export const UsersDashboard: React.FC = () => {
 
       {isModalOpen && (
         <div className="modal-overlay active">
-          <div className="modal-content" style={{ maxWidth: '400px' }}>
+          {/* Aumenté ligeramente el max-width para acomodar las columnas */}
+          <div className="modal-content" style={{ maxWidth: '550px' }}>
             <form onSubmit={handleRegisterUser}>
               <div className="modal-header">
                 <h3>Invite New User</h3>
                 <button type="button" className="close-modal" onClick={() => setIsModalOpen(false)} disabled={isProcessing}><X size={24}/></button>
               </div>
+
+              {/* 🔥 CSS GRID ADAPTATIVO: Nombres uno al lado del otro en PC, apilados en móvil */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '15px', marginBottom: '15px' }}>
+                <div className="form-group">
+                  <label>First Name *</label>
+                  <input 
+                    type="text" 
+                    required 
+                    value={newUserFirstName} 
+                    onChange={e => setNewUserFirstName(e.target.value)} 
+                    disabled={isProcessing} 
+                    placeholder="e.g. John"
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Last Name *</label>
+                  <input 
+                    type="text" 
+                    required 
+                    value={newUserLastName} 
+                    onChange={e => setNewUserLastName(e.target.value)} 
+                    disabled={isProcessing} 
+                    placeholder="e.g. Doe"
+                  />
+                </div>
+              </div>
+
               <div className="form-group" style={{ marginBottom: '15px' }}>
                 <label>Email Address *</label>
-                <input type="email" required value={newUserEmail} onChange={e => setNewUserEmail(e.target.value)} disabled={isProcessing} />
+                <input 
+                  type="email" 
+                  required 
+                  value={newUserEmail} 
+                  onChange={e => setNewUserEmail(e.target.value)} 
+                  disabled={isProcessing} 
+                  placeholder="name@company.com"
+                />
                 <span style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '4px' }}>
                   A real email will be sent to establish their password.
                 </span>
               </div>
+
               <div className="form-group" style={{ marginBottom: '25px' }}>
                 <label>Assign Role *</label>
                 <select required value={newUserRole} onChange={e => setNewUserRole(e.target.value)} disabled={isProcessing}>
@@ -191,7 +248,8 @@ export const UsersDashboard: React.FC = () => {
                   ))}
                 </select>
               </div>
-              <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '20px' }}>
+
+              <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '20px', borderTop: '1px solid #e2e8f0', paddingTop: '20px' }}>
                 <button type="button" className="action btn-secondary" onClick={() => setIsModalOpen(false)} disabled={isProcessing}>Cancel</button>
                 <button type="submit" className="action btn-primary" disabled={isProcessing}>
                   {isProcessing ? 'Sending...' : 'Send Invitation'}

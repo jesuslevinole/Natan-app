@@ -7,9 +7,11 @@ export interface User {
   roleId: string; 
 }
 
-// 🔥 NUEVO: Interfaz para los usuarios gestionados en el Dashboard
+// 🔥 ACTUALIZADO: Se añadieron Nombre y Apellido
 export interface SystemUser {
   id?: string;
+  firstName: string;
+  lastName: string;
   email: string;
   roleId: string;
   status: 'Pending' | 'Active';
