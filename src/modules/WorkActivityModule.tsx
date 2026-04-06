@@ -30,6 +30,7 @@ export const WorkActivity: React.FC = () => {
   const [viewProducts, setViewProducts] = useState<JobProduct[]>([]);
   const [showHistoric, setShowHistoric] = useState<boolean>(false); 
 
+  // Cargamos el catálogo priorizando 'description'
   const destinations = useCatalogOptions('destinations', 'description', 'property_name');
 
   const jobFields = [
@@ -394,7 +395,7 @@ export const WorkActivity: React.FC = () => {
               <div className="form-grid">
                 <div className="form-group"><label>Registration Date {isJobReq('createdAt') && '*'}</label><input type="date" value={formData.createdAt} onChange={e => setFormData({...formData, createdAt: e.target.value})} required={isJobReq('createdAt')} /></div>
                 
-                {/* 🔥 BUSCADOR DE DESTINATION ROBUSTO */}
+                {/* 🔥 BUSCADOR SÚPER LIMPIO: Muestra solo la descripción */}
                 <div className="form-group">
                   <label>Destination (Description) {isJobReq('destination') && '*'}</label>
                   <div style={{ display: 'flex', gap: '8px', alignItems: 'stretch' }}>
@@ -402,18 +403,15 @@ export const WorkActivity: React.FC = () => {
                       <SearchableSelect 
                         options={destinations.map(d => ({
                           id: d.value,
-                          label: d.label, // Este es el campo visible (la descripción)
-                          searchKeywords: d.label, // Búsqueda estricta sobre la descripción
+                          label: d.label, 
+                          searchKeywords: d.label, 
                           render: (
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                              <span style={{ fontWeight: 'bold', color: '#1e293b' }}>{d.label}</span>
-                              <span style={{ fontSize: '0.75rem', color: '#64748b' }}>Apt / Prop: {d.value}</span>
-                            </div>
+                            <span style={{ fontWeight: 'bold', color: '#1e293b' }}>{d.label}</span>
                           )
                         }))}
                         value={formData.destination}
                         onChange={val => setFormData({...formData, destination: val})}
-                        placeholder="Search by description (ej. 48 Staysail)..."
+                        placeholder="Search description..."
                         required={isJobReq('destination')}
                       />
                     </div>

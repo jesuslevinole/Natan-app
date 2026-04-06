@@ -1,6 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { collection, getDocs, addDoc, deleteDoc, doc } from 'firebase/firestore';
-import { db } from '../firebase'; 
+// 🔥 SOLUCIÓN: Importamos 'getApp' para no depender de la exportación de tu firebase.ts
+import { initializeApp, getApp } from 'firebase/app';
+import { getAuth, createUserWithEmailAndPassword, sendPasswordResetEmail, signOut } from 'firebase/auth';
+import { db } from '../firebase'; // 🔥 Importación limpia sin 'app'
 import { Users, Plus, Trash2, X } from 'lucide-react';
 import { SearchBar } from '../components/SharedUI';
 import { Role, SystemUser } from '../types';
@@ -12,6 +15,7 @@ export const UsersDashboard: React.FC = () => {
   
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false); 
   
   const [newUserEmail, setNewUserEmail] = useState('');
   const [newUserRole, setNewUserRole] = useState('');
@@ -21,19 +25,15 @@ export const UsersDashboard: React.FC = () => {
 
   const fetchData = async () => {
     try {
-      // 1. Traemos los roles para el select y para cruzar el nombre en la tabla
       const rolesSnap = await getDocs(collection(db, 'roles'));
       const fetchedRoles = rolesSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Role));
       setAvailableRoles(fetchedRoles);
 
-      // 2. Traemos la lista de usuarios invitados/activos
       const usersSnap = await getDocs(collection(db, 'users'));
       const fetchedUsers = usersSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as SystemUser));
       
-      // Ordenamos para que los más recientes salgan primero
       fetchedUsers.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
       setSystemUsers(fetchedUsers);
-
     } catch (error) {
       console.error("Error fetching users or roles:", error);
     }
@@ -45,29 +45,51 @@ export const UsersDashboard: React.FC = () => {
 
   const handleRegisterUser = async (e: React.FormEvent) => {
     e.preventDefault();
+    setIsProcessing(true);
+    
     try {
+      // 🔥 OBTENEMOS LA APP NATIVA DE MEMORIA PARA EVITAR EL ERROR DE IMPORTACIÓN
+      const mainApp = getApp();
+      
+      // Creamos la instancia secundaria usando las opciones de la app principal
+      const secondaryAppName = `SecondaryApp_${Date.now()}`;
+      const secondaryApp = initializeApp(mainApp.options, secondaryAppName);
+      const secondaryAuth = getAuth(secondaryApp);
+
+      // Creamos la cuenta con una contraseña temporal super segura
+      const tempPassword = `Temp@${Math.random().toString(36).slice(-8)}!`;
+      await createUserWithEmailAndPassword(secondaryAuth, newUserEmail, tempPassword);
+
+      // Disparamos el correo real de Firebase para restablecer contraseña
+      await sendPasswordResetEmail(secondaryAuth, newUserEmail);
+
+      // Limpiamos y cerramos la instancia secundaria
+      await signOut(secondaryAuth);
+
+      // Guardamos en Firestore el registro del usuario
       const newUser: SystemUser = {
         email: newUserEmail,
         roleId: newUserRole,
-        status: 'Pending', // Estado inicial
+        status: 'Pending', 
         createdAt: new Date().toISOString()
       };
 
-      // Guardamos en Firestore
       const docRef = await addDoc(collection(db, 'users'), newUser);
       
-      // Dejamos registro en Auditoría
+      // Registro en Auditoría
       AuditLogger.logCreate('Account Users', currentUser?.username || 'System', docRef.id, newUser);
 
-      // Cerramos modal y recargamos tabla
+      alert(`Success! An invitation email has been sent to ${newUserEmail}.`);
       setIsModalOpen(false);
       setNewUserEmail('');
       setNewUserRole('');
       fetchData();
       
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error adding user:", error);
-      alert("Failed to send invitation.");
+      alert(`Error sending invitation: ${error.message}`);
+    } finally {
+      setIsProcessing(false);
     }
   };
 
@@ -79,7 +101,6 @@ export const UsersDashboard: React.FC = () => {
     }
   };
 
-  // Filtrado de tabla
   const filteredUsers = systemUsers.filter(u => 
     u.email.toLowerCase().includes(searchTerm.toLowerCase())
   );
@@ -89,7 +110,7 @@ export const UsersDashboard: React.FC = () => {
       <div className="card-header" style={{ flexWrap: 'wrap', gap: '15px' }}>
         <div className="card-header-text" style={{ flex: 1, minWidth: '200px' }}>
           <h2 style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><Users size={28}/> Account Users</h2>
-          <p>Manage system access and roles.</p>
+          <p>Manage system access, roles, and invitations.</p>
         </div>
         <div style={{ flex: 2, display: 'flex', justifyContent: 'center', minWidth: '250px' }}>
           <SearchBar value={searchTerm} onChange={setSearchTerm} />
@@ -114,7 +135,6 @@ export const UsersDashboard: React.FC = () => {
           <tbody>
             {filteredUsers.length === 0 && <tr><td colSpan={4} className="empty-state">No users invited yet. Click "Invite User".</td></tr>}
             {filteredUsers.map(user => {
-              // Encontramos el nombre real del rol cruzando el roleId
               const roleName = availableRoles.find(r => r.id === user.roleId)?.name || 'Unknown Role';
               
               return (
@@ -153,16 +173,18 @@ export const UsersDashboard: React.FC = () => {
             <form onSubmit={handleRegisterUser}>
               <div className="modal-header">
                 <h3>Invite New User</h3>
-                <button type="button" className="close-modal" onClick={() => setIsModalOpen(false)}><X size={24}/></button>
+                <button type="button" className="close-modal" onClick={() => setIsModalOpen(false)} disabled={isProcessing}><X size={24}/></button>
               </div>
               <div className="form-group" style={{ marginBottom: '15px' }}>
                 <label>Email Address *</label>
-                <input type="email" required value={newUserEmail} onChange={e => setNewUserEmail(e.target.value)} />
-                <span style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '4px' }}>An email will be sent to set their password.</span>
+                <input type="email" required value={newUserEmail} onChange={e => setNewUserEmail(e.target.value)} disabled={isProcessing} />
+                <span style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '4px' }}>
+                  A real email will be sent to establish their password.
+                </span>
               </div>
               <div className="form-group" style={{ marginBottom: '25px' }}>
                 <label>Assign Role *</label>
-                <select required value={newUserRole} onChange={e => setNewUserRole(e.target.value)}>
+                <select required value={newUserRole} onChange={e => setNewUserRole(e.target.value)} disabled={isProcessing}>
                   <option value="">Select a Role...</option>
                   {availableRoles.map(role => (
                     <option key={role.id} value={role.id}>{role.name}</option>
@@ -170,8 +192,10 @@ export const UsersDashboard: React.FC = () => {
                 </select>
               </div>
               <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '20px' }}>
-                <button type="button" className="action btn-secondary" onClick={() => setIsModalOpen(false)}>Cancel</button>
-                <button type="submit" className="action btn-primary">Send Invitation</button>
+                <button type="button" className="action btn-secondary" onClick={() => setIsModalOpen(false)} disabled={isProcessing}>Cancel</button>
+                <button type="submit" className="action btn-primary" disabled={isProcessing}>
+                  {isProcessing ? 'Sending...' : 'Send Invitation'}
+                </button>
               </div>
             </form>
           </div>
