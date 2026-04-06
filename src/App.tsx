@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { PackageSearch, Briefcase, LogOut, BookOpen, BarChart2, Menu, ChevronRight, ChevronLeft, ShieldAlert, Users as UsersIcon, ShieldCheck } from 'lucide-react';
-import { AuthScreen } from './components/SharedUI'; // <- IMPORTACIÓN CORRECTA
+import { AuthScreen } from './components/SharedUI'; 
 import { AuthProvider, useAuth, RequirePermission } from './hooks/useAuth';
 
 // Módulos
@@ -116,7 +116,7 @@ function AppShell() {
   );
 }
 
-// Punto de entrada real: Inyecta el AuthContext antes de cargar la app
+// Punto de entrada real
 export default function App() {
   return (
     <AuthProvider>
@@ -125,7 +125,6 @@ export default function App() {
   );
 }
 
-// Sub-componente que consume la auth y determina si muestra Login o el Dashboard
 const AuthConsumer = () => {
   const { currentUser, login } = useAuth();
   return currentUser ? <AppShell /> : <AuthScreen onLoginSuccess={login} />;
