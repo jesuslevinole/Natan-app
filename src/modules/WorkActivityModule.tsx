@@ -10,6 +10,7 @@ import { AuditLogger } from '../utils/logger';
 import { useAuth, RequirePermission } from '../hooks/useAuth';
 
 export const WorkActivity: React.FC = () => {
+  // Extraemos al usuario logueado desde el contexto de seguridad
   const { currentUser } = useAuth();
   
   const [orders, setOrders] = useState<JobOrder[]>([]);
@@ -30,7 +31,6 @@ export const WorkActivity: React.FC = () => {
   const [viewProducts, setViewProducts] = useState<JobProduct[]>([]);
   const [showHistoric, setShowHistoric] = useState<boolean>(false); 
 
-  // Cargamos el catálogo priorizando 'description'
   const destinations = useCatalogOptions('destinations', 'description', 'property_name');
 
   const jobFields = [
@@ -50,9 +50,17 @@ export const WorkActivity: React.FC = () => {
   ];
   const { requiredFields: reqProd, toggleRequired: toggleProdReq, isRequired: isProdReq } = useFormConfig('addProduct', ['itemEntranceId', 'quantity']);
 
+  // 🔥 AUTO-FILL: Asignamos el nombre del usuario actual por defecto al abrir un nuevo formulario
   const initialFormState: JobFormData = {
-    jobOrder: '', destination: '', description: '', workFinish: 'NO', pendingWork: '', schedule: '', createdAt: getTodayString()
+    jobOrder: currentUser?.username || 'Unknown User', 
+    destination: '', 
+    description: '', 
+    workFinish: 'NO', 
+    pendingWork: '', 
+    schedule: '', 
+    createdAt: getTodayString()
   };
+  
   const [formData, setFormData] = useState<JobFormData>(initialFormState);
   const [formProducts, setFormProducts] = useState<JobProduct[]>([]);
   
@@ -105,7 +113,7 @@ export const WorkActivity: React.FC = () => {
     if (job) {
       setEditingJob(job.id);
       setFormData({ 
-        jobOrder: job.jobOrder, 
+        jobOrder: job.jobOrder, // Preservamos al autor histórico
         destination: job.destination, 
         description: job.description, 
         workFinish: job.workFinish, 
@@ -118,7 +126,8 @@ export const WorkActivity: React.FC = () => {
       setFormProducts(querySnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })) as JobProduct[]);
     } else {
       setEditingJob(null);
-      setFormData({ ...initialFormState, createdAt: getTodayString() });
+      // 🔥 AUTO-FILL: Inyectamos el usuario actual al crear un nuevo registro
+      setFormData({ ...initialFormState, jobOrder: currentUser?.username || 'Unknown User', createdAt: getTodayString() });
       setFormProducts([]);
     }
     setIsJobModalOpen(true);
@@ -395,7 +404,6 @@ export const WorkActivity: React.FC = () => {
               <div className="form-grid">
                 <div className="form-group"><label>Registration Date {isJobReq('createdAt') && '*'}</label><input type="date" value={formData.createdAt} onChange={e => setFormData({...formData, createdAt: e.target.value})} required={isJobReq('createdAt')} /></div>
                 
-                {/* 🔥 BUSCADOR SÚPER LIMPIO: Muestra solo la descripción */}
                 <div className="form-group">
                   <label>Destination (Description) {isJobReq('destination') && '*'}</label>
                   <div style={{ display: 'flex', gap: '8px', alignItems: 'stretch' }}>
@@ -427,7 +435,24 @@ export const WorkActivity: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="form-group"><label>Ordered by {isJobReq('jobOrder') && '*'}</label><input type="text" value={formData.jobOrder} onChange={e => setFormData({...formData, jobOrder: e.target.value})} required={isJobReq('jobOrder')} /></div>
+                {/* 🔥 CAMBIO APLICADO: Input 'Ordered by' Bloqueado e inmutable */}
+                <div className="form-group">
+                  <label>Ordered by {isJobReq('jobOrder') && '*'}</label>
+                  <input 
+                    type="text" 
+                    value={formData.jobOrder} 
+                    readOnly 
+                    title="This field is auto-populated and cannot be changed for auditing purposes."
+                    style={{
+                      backgroundColor: '#f1f5f9',
+                      color: '#64748b',
+                      cursor: 'not-allowed',
+                      fontWeight: '600',
+                      border: '1px solid #cbd5e1'
+                    }}
+                  />
+                </div>
+
                 <div className="form-group"><label>Work Finish {isJobReq('workFinish') && '*'}</label><select value={formData.workFinish} onChange={e => setFormData({...formData, workFinish: e.target.value as 'YES' | 'NO'})} required={isJobReq('workFinish')}><option value="YES">YES</option><option value="NO">NO</option></select></div>
                 <div className="form-group" style={{ gridColumn: 'span 2' }}><label>Description {isJobReq('description') && '*'}</label><input type="text" value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} required={isJobReq('description')} /></div>
                 <div className="form-group"><label>Schedule {isJobReq('schedule') && '*'}</label><input type="date" value={formData.schedule} onChange={e => setFormData({...formData, schedule: e.target.value})} required={isJobReq('schedule')} /></div>
