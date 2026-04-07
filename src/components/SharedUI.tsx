@@ -42,15 +42,12 @@ export const SearchableSelect: React.FC<{
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // 🔥 SOLUCIÓN: Filtro estricto por palabras exactas y orden alfabético
   const filteredOptions = options.filter(o => {
     if (!searchTerm) return true; 
     const target = String(o.searchKeywords || o.label || '').toLowerCase();
     const searchTerms = String(searchTerm).toLowerCase().trim().split(/\s+/);
-    
-    // Todas las palabras escritas deben existir en el target
     return searchTerms.every(term => target.includes(term));
-  }).sort((a, b) => String(a.label).localeCompare(String(b.label))); // Orden alfabético forzado
+  }).sort((a, b) => String(a.label).localeCompare(String(b.label))); 
 
   return (
     <div ref={containerRef} style={{ position: 'relative', width: '100%' }}>
@@ -176,9 +173,12 @@ export const AuthScreen: React.FC<{ onLoginSuccess: (user: User) => void }> = ({
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
+      // 🔥 INYECTAMOS NOMBRE Y APELLIDO EN EL USUARIO SIMULADO
       const fakeUser: User = { 
         uid: 'uid_123', 
         username: email.split('@')[0], 
+        firstName: 'Jesús', // Nombre base para pruebas
+        lastName: 'Levinole', // Apellido base para pruebas
         email, 
         roleId: 'admin_role' 
       };

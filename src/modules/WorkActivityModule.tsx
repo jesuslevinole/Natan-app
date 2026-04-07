@@ -10,8 +10,13 @@ import { AuditLogger } from '../utils/logger';
 import { useAuth, RequirePermission } from '../hooks/useAuth';
 
 export const WorkActivity: React.FC = () => {
-  // Extraemos al usuario logueado desde el contexto de seguridad
   const { currentUser } = useAuth();
+  
+  // 🔥 LÓGICA INTELIGENTE DE NOMBRE DE USUARIO
+  // Si el usuario tiene nombre y apellido, los une de forma elegante. Si no, hace un fallback seguro a username.
+  const authorName = currentUser 
+    ? `${currentUser.firstName || ''} ${currentUser.lastName || ''}`.trim() || currentUser.username 
+    : 'Unknown User';
   
   const [orders, setOrders] = useState<JobOrder[]>([]);
   const [entranceList, setEntranceList] = useState<ItemEntranceRecord[]>([]); 
@@ -50,9 +55,9 @@ export const WorkActivity: React.FC = () => {
   ];
   const { requiredFields: reqProd, toggleRequired: toggleProdReq, isRequired: isProdReq } = useFormConfig('addProduct', ['itemEntranceId', 'quantity']);
 
-  // 🔥 AUTO-FILL: Asignamos el nombre del usuario actual por defecto al abrir un nuevo formulario
+  // 🔥 ACTUALIZADO: El estado inicial usa el nombre completo calculado arriba
   const initialFormState: JobFormData = {
-    jobOrder: currentUser?.username || 'Unknown User', 
+    jobOrder: authorName, 
     destination: '', 
     description: '', 
     workFinish: 'NO', 
@@ -113,7 +118,7 @@ export const WorkActivity: React.FC = () => {
     if (job) {
       setEditingJob(job.id);
       setFormData({ 
-        jobOrder: job.jobOrder, // Preservamos al autor histórico
+        jobOrder: job.jobOrder, 
         destination: job.destination, 
         description: job.description, 
         workFinish: job.workFinish, 
@@ -126,8 +131,8 @@ export const WorkActivity: React.FC = () => {
       setFormProducts(querySnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })) as JobProduct[]);
     } else {
       setEditingJob(null);
-      // 🔥 AUTO-FILL: Inyectamos el usuario actual al crear un nuevo registro
-      setFormData({ ...initialFormState, jobOrder: currentUser?.username || 'Unknown User', createdAt: getTodayString() });
+      // 🔥 AUTO-FILL: Al crear un nuevo registro, forzamos el nombre completo y limpio
+      setFormData({ ...initialFormState, jobOrder: authorName, createdAt: getTodayString() });
       setFormProducts([]);
     }
     setIsJobModalOpen(true);
@@ -137,7 +142,7 @@ export const WorkActivity: React.FC = () => {
     if (window.confirm("⚠️ Delete record?")) {
       const orderToDelete = orders.find(o => o.id === id);
       await deleteDoc(doc(db, "jobOrders", id));
-      AuditLogger.logDelete('WorkActivity', currentUser?.username || 'Unknown', id, orderToDelete);
+      AuditLogger.logDelete('WorkActivity', authorName, id, orderToDelete);
       setViewingJob(null);
       fetchData(); 
     }
@@ -149,12 +154,12 @@ export const WorkActivity: React.FC = () => {
       let savedJobId = editingJob;
       if (editingJob) {
         await updateDoc(doc(db, "jobOrders", editingJob), { ...formData });
-        AuditLogger.logUpdate('WorkActivity', currentUser?.username || 'Unknown', editingJob, formData);
+        AuditLogger.logUpdate('WorkActivity', authorName, editingJob, formData);
       } else {
         const nextSeq = orders.length > 0 ? Math.max(...orders.map(o => o.visualSeq || 0)) + 1 : 1;
         const docRef = await addDoc(ordersCollectionRef, { ...formData, createdBy: currentUser?.username, seq: nextSeq });
         savedJobId = docRef.id;
-        AuditLogger.logCreate('WorkActivity', currentUser?.username || 'Unknown', docRef.id, formData);
+        AuditLogger.logCreate('WorkActivity', authorName, docRef.id, formData);
       }
       
       for (const product of formProducts) {
@@ -181,7 +186,7 @@ export const WorkActivity: React.FC = () => {
         createdAt: new Date().toISOString()
       });
       
-      AuditLogger.logCreate('Catalogs (Destinations)', currentUser?.username || 'Unknown', docRef.id, newDestData);
+      AuditLogger.logCreate('Catalogs (Destinations)', authorName, docRef.id, newDestData);
       
       setFormData({ ...formData, destination: newDestData.property_name });
       setIsQuickDestOpen(false);
@@ -220,7 +225,7 @@ export const WorkActivity: React.FC = () => {
     if (viewingJob) {
       const docRef = await addDoc(productsCollectionRef, { ...currentProduct, jobOrderId: viewingJob.id });
       setViewProducts([...viewProducts, { ...currentProduct, id: docRef.id, jobOrderId: viewingJob.id }]);
-      AuditLogger.logUpdate('WorkActivity Products', currentUser?.username || 'Unknown', viewingJob.id, { addedProduct: currentProduct });
+      AuditLogger.logUpdate('WorkActivity Products', authorName, viewingJob.id, { addedProduct: currentProduct });
       fetchData();
     } else {
       setFormProducts([...formProducts, { ...currentProduct, jobOrderId: 'pending' }]); 
@@ -235,7 +240,7 @@ export const WorkActivity: React.FC = () => {
       await deleteDoc(doc(db, "jobProducts", productId));
       
       if (viewingJob) {
-        AuditLogger.logUpdate('WorkActivity Products', currentUser?.username || 'Unknown', viewingJob.id, { removedProduct: prodToDelete });
+        AuditLogger.logUpdate('WorkActivity Products', authorName, viewingJob.id, { removedProduct: prodToDelete });
       }
       
       setViewProducts(viewProducts.filter(p => p.id !== productId));
@@ -419,7 +424,7 @@ export const WorkActivity: React.FC = () => {
                         }))}
                         value={formData.destination}
                         onChange={val => setFormData({...formData, destination: val})}
-                        placeholder="Search description..."
+                        placeholder="Search by description..."
                         required={isJobReq('destination')}
                       />
                     </div>
@@ -435,7 +440,6 @@ export const WorkActivity: React.FC = () => {
                   </div>
                 </div>
 
-                {/* 🔥 CAMBIO APLICADO: Input 'Ordered by' Bloqueado e inmutable */}
                 <div className="form-group">
                   <label>Ordered by {isJobReq('jobOrder') && '*'}</label>
                   <input 

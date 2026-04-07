@@ -3,11 +3,12 @@ import { ReactNode } from 'react';
 export interface User { 
   uid: string;
   username: string; 
+  firstName?: string; // 🔥 NUEVO
+  lastName?: string;  // 🔥 NUEVO
   email: string;
   roleId: string; 
 }
 
-// 🔥 ACTUALIZADO: Se añadieron Nombre y Apellido
 export interface SystemUser {
   id?: string;
   firstName: string;
