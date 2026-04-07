@@ -28,7 +28,6 @@ export const LogsDashboard: React.FC = () => {
     }
   };
 
-  // Formateador estricto de fechas en español
   const formatDateTimeES = (isoString: string) => {
     try {
       const d = new Date(isoString);
@@ -61,7 +60,8 @@ export const LogsDashboard: React.FC = () => {
               <th>Date & Time</th>
               <th style={{ textAlign: 'center' }}>Action</th>
               <th>Module</th>
-              <th>User / Author</th>
+              {/* 🔥 NOMBRE DE COLUMNA ACTUALIZADO */}
+              <th>Account User</th>
               <th>Details</th>
               <th style={{ textAlign: 'center' }}>Payload</th>
             </tr>
@@ -79,7 +79,10 @@ export const LogsDashboard: React.FC = () => {
                     </span>
                   </td>
                   <td data-label="Module" style={{ fontWeight: 'bold', color: '#334155' }}>{log.module}</td>
-                  <td data-label="User">{log.user}</td>
+                  
+                  {/* 🔥 AHORA IMPRIME EL NOMBRE COMPLETO FORMATEADO (En lugar de un username o email) */}
+                  <td data-label="Account User" style={{ fontWeight: '600' }}>{log.user}</td>
+                  
                   <td data-label="Details" style={{ color: '#475569', fontSize: '0.85rem' }}>{log.details}</td>
                   <td data-label="Payload" style={{ textAlign: 'center' }}>
                     {log.payload ? (

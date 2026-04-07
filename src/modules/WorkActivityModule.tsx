@@ -12,8 +12,7 @@ import { useAuth, RequirePermission } from '../hooks/useAuth';
 export const WorkActivity: React.FC = () => {
   const { currentUser } = useAuth();
   
-  // 🔥 LÓGICA INTELIGENTE DE NOMBRE DE USUARIO
-  // Si el usuario tiene nombre y apellido, los une de forma elegante. Si no, hace un fallback seguro a username.
+  // 🔥 LÓGICA INTELIGENTE DE NOMBRE: Usado para el UI y para Auditoría Estricta
   const authorName = currentUser 
     ? `${currentUser.firstName || ''} ${currentUser.lastName || ''}`.trim() || currentUser.username 
     : 'Unknown User';
@@ -55,7 +54,6 @@ export const WorkActivity: React.FC = () => {
   ];
   const { requiredFields: reqProd, toggleRequired: toggleProdReq, isRequired: isProdReq } = useFormConfig('addProduct', ['itemEntranceId', 'quantity']);
 
-  // 🔥 ACTUALIZADO: El estado inicial usa el nombre completo calculado arriba
   const initialFormState: JobFormData = {
     jobOrder: authorName, 
     destination: '', 
@@ -131,7 +129,6 @@ export const WorkActivity: React.FC = () => {
       setFormProducts(querySnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })) as JobProduct[]);
     } else {
       setEditingJob(null);
-      // 🔥 AUTO-FILL: Al crear un nuevo registro, forzamos el nombre completo y limpio
       setFormData({ ...initialFormState, jobOrder: authorName, createdAt: getTodayString() });
       setFormProducts([]);
     }
@@ -142,7 +139,10 @@ export const WorkActivity: React.FC = () => {
     if (window.confirm("⚠️ Delete record?")) {
       const orderToDelete = orders.find(o => o.id === id);
       await deleteDoc(doc(db, "jobOrders", id));
+      
+      // 🔥 AUDITORÍA: El logger registra el nombre y apellido completos
       AuditLogger.logDelete('WorkActivity', authorName, id, orderToDelete);
+      
       setViewingJob(null);
       fetchData(); 
     }
@@ -157,7 +157,7 @@ export const WorkActivity: React.FC = () => {
         AuditLogger.logUpdate('WorkActivity', authorName, editingJob, formData);
       } else {
         const nextSeq = orders.length > 0 ? Math.max(...orders.map(o => o.visualSeq || 0)) + 1 : 1;
-        const docRef = await addDoc(ordersCollectionRef, { ...formData, createdBy: currentUser?.username, seq: nextSeq });
+        const docRef = await addDoc(ordersCollectionRef, { ...formData, createdBy: authorName, seq: nextSeq });
         savedJobId = docRef.id;
         AuditLogger.logCreate('WorkActivity', authorName, docRef.id, formData);
       }
@@ -424,7 +424,7 @@ export const WorkActivity: React.FC = () => {
                         }))}
                         value={formData.destination}
                         onChange={val => setFormData({...formData, destination: val})}
-                        placeholder="Search by description..."
+                        placeholder="Search description..."
                         required={isJobReq('destination')}
                       />
                     </div>
@@ -440,6 +440,7 @@ export const WorkActivity: React.FC = () => {
                   </div>
                 </div>
 
+                {/* 🔥 CAMBIO APLICADO: Input 'Ordered by' Bloqueado e inmutable (Usa nombre completo) */}
                 <div className="form-group">
                   <label>Ordered by {isJobReq('jobOrder') && '*'}</label>
                   <input 
