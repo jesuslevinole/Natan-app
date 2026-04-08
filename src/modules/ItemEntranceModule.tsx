@@ -189,7 +189,7 @@ export const ItemEntrance: React.FC = () => {
         <table className="responsive-table">
           <thead>
             <tr>
-              {/* 🔥 COLUMNA DE ACCIONES MOVIDA AL PRINCIPIO */}
+              {/* 🔥 COLUMNA DE ACCIONES AL INICIO */}
               <th style={{ textAlign: 'center', width: '100px' }}>Actions</th>
               <th>#</th>
               <th style={{ textAlign: 'center' }}>Status</th>
@@ -210,7 +210,7 @@ export const ItemEntrance: React.FC = () => {
               const isAvailable = currentStock > 0;
               return (
                 <tr key={item.id} className="clickable-row">
-                  {/* 🔥 BOTONES DE ACCIÓN EN LA PRIMERA COLUMNA CON STOP PROPAGATION */}
+                  {/* 🔥 BOTONES DE ACCIONES AL INICIO DE LA FILA */}
                   <td data-label="Actions" style={{ textAlign: 'center' }}>
                     <div className="action-btns" style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
                       <RequirePermission permission="edit_item_entrance">

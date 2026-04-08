@@ -12,13 +12,12 @@ export const ReportsModule: React.FC = () => {
   const [allProducts, setAllProducts] = useState<JobProduct[]>([]);
   const destinations = useCatalogOptions('destinations', 'description', 'property_name');
   
-  // 🔥 AHORA CARGAMOS LA LISTA OFICIAL DE USUARIOS (Con ID y Nombre Completo)
   const [accountUsers, setAccountUsers] = useState<{name: string, email: string}[]>([]);
   
   const [startDate, setStartDate] = useState<string>('');
   const [endDate, setEndDate] = useState<string>('');
   const [selectedDest, setSelectedDest] = useState<string>('');
-  const [selectedWorker, setSelectedWorker] = useState<string>(''); // Nombre del trabajador
+  const [selectedWorker, setSelectedWorker] = useState<string>(''); 
 
   const [filterItemName, setFilterItemName] = useState<string>('');
   const [filterPO, setFilterPO] = useState<string>('');
@@ -26,17 +25,14 @@ export const ReportsModule: React.FC = () => {
 
   useEffect(() => {
     const fetchReportsData = async () => {
-      // 1. Órdenes de Trabajo
       const orderData = await getDocs(collection(db, "jobOrders"));
       const fetchedOrders = orderData.docs.map(doc => ({ ...doc.data(), id: doc.id } as JobOrder));
       setOrders(fetchedOrders);
 
-      // 2. Productos
       const prodData = await getDocs(collection(db, "jobProducts"));
       const fetchedProducts = prodData.docs.map(doc => ({ ...doc.data(), id: doc.id } as JobProduct));
       setAllProducts(fetchedProducts);
 
-      // 🔥 3. CONSULTA ESTRICTA A LA TABLA DE USUARIOS PARA EL DROPDOWN
       const usersData = await getDocs(collection(db, "users"));
       const fetchedUsers = usersData.docs.map(doc => {
         const u = doc.data() as SystemUser;
@@ -58,7 +54,6 @@ export const ReportsModule: React.FC = () => {
     if (endDate && orderDateStr > endDate) match = false;
     if (selectedDest && o.destination !== selectedDest) match = false;
     
-    // Filtro por nombre del trabajador (o.jobOrder guarda el nombre del autor)
     if (selectedWorker && o.jobOrder !== selectedWorker) match = false;
 
     if (match && (filterItemName || filterPO || filterSerial)) {
@@ -154,9 +149,18 @@ export const ReportsModule: React.FC = () => {
           <div className="form-group"><label>End Date</label><input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} style={{ padding: '8px' }}/></div>
           <div className="form-group">
             <label>Destination (Apt)</label>
+            
+            {/* 🔥 BUSCADOR ESTRICTO POR DESCRIPCIÓN EN EL TEMA OSCURO */}
             <SearchableSelect 
               theme="dark"
-              options={[{id: '', label: '', searchKeywords: ''}, ...destinations.map(d => ({id: d.value, label: d.label, searchKeywords: `${d.label} ${d.value}`}))]}
+              options={[{id: '', label: '', searchKeywords: ''}, ...destinations.map(d => ({
+                id: d.value, 
+                label: d.label, 
+                searchKeywords: String(d.label || ''), // Filtro estricto por Descripción
+                render: (
+                  <span style={{ fontWeight: 'bold', color: '#f8fafc' }}>{d.label}</span>
+                )
+              }))]}
               value={selectedDest} onChange={setSelectedDest} placeholder="-- Select Apt --"
             />
           </div>
@@ -164,7 +168,6 @@ export const ReportsModule: React.FC = () => {
             <label>Account User</label>
             <select value={selectedWorker} onChange={e => setSelectedWorker(e.target.value)} style={{ padding: '8px' }}>
               <option value="" style={{color: 'black'}}>All Account Users</option>
-              {/* 🔥 AHORA MAPEA ÚNICAMENTE A LOS USUARIOS REALES DEL SISTEMA */}
               {accountUsers.map((user, idx) => (
                 <option key={idx} value={user.name} style={{color: 'black'}}>{user.name}</option>
               ))}

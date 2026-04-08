@@ -12,7 +12,6 @@ import { useAuth, RequirePermission } from '../hooks/useAuth';
 export const WorkActivity: React.FC = () => {
   const { currentUser } = useAuth();
   
-  // 🔥 LÓGICA INTELIGENTE DE NOMBRE: Usado para el UI y para Auditoría Estricta
   const authorName = currentUser 
     ? `${currentUser.firstName || ''} ${currentUser.lastName || ''}`.trim() || currentUser.username 
     : 'Unknown User';
@@ -35,7 +34,7 @@ export const WorkActivity: React.FC = () => {
   const [viewProducts, setViewProducts] = useState<JobProduct[]>([]);
   const [showHistoric, setShowHistoric] = useState<boolean>(false); 
 
-  // Cargamos el catálogo mapeando explícitamente la 'description' al label visual
+  // Cargamos opciones del catálogo de Destinos
   const destinations = useCatalogOptions('destinations', 'description', 'property_name');
 
   const jobFields = [
@@ -140,9 +139,7 @@ export const WorkActivity: React.FC = () => {
     if (window.confirm("⚠️ Delete record?")) {
       const orderToDelete = orders.find(o => o.id === id);
       await deleteDoc(doc(db, "jobOrders", id));
-      
       AuditLogger.logDelete('WorkActivity', authorName, id, orderToDelete);
-      
       setViewingJob(null);
       fetchData(); 
     }
@@ -299,7 +296,6 @@ export const WorkActivity: React.FC = () => {
         <table className="responsive-table">
           <thead>
             <tr>
-              {/* 🔥 COLUMNA DE ACCIONES MOVIDA AL PRINCIPIO */}
               <th style={{ textAlign: 'center', width: '100px' }}>Actions</th>
               <th>#</th>
               <th>Registration Date</th>
@@ -319,7 +315,6 @@ export const WorkActivity: React.FC = () => {
 
               return (
                 <tr key={order.id} className="clickable-row" onClick={() => handleViewDetails(order)}>
-                  {/* 🔥 BOTONES DE ACCIÓN EN LA PRIMERA COLUMNA CON STOP PROPAGATION */}
                   <td data-label="Actions" style={{ textAlign: 'center' }}>
                     <div className="action-btns" style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
                       <RequirePermission permission="edit_work_activity">
@@ -403,7 +398,6 @@ export const WorkActivity: React.FC = () => {
                 <table className="responsive-table">
                   <thead>
                     <tr>
-                      {/* 🔥 ACCIÓN PRIMERO EN LA TABLA DE DETALLES TAMBIÉN */}
                       <th style={{ textAlign: 'center', width: '80px' }}>Action</th>
                       <th>#</th>
                       <th>Item Name</th>
@@ -452,6 +446,7 @@ export const WorkActivity: React.FC = () => {
               <div className="form-grid">
                 <div className="form-group"><label>Registration Date {isJobReq('createdAt') && '*'}</label><input type="date" value={formData.createdAt} onChange={e => setFormData({...formData, createdAt: e.target.value})} required={isJobReq('createdAt')} /></div>
                 
+                {/* 🔥 BUSCADOR DE DESTINOS: Filtro dinámico estricto por Description (label) */}
                 <div className="form-group">
                   <label>Destination (Description) {isJobReq('destination') && '*'}</label>
                   <div style={{ display: 'flex', gap: '8px', alignItems: 'stretch' }}>
@@ -460,14 +455,14 @@ export const WorkActivity: React.FC = () => {
                         options={destinations.map(d => ({
                           id: d.value,
                           label: d.label, 
-                          searchKeywords: String(d.label || '').toLowerCase(), // 🔥 FILTRO ESTRICTO: Solo busca en Description
+                          searchKeywords: String(d.label || ''), 
                           render: (
                             <span style={{ fontWeight: 'bold', color: '#1e293b' }}>{d.label}</span>
                           )
                         }))}
                         value={formData.destination}
                         onChange={val => setFormData({...formData, destination: val})}
-                        placeholder="Search by description (ej. 48 Staysail)..."
+                        placeholder="Search description..."
                         required={isJobReq('destination')}
                       />
                     </div>
@@ -514,7 +509,6 @@ export const WorkActivity: React.FC = () => {
                   <table className="responsive-table">
                     <thead>
                       <tr>
-                        {/* 🔥 ACCIÓN PRIMERO EN LA TABLA DEL FORMULARIO TAMBIÉN */}
                         <th style={{ textAlign: 'center', width: '80px' }}>Action</th>
                         <th>#</th>
                         <th>Item</th>

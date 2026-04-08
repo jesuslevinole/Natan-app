@@ -1,6 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Search, Settings, X, Briefcase, ArrowLeft, ShieldAlert } from 'lucide-react';
-// 🔥 IMPORTAMOS FIREBASE AUTH Y FIRESTORE PARA EL LOGIN REAL
 import { getAuth, signInWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth';
 import { collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../firebase'; 
@@ -24,56 +23,50 @@ export const SearchableSelect: React.FC<{
 }> = ({ options, value, onChange, placeholder = "Search...", required, theme = 'light' }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [isOpen, setIsOpen] = useState(false);
-  const containerRef = useRef<HTMLDivElement>(null);
 
   const isDark = theme === 'dark';
+  const selectedLabel = options.find(o => o.id === value)?.label || '';
 
   useEffect(() => {
     if (!isOpen) {
-      const selectedOpt = options.find(o => o.id === value);
-      if (selectedOpt) setSearchTerm(selectedOpt.label);
-      else setSearchTerm('');
+      setSearchTerm(selectedLabel);
     }
-  }, [value, options, isOpen]);
+  }, [value, selectedLabel, isOpen]);
 
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
-        setIsOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
-
-  const filteredOptions = options.filter(o => {
-    if (!searchTerm) return true; 
-    const target = String(o.searchKeywords || o.label || '').toLowerCase();
+  const filteredOptions = options.filter(opt => {
+    if (!searchTerm) return true;
+    const target = String(opt.searchKeywords || opt.label || '').toLowerCase();
     const searchTerms = String(searchTerm).toLowerCase().trim().split(/\s+/);
     return searchTerms.every(term => target.includes(term));
-  }).sort((a, b) => String(a.label).localeCompare(String(b.label))); 
+  }).sort((a, b) => String(a.label).localeCompare(String(b.label)));
 
   return (
-    <div ref={containerRef} style={{ position: 'relative', width: '100%' }}>
+    <div style={{ position: 'relative', width: '100%' }}>
       <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
         <input
           type="text"
           placeholder={placeholder}
-          value={isOpen ? searchTerm : (options.find(o => o.id === value)?.label || '')}
+          value={isOpen ? searchTerm : selectedLabel}
           onChange={(e) => {
             setSearchTerm(e.target.value);
             setIsOpen(true);
-            if (e.target.value === '') onChange('');
           }}
-          onFocus={() => setIsOpen(true)}
+          onFocus={() => {
+            setSearchTerm('');
+            setIsOpen(true);
+          }}
+          onBlur={() => {
+            setTimeout(() => setIsOpen(false), 200);
+            setSearchTerm(selectedLabel);
+          }}
           required={required && !value}
           style={{
             width: '100%', padding: '12px 40px 12px 14px', 
-            border: isDark ? '1px solid rgba(255,255,255,0.3)' : '1px solid #cbd5e1',
+            border: isDark ? (isOpen ? '1px solid #3b82f6' : '1px solid rgba(255,255,255,0.3)') : (isOpen ? '1px solid #3b82f6' : '1px solid #cbd5e1'),
             backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : '#ffffff',
             color: isDark ? '#ffffff' : '#334155',
             borderRadius: '8px', fontSize: '0.95rem', outline: 'none',
-            transition: 'all 0.2s'
+            transition: 'all 0.2s', cursor: 'text'
           }}
         />
         <Search size={18} color={isDark ? "#cbd5e1" : "#94a3b8"} style={{ position: 'absolute', right: '14px' }} />
@@ -84,15 +77,15 @@ export const SearchableSelect: React.FC<{
           position: 'absolute', top: '100%', left: 0, right: 0, 
           background: isDark ? '#475569' : 'white', 
           border: isDark ? '1px solid #64748b' : '1px solid #e2e8f0', 
-          borderRadius: '8px', marginTop: '6px', maxHeight: '350px', 
-          overflowY: 'auto', zIndex: 100, listStyle: 'none', padding: '6px', 
+          borderRadius: '8px', marginTop: '6px', maxHeight: '300px', 
+          overflowY: 'auto', zIndex: 1000, listStyle: 'none', padding: '6px', 
           boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.25)'
         }}>
           {filteredOptions.length > 0 ? (
             filteredOptions.map(opt => (
               <li
                 key={opt.id}
-                onMouseDown={() => {
+                onClick={() => {
                   onChange(opt.id);
                   setSearchTerm(opt.label);
                   setIsOpen(false);
@@ -175,7 +168,6 @@ export const AuthScreen: React.FC<{ onLoginSuccess: (user: User) => void }> = ({
   const [message, setMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
-  // 🔥 LÓGICA DE LOGIN REAL CON FIREBASE AUTH Y REVISIÓN DE ROLES EN FIRESTORE
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
@@ -183,21 +175,17 @@ export const AuthScreen: React.FC<{ onLoginSuccess: (user: User) => void }> = ({
     
     try {
       const auth = getAuth();
-      // 1. Autenticamos al usuario con Firebase Auth
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
       const firebaseUser = userCredential.user;
 
-      // 2. Verificamos que el usuario exista en nuestra tabla de permisos 'users'
       const q = query(collection(db, 'users'), where('email', '==', email.trim().toLowerCase()));
       const querySnapshot = await getDocs(q);
 
       if (querySnapshot.empty) {
-        // Si no está en la tabla de usuarios, no tiene permisos, lo expulsamos.
         await auth.signOut();
         throw new Error("Access Denied: Your account has not been authorized by an Administrator.");
       }
 
-      // 3. Extraemos sus datos (Nombre, Apellido, Rol)
       const userData = querySnapshot.docs[0].data() as SystemUser;
 
       const loggedInUser: User = { 
@@ -214,7 +202,6 @@ export const AuthScreen: React.FC<{ onLoginSuccess: (user: User) => void }> = ({
 
     } catch (error: any) {
       console.error(error);
-      // Mensajes amigables
       if (error.code === 'auth/invalid-credential' || error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
         setMessage('Invalid email or password.');
       } else {
@@ -225,7 +212,6 @@ export const AuthScreen: React.FC<{ onLoginSuccess: (user: User) => void }> = ({
     }
   };
 
-  // 🔥 BYPASS DE EMERGENCIA PARA ADMINISTRADOR
   const handleAdminBypass = () => {
     const adminUser: User = {
       uid: 'admin_bypass_001',
@@ -233,7 +219,7 @@ export const AuthScreen: React.FC<{ onLoginSuccess: (user: User) => void }> = ({
       firstName: 'Admin',
       lastName: 'Temporal',
       email: 'admin@system.com',
-      roleId: 'admin_role' // Fuerza el rol maestro que configuramos en useAuth
+      roleId: 'admin_role'
     };
     AuditLogger.logLogin(adminUser.username);
     onLoginSuccess(adminUser);
@@ -282,7 +268,6 @@ export const AuthScreen: React.FC<{ onLoginSuccess: (user: User) => void }> = ({
               Forgot your password?
             </p>
 
-            {/* 🔥 BOTÓN DE BYPASS (TEMPORAL) */}
             <div style={{ marginTop: '30px', paddingTop: '15px', borderTop: '1px solid #e2e8f0', textAlign: 'center' }}>
               <button 
                 type="button" 
