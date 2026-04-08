@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { collection, getDocs } from 'firebase/firestore';
 import { db } from '../firebase'; 
 import { BarChart2, Filter, Award, Activity, Wrench, MapPin } from 'lucide-react';
-import { JobOrder, JobProduct } from '../types';
+import { JobOrder, JobProduct, SystemUser } from '../types';
 import { SearchableSelect } from '../components/SharedUI';
 import { useCatalogOptions } from '../hooks/useAppHooks';
 import { formatDateDisplay } from '../utils/helpers';
@@ -11,31 +11,44 @@ export const ReportsModule: React.FC = () => {
   const [orders, setOrders] = useState<JobOrder[]>([]);
   const [allProducts, setAllProducts] = useState<JobProduct[]>([]);
   const destinations = useCatalogOptions('destinations', 'description', 'property_name');
-  const [workers, setWorkers] = useState<string[]>([]);
+  
+  // 🔥 AHORA CARGAMOS LA LISTA OFICIAL DE USUARIOS (Con ID y Nombre Completo)
+  const [accountUsers, setAccountUsers] = useState<{name: string, email: string}[]>([]);
   
   const [startDate, setStartDate] = useState<string>('');
   const [endDate, setEndDate] = useState<string>('');
   const [selectedDest, setSelectedDest] = useState<string>('');
-  const [selectedWorker, setSelectedWorker] = useState<string>('');
+  const [selectedWorker, setSelectedWorker] = useState<string>(''); // Nombre del trabajador
 
   const [filterItemName, setFilterItemName] = useState<string>('');
   const [filterPO, setFilterPO] = useState<string>('');
   const [filterSerial, setFilterSerial] = useState<string>('');
 
   useEffect(() => {
-    const fetchOrders = async () => {
+    const fetchReportsData = async () => {
+      // 1. Órdenes de Trabajo
       const orderData = await getDocs(collection(db, "jobOrders"));
       const fetchedOrders = orderData.docs.map(doc => ({ ...doc.data(), id: doc.id } as JobOrder));
       setOrders(fetchedOrders);
 
+      // 2. Productos
       const prodData = await getDocs(collection(db, "jobProducts"));
       const fetchedProducts = prodData.docs.map(doc => ({ ...doc.data(), id: doc.id } as JobProduct));
       setAllProducts(fetchedProducts);
 
-      const uniqueWorkers = Array.from(new Set(fetchedOrders.map(o => o.jobOrder))).filter(Boolean);
-      setWorkers(uniqueWorkers as string[]);
+      // 🔥 3. CONSULTA ESTRICTA A LA TABLA DE USUARIOS PARA EL DROPDOWN
+      const usersData = await getDocs(collection(db, "users"));
+      const fetchedUsers = usersData.docs.map(doc => {
+        const u = doc.data() as SystemUser;
+        return {
+          name: `${u.firstName || ''} ${u.lastName || ''}`.trim() || u.email,
+          email: u.email
+        };
+      });
+      setAccountUsers(fetchedUsers);
     };
-    fetchOrders();
+    
+    fetchReportsData();
   }, []);
 
   const filteredOrders = orders.filter(o => {
@@ -44,6 +57,8 @@ export const ReportsModule: React.FC = () => {
     if (startDate && orderDateStr < startDate) match = false;
     if (endDate && orderDateStr > endDate) match = false;
     if (selectedDest && o.destination !== selectedDest) match = false;
+    
+    // Filtro por nombre del trabajador (o.jobOrder guarda el nombre del autor)
     if (selectedWorker && o.jobOrder !== selectedWorker) match = false;
 
     if (match && (filterItemName || filterPO || filterSerial)) {
@@ -141,7 +156,6 @@ export const ReportsModule: React.FC = () => {
             <label>Destination (Apt)</label>
             <SearchableSelect 
               theme="dark"
-              // Removido "All Destinations" del label para que actúe el placeholder por defecto
               options={[{id: '', label: '', searchKeywords: ''}, ...destinations.map(d => ({id: d.value, label: d.label, searchKeywords: `${d.label} ${d.value}`}))]}
               value={selectedDest} onChange={setSelectedDest} placeholder="-- Select Apt --"
             />
@@ -150,7 +164,10 @@ export const ReportsModule: React.FC = () => {
             <label>Account User</label>
             <select value={selectedWorker} onChange={e => setSelectedWorker(e.target.value)} style={{ padding: '8px' }}>
               <option value="" style={{color: 'black'}}>All Account Users</option>
-              {workers.map(w => <option key={w} value={w} style={{color: 'black'}}>{w}</option>)}
+              {/* 🔥 AHORA MAPEA ÚNICAMENTE A LOS USUARIOS REALES DEL SISTEMA */}
+              {accountUsers.map((user, idx) => (
+                <option key={idx} value={user.name} style={{color: 'black'}}>{user.name}</option>
+              ))}
             </select>
           </div>
           <div className="form-group"><label>Item Name</label><input type="text" placeholder="Search by name..." value={filterItemName} onChange={e => setFilterItemName(e.target.value)} style={{ padding: '8px' }}/></div>

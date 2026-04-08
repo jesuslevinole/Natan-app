@@ -1,7 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Search, Settings, X, Briefcase, ArrowLeft } from 'lucide-react';
+import { Search, Settings, X, Briefcase, ArrowLeft, ShieldAlert } from 'lucide-react';
+// 🔥 IMPORTAMOS FIREBASE AUTH Y FIRESTORE PARA EL LOGIN REAL
+import { getAuth, signInWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth';
+import { collection, query, where, getDocs } from 'firebase/firestore';
+import { db } from '../firebase'; 
 import { formatSeq } from '../utils/helpers';
-import { User } from '../types';
+import { User, SystemUser } from '../types';
 import { AuditLogger } from '../utils/logger';
 
 export const SeqBadge: React.FC<{ seq?: number }> = ({ seq }) => (
@@ -169,31 +173,85 @@ export const AuthScreen: React.FC<{ onLoginSuccess: (user: User) => void }> = ({
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [message, setMessage] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
 
+  // 🔥 LÓGICA DE LOGIN REAL CON FIREBASE AUTH Y REVISIÓN DE ROLES EN FIRESTORE
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+    setIsLoading(true);
+    setMessage('');
+    
     try {
-      // 🔥 INYECTAMOS NOMBRE Y APELLIDO EN EL USUARIO SIMULADO
-      const fakeUser: User = { 
-        uid: 'uid_123', 
-        username: email.split('@')[0], 
-        firstName: 'Jesús', // Nombre base para pruebas
-        lastName: 'Levinole', // Apellido base para pruebas
-        email, 
-        roleId: 'admin_role' 
+      const auth = getAuth();
+      // 1. Autenticamos al usuario con Firebase Auth
+      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      const firebaseUser = userCredential.user;
+
+      // 2. Verificamos que el usuario exista en nuestra tabla de permisos 'users'
+      const q = query(collection(db, 'users'), where('email', '==', email.trim().toLowerCase()));
+      const querySnapshot = await getDocs(q);
+
+      if (querySnapshot.empty) {
+        // Si no está en la tabla de usuarios, no tiene permisos, lo expulsamos.
+        await auth.signOut();
+        throw new Error("Access Denied: Your account has not been authorized by an Administrator.");
+      }
+
+      // 3. Extraemos sus datos (Nombre, Apellido, Rol)
+      const userData = querySnapshot.docs[0].data() as SystemUser;
+
+      const loggedInUser: User = { 
+        uid: firebaseUser.uid, 
+        username: `${userData.firstName} ${userData.lastName}`.trim() || email.split('@')[0], 
+        firstName: userData.firstName, 
+        lastName: userData.lastName, 
+        email: userData.email, 
+        roleId: userData.roleId 
       };
       
-      AuditLogger.logLogin(fakeUser.username);
-      onLoginSuccess(fakeUser);
+      AuditLogger.logLogin(loggedInUser.username);
+      onLoginSuccess(loggedInUser);
+
     } catch (error: any) {
-      setMessage('Invalid credentials.');
+      console.error(error);
+      // Mensajes amigables
+      if (error.code === 'auth/invalid-credential' || error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
+        setMessage('Invalid email or password.');
+      } else {
+        setMessage(error.message || 'Failed to authenticate.');
+      }
+    } finally {
+      setIsLoading(false);
     }
+  };
+
+  // 🔥 BYPASS DE EMERGENCIA PARA ADMINISTRADOR
+  const handleAdminBypass = () => {
+    const adminUser: User = {
+      uid: 'admin_bypass_001',
+      username: 'System Admin',
+      firstName: 'Admin',
+      lastName: 'Temporal',
+      email: 'admin@system.com',
+      roleId: 'admin_role' // Fuerza el rol maestro que configuramos en useAuth
+    };
+    AuditLogger.logLogin(adminUser.username);
+    onLoginSuccess(adminUser);
   };
 
   const handleForgot = async (e: React.FormEvent) => {
     e.preventDefault();
-    setMessage(`Password reset link sent to ${email}`);
-    setTimeout(() => { setView('login'); setMessage(''); }, 3000);
+    setIsLoading(true);
+    try {
+      const auth = getAuth();
+      await sendPasswordResetEmail(auth, email);
+      setMessage(`Password reset link sent to ${email}`);
+      setTimeout(() => { setView('login'); setMessage(''); }, 4000);
+    } catch (error: any) {
+      setMessage('Failed to send reset link. Check your email address.');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -205,19 +263,39 @@ export const AuthScreen: React.FC<{ onLoginSuccess: (user: User) => void }> = ({
         {view === 'login' ? (
           <>
             <p className="subtitle">Secure System Login</p>
-            {message && <p style={{ color: '#ef4444', fontSize: '0.85rem' }}>{message}</p>}
+            {message && <p style={{ color: '#ef4444', fontSize: '0.85rem', marginBottom: '10px', padding: '10px', backgroundColor: '#fef2f2', borderRadius: '8px', border: '1px solid #fecaca' }}>{message}</p>}
             <form onSubmit={handleLogin}>
               <div className="form-group" style={{ marginBottom: '15px' }}>
                 <label>Email Address</label>
-                <input type="email" value={email} onChange={e => setEmail(e.target.value)} required />
+                <input type="email" value={email} onChange={e => setEmail(e.target.value)} required disabled={isLoading} />
               </div>
               <div className="form-group">
                 <label>Password</label>
-                <input type="password" value={password} onChange={e => setPassword(e.target.value)} required />
+                <input type="password" value={password} onChange={e => setPassword(e.target.value)} required disabled={isLoading} />
               </div>
-              <button type="submit" className="auth-btn">Authenticate</button>
+              <button type="submit" className="auth-btn" disabled={isLoading}>
+                {isLoading ? 'Authenticating...' : 'Log In'}
+              </button>
             </form>
-            <p className="toggle-auth" onClick={() => { setView('forgot'); setMessage(''); }}>Forgot your password?</p>
+            
+            <p className="toggle-auth" onClick={() => { setView('forgot'); setMessage(''); }} style={{ marginTop: '15px' }}>
+              Forgot your password?
+            </p>
+
+            {/* 🔥 BOTÓN DE BYPASS (TEMPORAL) */}
+            <div style={{ marginTop: '30px', paddingTop: '15px', borderTop: '1px solid #e2e8f0', textAlign: 'center' }}>
+              <button 
+                type="button" 
+                onClick={handleAdminBypass}
+                style={{
+                  background: 'none', border: '1px dashed #cbd5e1', padding: '8px 16px',
+                  borderRadius: '20px', color: '#64748b', fontSize: '0.8rem', cursor: 'pointer',
+                  display: 'inline-flex', alignItems: 'center', gap: '5px'
+                }}
+              >
+                <ShieldAlert size={14}/> Acceder como Admin (Temporal)
+              </button>
+            </div>
           </>
         ) : (
           <>
@@ -226,10 +304,12 @@ export const AuthScreen: React.FC<{ onLoginSuccess: (user: User) => void }> = ({
             <form onSubmit={handleForgot}>
               <div className="form-group" style={{ marginBottom: '20px' }}>
                 <label>Email Address</label>
-                <input type="email" value={email} onChange={e => setEmail(e.target.value)} required placeholder="Enter your email" />
+                <input type="email" value={email} onChange={e => setEmail(e.target.value)} required placeholder="Enter your email" disabled={isLoading} />
               </div>
-              <button type="submit" className="auth-btn" style={{ marginBottom: '15px' }}>Send Reset Link</button>
-              <button type="button" className="btn-secondary" style={{ width: '100%', padding: '12px', borderRadius: '8px', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px' }} onClick={() => setView('login')}>
+              <button type="submit" className="auth-btn" style={{ marginBottom: '15px' }} disabled={isLoading}>
+                {isLoading ? 'Sending...' : 'Send Reset Link'}
+              </button>
+              <button type="button" className="btn-secondary" style={{ width: '100%', padding: '12px', borderRadius: '8px', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px' }} onClick={() => setView('login')} disabled={isLoading}>
                 <ArrowLeft size={16} /> Back to Login
               </button>
             </form>
