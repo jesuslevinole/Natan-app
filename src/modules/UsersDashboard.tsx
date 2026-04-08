@@ -1,26 +1,31 @@
 import React, { useState, useEffect } from 'react';
-import { collection, getDocs, addDoc, deleteDoc, doc } from 'firebase/firestore';
+import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc } from 'firebase/firestore';
 import { initializeApp, getApp } from 'firebase/app';
 import { getAuth, createUserWithEmailAndPassword, sendPasswordResetEmail, signOut } from 'firebase/auth';
 import { db } from '../firebase'; 
-import { Users, Plus, Trash2, X, User as UserIcon } from 'lucide-react';
+import { Users, Plus, Trash2, X, User as UserIcon, Edit2, ShieldAlert } from 'lucide-react';
 import { SearchBar } from '../components/SharedUI';
 import { Role, SystemUser } from '../types';
 import { AuditLogger } from '../utils/logger';
-import { useAuth } from '../hooks/useAuth';
+import { useAuth, RequirePermission } from '../hooks/useAuth';
+import { formatDateDisplay } from '../utils/helpers';
 
 export const UsersDashboard: React.FC = () => {
   const { currentUser } = useAuth();
   
   const [searchTerm, setSearchTerm] = useState('');
-  const [isModalOpen, setIsModalOpen] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false); 
   
-  // 🔥 NUEVOS ESTADOS DE FORMULARIO
-  const [newUserFirstName, setNewUserFirstName] = useState('');
-  const [newUserLastName, setNewUserLastName] = useState('');
-  const [newUserEmail, setNewUserEmail] = useState('');
-  const [newUserRole, setNewUserRole] = useState('');
+  // 🔥 Máquina de estados para el Modal (Crear, Editar, Ver Detalle)
+  const [modalState, setModalState] = useState<'closed' | 'add' | 'edit' | 'detail'>('closed');
+  const [selectedUser, setSelectedUser] = useState<SystemUser | null>(null);
+  
+  // Estados del Formulario Unificado
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
+  const [email, setEmail] = useState('');
+  const [roleId, setRoleId] = useState('');
+  const [status, setStatus] = useState<'Pending' | 'Active' | string>('Pending');
   
   const [availableRoles, setAvailableRoles] = useState<Role[]>([]);
   const [systemUsers, setSystemUsers] = useState<SystemUser[]>([]);
@@ -45,57 +50,82 @@ export const UsersDashboard: React.FC = () => {
     fetchData();
   }, []);
 
-  const handleRegisterUser = async (e: React.FormEvent) => {
+  // Controladores de apertura de Modales
+  const handleOpenAdd = () => {
+    setSelectedUser(null);
+    setFirstName('');
+    setLastName('');
+    setEmail('');
+    setRoleId('');
+    setStatus('Pending');
+    setModalState('add');
+  };
+
+  const handleOpenEdit = (user: SystemUser) => {
+    setSelectedUser(user);
+    setFirstName(user.firstName || '');
+    setLastName(user.lastName || '');
+    setEmail(user.email);
+    setRoleId(user.roleId);
+    setStatus(user.status);
+    setModalState('edit');
+  };
+
+  const handleOpenDetail = (user: SystemUser) => {
+    setSelectedUser(user);
+    setModalState('detail');
+  };
+
+  const handleSaveUser = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsProcessing(true);
     
     try {
-      // 1. Obtener la App Principal de Firebase
-      const mainApp = getApp();
-      
-      // 2. Instancia Secundaria para Auth Segura
-      const secondaryAppName = `SecondaryApp_${Date.now()}`;
-      const secondaryApp = initializeApp(mainApp.options, secondaryAppName);
-      const secondaryAuth = getAuth(secondaryApp);
+      if (modalState === 'add') {
+        // 🔥 LÓGICA DE CREACIÓN (Con invitación por correo)
+        const mainApp = getApp();
+        const secondaryAppName = `SecondaryApp_${Date.now()}`;
+        const secondaryApp = initializeApp(mainApp.options, secondaryAppName);
+        const secondaryAuth = getAuth(secondaryApp);
 
-      // 3. Crear usuario con contraseña temporal
-      const tempPassword = `Temp@${Math.random().toString(36).slice(-8)}!`;
-      await createUserWithEmailAndPassword(secondaryAuth, newUserEmail, tempPassword);
+        const tempPassword = `Temp@${Math.random().toString(36).slice(-8)}!`;
+        await createUserWithEmailAndPassword(secondaryAuth, email, tempPassword);
+        await sendPasswordResetEmail(secondaryAuth, email);
+        await signOut(secondaryAuth);
 
-      // 4. Enviar correo de restablecimiento (Invitación real)
-      await sendPasswordResetEmail(secondaryAuth, newUserEmail);
+        const newUser: SystemUser = {
+          firstName: firstName.trim(),
+          lastName: lastName.trim(),
+          email: email.trim(),
+          roleId: roleId,
+          status: 'Pending', 
+          createdAt: new Date().toISOString()
+        };
 
-      // 5. Cerrar sesión secundaria para no afectar al admin
-      await signOut(secondaryAuth);
+        const docRef = await addDoc(collection(db, 'users'), newUser);
+        AuditLogger.logCreate('Account Users', currentUser?.username || 'System', docRef.id, newUser);
+        alert(`Success! An invitation email has been sent to ${email}.`);
 
-      // 6. Guardar el registro completo en Firestore
-      const newUser: SystemUser = {
-        firstName: newUserFirstName.trim(),
-        lastName: newUserLastName.trim(),
-        email: newUserEmail.trim(),
-        roleId: newUserRole,
-        status: 'Pending', 
-        createdAt: new Date().toISOString()
-      };
+      } else if (modalState === 'edit' && selectedUser?.id) {
+        // 🔥 LÓGICA DE EDICIÓN (Actualización simple en Firestore)
+        const updatedData = {
+          firstName: firstName.trim(),
+          lastName: lastName.trim(),
+          roleId: roleId,
+          status: status
+          // El email no se edita aquí por seguridad de Firebase Auth
+        };
 
-      const docRef = await addDoc(collection(db, 'users'), newUser);
-      
-      // 7. Registro de Auditoría
-      AuditLogger.logCreate('Account Users', currentUser?.username || 'System', docRef.id, newUser);
+        await updateDoc(doc(db, 'users', selectedUser.id), updatedData);
+        AuditLogger.logUpdate('Account Users', currentUser?.username || 'System', selectedUser.id, updatedData);
+      }
 
-      alert(`Success! An invitation email has been sent to ${newUserEmail}.`);
-      setIsModalOpen(false);
-      
-      // Limpieza de Estados
-      setNewUserFirstName('');
-      setNewUserLastName('');
-      setNewUserEmail('');
-      setNewUserRole('');
+      setModalState('closed');
       fetchData();
       
     } catch (error: any) {
-      console.error("Error adding user:", error);
-      alert(`Error sending invitation: ${error.message}`);
+      console.error("Error saving user:", error);
+      alert(`Error processing request: ${error.message}`);
     } finally {
       setIsProcessing(false);
     }
@@ -111,8 +141,8 @@ export const UsersDashboard: React.FC = () => {
 
   const filteredUsers = systemUsers.filter(u => 
     u.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    u.firstName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    u.lastName.toLowerCase().includes(searchTerm.toLowerCase())
+    (u.firstName && u.firstName.toLowerCase().includes(searchTerm.toLowerCase())) ||
+    (u.lastName && u.lastName.toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
   return (
@@ -126,9 +156,11 @@ export const UsersDashboard: React.FC = () => {
           <SearchBar value={searchTerm} onChange={setSearchTerm} />
         </div>
         <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flex: 1, justifyContent: 'flex-end', minWidth: '150px' }}>
-          <button className="action btn-primary" style={{ height: '42px', padding: '0 20px', whiteSpace: 'nowrap' }} onClick={() => setIsModalOpen(true)}>
-            <Plus size={18}/> Invite User
-          </button>
+          <RequirePermission permission="manage_security">
+            <button className="action btn-primary" style={{ height: '42px', padding: '0 20px', whiteSpace: 'nowrap' }} onClick={handleOpenAdd}>
+              <Plus size={18}/> Invite User
+            </button>
+          </RequirePermission>
         </div>
       </div>
       
@@ -146,23 +178,30 @@ export const UsersDashboard: React.FC = () => {
             {filteredUsers.length === 0 && <tr><td colSpan={4} className="empty-state">No users found.</td></tr>}
             {filteredUsers.map(user => {
               const roleName = availableRoles.find(r => r.id === user.roleId)?.name || 'Unknown Role';
+              // Manejo de registros antiguos que no tengan nombre
+              const displayName = user.firstName || user.lastName 
+                ? `${user.firstName || ''} ${user.lastName || ''}`.trim() 
+                : 'No Name Set';
               
               return (
                 <tr key={user.id} className="clickable-row">
-                  {/* 🔥 UI MEJORADA: Mostramos Nombre Completo con Correo abajo */}
-                  <td data-label="User">
+                  <td data-label="User" onClick={() => handleOpenDetail(user)}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                       <div style={{ backgroundColor: '#f1f5f9', padding: '8px', borderRadius: '50%', color: '#64748b' }}>
                         <UserIcon size={18} />
                       </div>
                       <div style={{ display: 'flex', flexDirection: 'column' }}>
-                        <span style={{ fontWeight: 'bold', color: '#1e293b' }}>{user.firstName} {user.lastName}</span>
+                        <span style={{ fontWeight: 'bold', color: '#1e293b' }}>
+                          {displayName}
+                        </span>
                         <span style={{ fontSize: '0.8rem', color: '#64748b' }}>{user.email}</span>
                       </div>
                     </div>
                   </td>
-                  <td data-label="Role" style={{ color: '#475569' }}>{roleName}</td>
-                  <td data-label="Status" style={{ textAlign: 'center' }}>
+                  <td data-label="Role" style={{ color: '#475569', verticalAlign: 'middle' }} onClick={() => handleOpenDetail(user)}>
+                    {roleName}
+                  </td>
+                  <td data-label="Status" style={{ textAlign: 'center', verticalAlign: 'middle' }} onClick={() => handleOpenDetail(user)}>
                     <span style={{ 
                       backgroundColor: user.status === 'Pending' ? '#fef08a' : '#d1fae5', 
                       color: user.status === 'Pending' ? '#ea580c' : '#16a34a', 
@@ -174,11 +213,16 @@ export const UsersDashboard: React.FC = () => {
                       {user.status}
                     </span>
                   </td>
-                  <td data-label="Action" style={{ textAlign: 'center' }}>
+                  <td data-label="Action" style={{ textAlign: 'center', verticalAlign: 'middle' }}>
                     <div className="action-btns">
-                      <button className="icon-btn delete" onClick={() => handleDeleteUser(user.id!, user.email)} title="Revoke Access">
-                        <Trash2 size={16}/>
-                      </button>
+                      <RequirePermission permission="manage_security">
+                        <button className="icon-btn edit" onClick={() => handleOpenEdit(user)} title="Edit User">
+                          <Edit2 size={16}/>
+                        </button>
+                        <button className="icon-btn delete" onClick={() => handleDeleteUser(user.id!, user.email)} title="Revoke Access">
+                          <Trash2 size={16}/>
+                        </button>
+                      </RequirePermission>
                     </div>
                   </td>
                 </tr>
@@ -188,74 +232,114 @@ export const UsersDashboard: React.FC = () => {
         </table>
       </div>
 
-      {isModalOpen && (
+      {/* 🔥 MODAL MULTIPROPÓSITO: ADD, EDIT, DETAIL */}
+      {modalState !== 'closed' && (
         <div className="modal-overlay active">
-          {/* Aumenté ligeramente el max-width para acomodar las columnas */}
-          <div className="modal-content" style={{ maxWidth: '550px' }}>
-            <form onSubmit={handleRegisterUser}>
-              <div className="modal-header">
-                <h3>Invite New User</h3>
-                <button type="button" className="close-modal" onClick={() => setIsModalOpen(false)} disabled={isProcessing}><X size={24}/></button>
+          <div className="modal-content" style={{ maxWidth: '600px' }}>
+            
+            <div className="modal-header">
+              <h3>
+                {modalState === 'add' ? 'Invite New User' : 
+                 modalState === 'edit' ? 'Edit User Record' : 'User Details'}
+              </h3>
+              <div style={{ display: 'flex', gap: '10px' }}>
+                {modalState === 'detail' && (
+                   <RequirePermission permission="manage_security">
+                     <button className="action btn-primary" onClick={() => handleOpenEdit(selectedUser!)}><Edit2 size={16}/> Edit</button>
+                   </RequirePermission>
+                )}
+                <button type="button" className="close-modal" onClick={() => setModalState('closed')} disabled={isProcessing}><X size={24}/></button>
               </div>
+            </div>
 
-              {/* 🔥 CSS GRID ADAPTATIVO: Nombres uno al lado del otro en PC, apilados en móvil */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '15px', marginBottom: '15px' }}>
-                <div className="form-group">
-                  <label>First Name *</label>
-                  <input 
-                    type="text" 
-                    required 
-                    value={newUserFirstName} 
-                    onChange={e => setNewUserFirstName(e.target.value)} 
-                    disabled={isProcessing} 
-                    placeholder="e.g. John"
-                  />
+            {modalState === 'detail' && selectedUser ? (
+              // VISTA DE DETALLES
+              <div className="details-grid">
+                <div className="detail-item"><span>First Name:</span> <p>{selectedUser.firstName || '-'}</p></div>
+                <div className="detail-item"><span>Last Name:</span> <p>{selectedUser.lastName || '-'}</p></div>
+                <div className="detail-item"><span>Email Address:</span> <p>{selectedUser.email}</p></div>
+                <div className="detail-item"><span>Role Assigned:</span> <p>{availableRoles.find(r => r.id === selectedUser.roleId)?.name || 'Unknown'}</p></div>
+                <div className="detail-item">
+                  <span>Status:</span> 
+                  <p style={{ color: selectedUser.status === 'Pending' ? '#ea580c' : '#16a34a', fontWeight: 'bold' }}>
+                    {selectedUser.status}
+                  </p>
                 </div>
-                <div className="form-group">
-                  <label>Last Name *</label>
-                  <input 
-                    type="text" 
-                    required 
-                    value={newUserLastName} 
-                    onChange={e => setNewUserLastName(e.target.value)} 
-                    disabled={isProcessing} 
-                    placeholder="e.g. Doe"
-                  />
+                <div className="detail-item"><span>Registration Date:</span> <p>{formatDateDisplay(selectedUser.createdAt)}</p></div>
+              </div>
+            ) : (
+              // FORMULARIO (ADD & EDIT)
+              <form onSubmit={handleSaveUser}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '15px', marginBottom: '15px' }}>
+                  <div className="form-group">
+                    <label>First Name *</label>
+                    <input 
+                      type="text" required 
+                      value={firstName} onChange={e => setFirstName(e.target.value)} 
+                      disabled={isProcessing} placeholder="e.g. John"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label>Last Name *</label>
+                    <input 
+                      type="text" required 
+                      value={lastName} onChange={e => setLastName(e.target.value)} 
+                      disabled={isProcessing} placeholder="e.g. Doe"
+                    />
+                  </div>
                 </div>
-              </div>
 
-              <div className="form-group" style={{ marginBottom: '15px' }}>
-                <label>Email Address *</label>
-                <input 
-                  type="email" 
-                  required 
-                  value={newUserEmail} 
-                  onChange={e => setNewUserEmail(e.target.value)} 
-                  disabled={isProcessing} 
-                  placeholder="name@company.com"
-                />
-                <span style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '4px' }}>
-                  A real email will be sent to establish their password.
-                </span>
-              </div>
+                <div className="form-group" style={{ marginBottom: '15px' }}>
+                  <label>Email Address *</label>
+                  <input 
+                    type="email" required 
+                    value={email} onChange={e => setEmail(e.target.value)} 
+                    disabled={isProcessing || modalState === 'edit'} // Bloqueado en edición
+                    placeholder="name@company.com"
+                    style={{ backgroundColor: modalState === 'edit' ? '#f1f5f9' : 'white' }}
+                  />
+                  {modalState === 'add' ? (
+                     <span style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '4px' }}>
+                       A real email will be sent to establish their password.
+                     </span>
+                  ) : (
+                     <span style={{ fontSize: '0.75rem', color: '#ea580c', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                       <ShieldAlert size={12}/> Email cannot be changed here for security reasons.
+                     </span>
+                  )}
+                </div>
 
-              <div className="form-group" style={{ marginBottom: '25px' }}>
-                <label>Assign Role *</label>
-                <select required value={newUserRole} onChange={e => setNewUserRole(e.target.value)} disabled={isProcessing}>
-                  <option value="">Select a Role...</option>
-                  {availableRoles.map(role => (
-                    <option key={role.id} value={role.id}>{role.name}</option>
-                  ))}
-                </select>
-              </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '15px', marginBottom: '25px' }}>
+                  <div className="form-group">
+                    <label>Assign Role *</label>
+                    <select required value={roleId} onChange={e => setRoleId(e.target.value)} disabled={isProcessing}>
+                      <option value="">Select a Role...</option>
+                      {availableRoles.map(role => (
+                        <option key={role.id} value={role.id}>{role.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  
+                  {modalState === 'edit' && (
+                    <div className="form-group">
+                      <label>Status</label>
+                      <select required value={status} onChange={e => setStatus(e.target.value)} disabled={isProcessing}>
+                        <option value="Pending">Pending</option>
+                        <option value="Active">Active</option>
+                        <option value="Suspended">Suspended</option>
+                      </select>
+                    </div>
+                  )}
+                </div>
 
-              <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '20px', borderTop: '1px solid #e2e8f0', paddingTop: '20px' }}>
-                <button type="button" className="action btn-secondary" onClick={() => setIsModalOpen(false)} disabled={isProcessing}>Cancel</button>
-                <button type="submit" className="action btn-primary" disabled={isProcessing}>
-                  {isProcessing ? 'Sending...' : 'Send Invitation'}
-                </button>
-              </div>
-            </form>
+                <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '20px', borderTop: '1px solid #e2e8f0', paddingTop: '20px' }}>
+                  <button type="button" className="action btn-secondary" onClick={() => setModalState('closed')} disabled={isProcessing}>Cancel</button>
+                  <button type="submit" className="action btn-primary" disabled={isProcessing}>
+                    {isProcessing ? 'Saving...' : modalState === 'add' ? 'Send Invitation' : 'Save Changes'}
+                  </button>
+                </div>
+              </form>
+            )}
           </div>
         </div>
       )}
