@@ -168,10 +168,11 @@ export const UsersDashboard: React.FC = () => {
         <table className="responsive-table">
           <thead>
             <tr>
+              {/* 🔥 COLUMNA DE ACCIÓN REUBICADA AL PRINCIPIO */}
+              <th style={{ textAlign: 'center', width: '80px' }}>Action</th>
               <th>Account User</th>
               <th>Assigned Role</th>
               <th style={{ textAlign: 'center' }}>Status</th>
-              <th style={{ textAlign: 'center' }}>Action</th>
             </tr>
           </thead>
           <tbody>
@@ -184,8 +185,32 @@ export const UsersDashboard: React.FC = () => {
                 : 'No Name Set';
               
               return (
-                <tr key={user.id} className="clickable-row">
-                  <td data-label="User" onClick={() => handleOpenDetail(user)}>
+                <tr key={user.id} className="clickable-row" onClick={() => handleOpenDetail(user)}>
+                  {/* 🔥 BOTONES DE ACCIÓN CON e.stopPropagation() PARA NO ABRIR EL DETALLE */}
+                  <td data-label="Action" style={{ textAlign: 'center', verticalAlign: 'middle' }}>
+                    <div className="action-btns" style={{ display: 'flex', justifyContent: 'center', gap: '8px' }}>
+                      <RequirePermission permission="manage_security">
+                        <button 
+                          type="button"
+                          className="icon-btn edit" 
+                          onClick={(e) => { e.stopPropagation(); handleOpenEdit(user); }} 
+                          title="Edit User"
+                        >
+                          <Edit2 size={16}/>
+                        </button>
+                        <button 
+                          type="button"
+                          className="icon-btn delete" 
+                          onClick={(e) => { e.stopPropagation(); handleDeleteUser(user.id!, user.email); }} 
+                          title="Revoke Access"
+                        >
+                          <Trash2 size={16}/>
+                        </button>
+                      </RequirePermission>
+                    </div>
+                  </td>
+                  
+                  <td data-label="User">
                     <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                       <div style={{ backgroundColor: '#f1f5f9', padding: '8px', borderRadius: '50%', color: '#64748b' }}>
                         <UserIcon size={18} />
@@ -198,10 +223,10 @@ export const UsersDashboard: React.FC = () => {
                       </div>
                     </div>
                   </td>
-                  <td data-label="Role" style={{ color: '#475569', verticalAlign: 'middle' }} onClick={() => handleOpenDetail(user)}>
+                  <td data-label="Role" style={{ color: '#475569', verticalAlign: 'middle' }}>
                     {roleName}
                   </td>
-                  <td data-label="Status" style={{ textAlign: 'center', verticalAlign: 'middle' }} onClick={() => handleOpenDetail(user)}>
+                  <td data-label="Status" style={{ textAlign: 'center', verticalAlign: 'middle' }}>
                     <span style={{ 
                       backgroundColor: user.status === 'Pending' ? '#fef08a' : '#d1fae5', 
                       color: user.status === 'Pending' ? '#ea580c' : '#16a34a', 
@@ -212,18 +237,6 @@ export const UsersDashboard: React.FC = () => {
                     }}>
                       {user.status}
                     </span>
-                  </td>
-                  <td data-label="Action" style={{ textAlign: 'center', verticalAlign: 'middle' }}>
-                    <div className="action-btns">
-                      <RequirePermission permission="manage_security">
-                        <button className="icon-btn edit" onClick={() => handleOpenEdit(user)} title="Edit User">
-                          <Edit2 size={16}/>
-                        </button>
-                        <button className="icon-btn delete" onClick={() => handleDeleteUser(user.id!, user.email)} title="Revoke Access">
-                          <Trash2 size={16}/>
-                        </button>
-                      </RequirePermission>
-                    </div>
                   </td>
                 </tr>
               )

@@ -35,6 +35,7 @@ export const WorkActivity: React.FC = () => {
   const [viewProducts, setViewProducts] = useState<JobProduct[]>([]);
   const [showHistoric, setShowHistoric] = useState<boolean>(false); 
 
+  // Cargamos el catálogo mapeando explícitamente la 'description' al label visual
   const destinations = useCatalogOptions('destinations', 'description', 'property_name');
 
   const jobFields = [
@@ -140,7 +141,6 @@ export const WorkActivity: React.FC = () => {
       const orderToDelete = orders.find(o => o.id === id);
       await deleteDoc(doc(db, "jobOrders", id));
       
-      // 🔥 AUDITORÍA: El logger registra el nombre y apellido completos
       AuditLogger.logDelete('WorkActivity', authorName, id, orderToDelete);
       
       setViewingJob(null);
@@ -234,7 +234,8 @@ export const WorkActivity: React.FC = () => {
     setIsProductModalOpen(false);
   };
 
-  const handleRemoveProductFromDetails = async (productId: string) => {
+  const handleRemoveProductFromDetails = async (productId: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
     if(window.confirm("Delete product?")) {
       const prodToDelete = viewProducts.find(p => p.id === productId);
       await deleteDoc(doc(db, "jobProducts", productId));
@@ -246,6 +247,11 @@ export const WorkActivity: React.FC = () => {
       setViewProducts(viewProducts.filter(p => p.id !== productId));
       fetchData(); 
     }
+  };
+
+  const handleRemoveProductFromForm = (index: number, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setFormProducts(formProducts.filter((_, i) => i !== index));
   };
 
   const displayedOrders = (showHistoric 
@@ -293,6 +299,8 @@ export const WorkActivity: React.FC = () => {
         <table className="responsive-table">
           <thead>
             <tr>
+              {/* 🔥 COLUMNA DE ACCIONES MOVIDA AL PRINCIPIO */}
+              <th style={{ textAlign: 'center', width: '100px' }}>Actions</th>
               <th>#</th>
               <th>Registration Date</th>
               <th>Ordered by</th>
@@ -304,13 +312,38 @@ export const WorkActivity: React.FC = () => {
             </tr>
           </thead>
           <tbody>
-            {displayedOrders.length === 0 && <tr><td colSpan={8} className="empty-state">No records found.</td></tr>}
+            {displayedOrders.length === 0 && <tr><td colSpan={9} className="empty-state">No records found.</td></tr>}
             {displayedOrders.map(order => {
               const destObj = destinations.find(d => d.value === order.destination);
               const displayDestination = destObj ? destObj.label : order.destination;
 
               return (
                 <tr key={order.id} className="clickable-row" onClick={() => handleViewDetails(order)}>
+                  {/* 🔥 BOTONES DE ACCIÓN EN LA PRIMERA COLUMNA CON STOP PROPAGATION */}
+                  <td data-label="Actions" style={{ textAlign: 'center' }}>
+                    <div className="action-btns" style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
+                      <RequirePermission permission="edit_work_activity">
+                        <button 
+                          type="button" 
+                          className="icon-btn edit" 
+                          onClick={(e) => { e.stopPropagation(); handleOpenModal(order); }} 
+                          title="Edit Order"
+                        >
+                          <Edit2 size={16}/>
+                        </button>
+                      </RequirePermission>
+                      <RequirePermission permission="delete_work_activity">
+                        <button 
+                          type="button" 
+                          className="icon-btn delete" 
+                          onClick={(e) => { e.stopPropagation(); handleDelete(order.id); }} 
+                          title="Delete Order"
+                        >
+                          <Trash2 size={16}/>
+                        </button>
+                      </RequirePermission>
+                    </div>
+                  </td>
                   <td data-label="#"><SeqBadge seq={order.visualSeq} /></td>
                   <td data-label="Date">{formatDateDisplay(order.createdAt)}</td>
                   <td data-label="Ordered by" style={{ fontWeight: 'bold' }}>{order.jobOrder}</td>
@@ -368,21 +401,31 @@ export const WorkActivity: React.FC = () => {
               </div>
               <div className="table-container large-table">
                 <table className="responsive-table">
-                  <thead><tr><th>#</th><th>Item Name</th><th>Model</th><th>Serial</th><th>Qty</th><th style={{ textAlign: 'center' }}>Action</th></tr></thead>
+                  <thead>
+                    <tr>
+                      {/* 🔥 ACCIÓN PRIMERO EN LA TABLA DE DETALLES TAMBIÉN */}
+                      <th style={{ textAlign: 'center', width: '80px' }}>Action</th>
+                      <th>#</th>
+                      <th>Item Name</th>
+                      <th>Model</th>
+                      <th>Serial</th>
+                      <th>Qty</th>
+                    </tr>
+                  </thead>
                   <tbody>
                     {viewProducts.length === 0 && <tr><td colSpan={6} className="empty-state">No products attached.</td></tr>}
                     {viewProducts.map((p, i) => (
                       <tr key={p.id}>
+                        <td data-label="Action" style={{ textAlign: 'center' }}>
+                          <RequirePermission permission="edit_work_activity">
+                            <button type="button" className="btn-text-danger" onClick={(e) => handleRemoveProductFromDetails(p.id!, e)}>Remove</button>
+                          </RequirePermission>
+                        </td>
                         <td data-label="#">{formatSeq(i + 1)}</td>
                         <td data-label="Item">{p.itemName}</td>
                         <td data-label="Model">{p.modelPart}</td>
                         <td data-label="Serial">{p.serial || '-'}</td>
                         <td data-label="Qty">{p.quantity}</td>
-                        <td data-label="Action" style={{ textAlign: 'center' }}>
-                          <RequirePermission permission="edit_work_activity">
-                            <button type="button" className="btn-text-danger" onClick={() => handleRemoveProductFromDetails(p.id!)}>Remove</button>
-                          </RequirePermission>
-                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -417,14 +460,14 @@ export const WorkActivity: React.FC = () => {
                         options={destinations.map(d => ({
                           id: d.value,
                           label: d.label, 
-                          searchKeywords: d.label, 
+                          searchKeywords: String(d.label || '').toLowerCase(), // 🔥 FILTRO ESTRICTO: Solo busca en Description
                           render: (
                             <span style={{ fontWeight: 'bold', color: '#1e293b' }}>{d.label}</span>
                           )
                         }))}
                         value={formData.destination}
                         onChange={val => setFormData({...formData, destination: val})}
-                        placeholder="Search description..."
+                        placeholder="Search by description (ej. 48 Staysail)..."
                         required={isJobReq('destination')}
                       />
                     </div>
@@ -440,7 +483,6 @@ export const WorkActivity: React.FC = () => {
                   </div>
                 </div>
 
-                {/* 🔥 CAMBIO APLICADO: Input 'Ordered by' Bloqueado e inmutable (Usa nombre completo) */}
                 <div className="form-group">
                   <label>Ordered by {isJobReq('jobOrder') && '*'}</label>
                   <input 
@@ -470,16 +512,27 @@ export const WorkActivity: React.FC = () => {
                 </div>
                 <div className="table-container large-table">
                   <table className="responsive-table">
-                    <thead><tr><th>#</th><th>Item</th><th>Model</th><th>Qty</th><th>Action</th></tr></thead>
+                    <thead>
+                      <tr>
+                        {/* 🔥 ACCIÓN PRIMERO EN LA TABLA DEL FORMULARIO TAMBIÉN */}
+                        <th style={{ textAlign: 'center', width: '80px' }}>Action</th>
+                        <th>#</th>
+                        <th>Item</th>
+                        <th>Model</th>
+                        <th>Qty</th>
+                      </tr>
+                    </thead>
                     <tbody>
                       {formProducts.length === 0 && <tr><td colSpan={5} className="empty-state">No products added. Click "+ Add Product".</td></tr>}
                       {formProducts.map((p, index) => (
                         <tr key={index}>
+                          <td data-label="Action" style={{ textAlign: 'center' }}>
+                            <button type="button" className="btn-text-danger" onClick={(e) => handleRemoveProductFromForm(index, e)}>Remove</button>
+                          </td>
                           <td data-label="#">{formatSeq(index + 1)}</td>
                           <td data-label="Item">{p.itemName}</td>
                           <td data-label="Model">{p.modelPart}</td>
                           <td data-label="Qty">{p.quantity}</td>
-                          <td data-label="Action"><button type="button" className="btn-text-danger" onClick={() => setFormProducts(formProducts.filter((_, i) => i !== index))}>Remove</button></td>
                         </tr>
                       ))}
                     </tbody>

@@ -6,8 +6,15 @@ import { ItemEntranceRecord, JobProduct, JobOrder, ItemEntranceFormData } from '
 import { SearchBar, FieldConfigModal, SeqBadge } from '../components/SharedUI';
 import { useCatalogOptions, useFormConfig } from '../hooks/useAppHooks';
 import { getTodayString, formatDateDisplay, getInventoryStatusStyles } from '../utils/helpers';
+import { AuditLogger } from '../utils/logger';
+import { useAuth, RequirePermission } from '../hooks/useAuth';
 
 export const ItemEntrance: React.FC = () => {
+  const { currentUser } = useAuth();
+  const authorName = currentUser 
+    ? `${currentUser.firstName || ''} ${currentUser.lastName || ''}`.trim() || currentUser.username 
+    : 'Unknown User';
+
   const [items, setItems] = useState<ItemEntranceRecord[]>([]);
   const [allJobProducts, setAllJobProducts] = useState<JobProduct[]>([]);
   const [allOrders, setAllOrders] = useState<JobOrder[]>([]); 
@@ -106,18 +113,23 @@ export const ItemEntrance: React.FC = () => {
     try {
       if (editingId) {
         await updateDoc(doc(db, "itemEntrance", editingId), { ...formData });
+        AuditLogger.logUpdate('Item Entrance', authorName, editingId, formData);
       } else {
         const nextSeq = items.length > 0 ? Math.max(...items.map(i => i.visualSeq || 0)) + 1 : 1;
-        await addDoc(collectionRef, { ...formData, seq: nextSeq, createdAt: new Date().toISOString() });
+        const docRef = await addDoc(collectionRef, { ...formData, seq: nextSeq, createdAt: new Date().toISOString() });
+        AuditLogger.logCreate('Item Entrance', authorName, docRef.id, formData);
       }
       fetchItems();
       setIsModalOpen(false);
     } catch (error) { console.error("Error saving data", error); }
   };
 
-  const handleDeleteEntrance = async (id: string) => {
+  const handleDeleteEntrance = async (id: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
     if (window.confirm("Are you sure you want to delete this entrance record permanently?")) {
+      const recordToDelete = items.find(i => i.id === id);
       await deleteDoc(doc(db, "itemEntrance", id));
+      AuditLogger.logDelete('Item Entrance', authorName, id, recordToDelete);
       fetchItems();
     }
   };
@@ -166,15 +178,19 @@ export const ItemEntrance: React.FC = () => {
         </div>
 
         <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start', flex: 1, justifyContent: 'flex-end', minWidth: '150px' }}>
-          <button className="action btn-primary" style={{ height: '42px', padding: '0 20px', whiteSpace: 'nowrap' }} onClick={() => handleOpenModal(null)}>
-            <Plus size={18}/> New Entrance
-          </button>
+          <RequirePermission permission="add_item_entrance">
+            <button className="action btn-primary" style={{ height: '42px', padding: '0 20px', whiteSpace: 'nowrap' }} onClick={() => handleOpenModal(null)}>
+              <Plus size={18}/> New Entrance
+            </button>
+          </RequirePermission>
         </div>
       </div>
       <div className="table-container">
         <table className="responsive-table">
           <thead>
             <tr>
+              {/* 🔥 COLUMNA DE ACCIONES MOVIDA AL PRINCIPIO */}
+              <th style={{ textAlign: 'center', width: '100px' }}>Actions</th>
               <th>#</th>
               <th style={{ textAlign: 'center' }}>Status</th>
               <th>Date</th>
@@ -185,7 +201,6 @@ export const ItemEntrance: React.FC = () => {
               <th>Company</th>
               <th>Qty</th>
               <th>Stock</th>
-              <th style={{ textAlign: 'center' }}>Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -195,6 +210,29 @@ export const ItemEntrance: React.FC = () => {
               const isAvailable = currentStock > 0;
               return (
                 <tr key={item.id} className="clickable-row">
+                  {/* 🔥 BOTONES DE ACCIÓN EN LA PRIMERA COLUMNA CON STOP PROPAGATION */}
+                  <td data-label="Actions" style={{ textAlign: 'center' }}>
+                    <div className="action-btns" style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
+                      <RequirePermission permission="edit_item_entrance">
+                        <button 
+                          className="icon-btn edit" 
+                          onClick={(e) => { e.stopPropagation(); handleOpenModal(item); }}
+                          title="Edit Record"
+                        >
+                          <Edit2 size={16}/>
+                        </button>
+                      </RequirePermission>
+                      <RequirePermission permission="delete_item_entrance">
+                        <button 
+                          className="icon-btn delete" 
+                          onClick={(e) => handleDeleteEntrance(item.id, e)}
+                          title="Delete Record"
+                        >
+                          <Trash2 size={16}/>
+                        </button>
+                      </RequirePermission>
+                    </div>
+                  </td>
                   <td data-label="#" onClick={() => handleOpenModal(item)}><SeqBadge seq={item.visualSeq} /></td>
                   <td data-label="Status" style={{ textAlign: 'center' }} onClick={() => handleOpenModal(item)}>
                     <span style={getInventoryStatusStyles(isAvailable)}>
@@ -210,12 +248,6 @@ export const ItemEntrance: React.FC = () => {
                   <td data-label="Qty" onClick={() => handleOpenModal(item)}>{item.quantityOrdered}</td>
                   <td data-label="Stock" style={{ color: isAvailable ? 'inherit' : '#ef4444', fontWeight: isAvailable ? 'normal' : 'bold' }} onClick={() => handleOpenModal(item)}>
                     {currentStock}
-                  </td>
-                  <td data-label="Actions" style={{ textAlign: 'center' }}>
-                    <div className="action-btns">
-                      <button className="icon-btn edit" onClick={() => handleOpenModal(item)}><Edit2 size={16}/></button>
-                      <button className="icon-btn delete" onClick={() => handleDeleteEntrance(item.id)}><Trash2 size={16}/></button>
-                    </div>
                   </td>
                 </tr>
               );
@@ -235,13 +267,6 @@ export const ItemEntrance: React.FC = () => {
                 <div style={{ display: 'flex', gap: '10px' }}>
                   <button type="button" className="icon-btn" onClick={() => setIsConfigOpen(true)} title="Configure Required Fields"><Settings size={20}/></button>
                   <button type="submit" className="action btn-primary">Save Changes</button>
-                  <button type="button" className="action btn-danger" onClick={async () => {
-                    if (editingId && window.confirm("Delete this record permanently?")) {
-                      await deleteDoc(doc(db, "itemEntrance", editingId));
-                      setIsModalOpen(false);
-                      fetchItems();
-                    }
-                  }}><Trash2 size={16}/> Delete</button>
                   <button type="button" className="close-modal" onClick={() => setIsModalOpen(false)}><X size={24}/></button>
                 </div>
               </div>
@@ -264,7 +289,6 @@ export const ItemEntrance: React.FC = () => {
               </div>
             </form>
 
-            {/* SECCIÓN DE HISTORIAL DE INSTALACIONES */}
             {editingId && (
               <div className="products-section" style={{ marginTop: '20px', borderTop: '1px solid #e2e8f0', paddingTop: '20px' }}>
                 <div className="products-header">
@@ -305,7 +329,6 @@ export const ItemEntrance: React.FC = () => {
         </div>
       )}
 
-      {/* MODAL EXPANDIDO DEL HISTORIAL */}
       {isExpandHistoryOpen && (
         <div className="modal-overlay active" style={{ zIndex: 1200 }}>
           <div className="modal-content modal-large">
