@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Search, Settings, X, Briefcase, ArrowLeft, ShieldAlert } from 'lucide-react';
 import { getAuth, signInWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth';
 import { collection, query, where, getDocs } from 'firebase/firestore';
@@ -23,6 +23,7 @@ export const SearchableSelect: React.FC<{
 }> = ({ options, value, onChange, placeholder = "Search...", required, theme = 'light' }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [isOpen, setIsOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   const isDark = theme === 'dark';
   const selectedLabel = options.find(o => o.id === value)?.label || '';
@@ -33,15 +34,26 @@ export const SearchableSelect: React.FC<{
     }
   }, [value, selectedLabel, isOpen]);
 
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  // 🔥 LÓGICA EXACTA DE BÚSQUEDA SOLICITADA
   const filteredOptions = options.filter(opt => {
     if (!searchTerm) return true;
     const target = String(opt.searchKeywords || opt.label || '').toLowerCase();
-    const searchTerms = String(searchTerm).toLowerCase().trim().split(/\s+/);
-    return searchTerms.every(term => target.includes(term));
+    const term = String(searchTerm).toLowerCase().trim();
+    return target.includes(term); // Coincidencia de subcadena exacta
   }).sort((a, b) => String(a.label).localeCompare(String(b.label)));
 
   return (
-    <div style={{ position: 'relative', width: '100%' }}>
+    <div ref={containerRef} style={{ position: 'relative', width: '100%' }}>
       <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
         <input
           type="text"
