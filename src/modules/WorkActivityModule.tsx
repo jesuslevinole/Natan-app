@@ -34,7 +34,6 @@ export const WorkActivity: React.FC = () => {
   const [viewProducts, setViewProducts] = useState<JobProduct[]>([]);
   const [showHistoric, setShowHistoric] = useState<boolean>(false); 
 
-  // Cargamos opciones del catálogo de Destinos
   const destinations = useCatalogOptions('destinations', 'description', 'property_name');
 
   const jobFields = [
@@ -135,7 +134,8 @@ export const WorkActivity: React.FC = () => {
     setIsJobModalOpen(true);
   };
 
-  const handleDelete = async (id: string) => {
+  const handleDelete = async (id: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
     if (window.confirm("⚠️ Delete record?")) {
       const orderToDelete = orders.find(o => o.id === id);
       await deleteDoc(doc(db, "jobOrders", id));
@@ -296,6 +296,7 @@ export const WorkActivity: React.FC = () => {
         <table className="responsive-table">
           <thead>
             <tr>
+              {/* 🔥 COLUMNA DE ACCIÓN REUBICADA AL PRINCIPIO */}
               <th style={{ textAlign: 'center', width: '100px' }}>Actions</th>
               <th>#</th>
               <th>Registration Date</th>
@@ -315,6 +316,7 @@ export const WorkActivity: React.FC = () => {
 
               return (
                 <tr key={order.id} className="clickable-row" onClick={() => handleViewDetails(order)}>
+                  {/* 🔥 BOTONES DE ACCIÓN CON e.stopPropagation() PARA NO ABRIR EL DETALLE */}
                   <td data-label="Actions" style={{ textAlign: 'center' }}>
                     <div className="action-btns" style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
                       <RequirePermission permission="edit_work_activity">
@@ -331,7 +333,7 @@ export const WorkActivity: React.FC = () => {
                         <button 
                           type="button" 
                           className="icon-btn delete" 
-                          onClick={(e) => { e.stopPropagation(); handleDelete(order.id); }} 
+                          onClick={(e) => handleDelete(order.id, e)} 
                           title="Delete Order"
                         >
                           <Trash2 size={16}/>
@@ -398,6 +400,7 @@ export const WorkActivity: React.FC = () => {
                 <table className="responsive-table">
                   <thead>
                     <tr>
+                      {/* 🔥 ACCIÓN PRIMERO EN LA TABLA DE DETALLES */}
                       <th style={{ textAlign: 'center', width: '80px' }}>Action</th>
                       <th>#</th>
                       <th>Item Name</th>
@@ -446,7 +449,6 @@ export const WorkActivity: React.FC = () => {
               <div className="form-grid">
                 <div className="form-group"><label>Registration Date {isJobReq('createdAt') && '*'}</label><input type="date" value={formData.createdAt} onChange={e => setFormData({...formData, createdAt: e.target.value})} required={isJobReq('createdAt')} /></div>
                 
-                {/* 🔥 BUSCADOR DE DESTINOS: Filtro dinámico estricto por Description (label) */}
                 <div className="form-group">
                   <label>Destination (Description) {isJobReq('destination') && '*'}</label>
                   <div style={{ display: 'flex', gap: '8px', alignItems: 'stretch' }}>
@@ -509,6 +511,7 @@ export const WorkActivity: React.FC = () => {
                   <table className="responsive-table">
                     <thead>
                       <tr>
+                        {/* 🔥 ACCIÓN PRIMERO EN LA TABLA DEL FORMULARIO */}
                         <th style={{ textAlign: 'center', width: '80px' }}>Action</th>
                         <th>#</th>
                         <th>Item</th>
