@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Search, Settings, X, Briefcase, ArrowLeft, ShieldAlert } from 'lucide-react';
 import { getAuth, signInWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth';
 import { collection, query, where, getDocs } from 'firebase/firestore';
@@ -13,47 +13,33 @@ export const SeqBadge: React.FC<{ seq?: number }> = ({ seq }) => (
   </span>
 );
 
+// =========================================
+// 🔥 BUSCADOR EXACTO (Réplica de tu FormularioConvenioCliente)
+// =========================================
 export const SearchableSelect: React.FC<{
-  options: { id: string; label: string; searchKeywords?: string; render?: React.ReactNode }[];
+  options: { id: string, label: string }[];
   value: string;
-  onChange: (id: string) => void;
+  onChange: (id: string, label: string) => void;
   placeholder?: string;
   required?: boolean;
   theme?: 'light' | 'dark';
-}> = ({ options, value, onChange, placeholder = "Search...", required, theme = 'light' }) => {
-  const [searchTerm, setSearchTerm] = useState('');
+}> = ({ options, value, onChange, placeholder = "Buscar...", required = false, theme = 'light' }) => {
   const [isOpen, setIsOpen] = useState(false);
-  const containerRef = useRef<HTMLDivElement>(null);
-
+  const [searchTerm, setSearchTerm] = useState('');
+  
   const isDark = theme === 'dark';
   const selectedLabel = options.find(o => o.id === value)?.label || '';
 
   useEffect(() => {
-    if (!isOpen) {
-      setSearchTerm(selectedLabel);
-    }
-  }, [value, selectedLabel, isOpen]);
+    setSearchTerm(selectedLabel);
+  }, [value, selectedLabel]);
 
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
-        setIsOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
-
-  // 🔥 LÓGICA EXACTA DE BÚSQUEDA SOLICITADA
-  const filteredOptions = options.filter(opt => {
-    if (!searchTerm) return true;
-    const target = String(opt.searchKeywords || opt.label || '').toLowerCase();
-    const term = String(searchTerm).toLowerCase().trim();
-    return target.includes(term); // Coincidencia de subcadena exacta
-  }).sort((a, b) => String(a.label).localeCompare(String(b.label)));
+  const filteredOptions = options.filter(opt => 
+    String(opt.label).toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
   return (
-    <div ref={containerRef} style={{ position: 'relative', width: '100%' }}>
+    <div style={{ position: 'relative', width: '100%' }}>
       <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
         <input
           type="text"
@@ -64,14 +50,14 @@ export const SearchableSelect: React.FC<{
             setIsOpen(true);
           }}
           onFocus={() => {
-            setSearchTerm('');
+            setSearchTerm(''); 
             setIsOpen(true);
           }}
           onBlur={() => {
             setTimeout(() => setIsOpen(false), 200);
-            setSearchTerm(selectedLabel);
+            setSearchTerm(selectedLabel); 
           }}
-          required={required && !value}
+          required={required && !value} 
           style={{
             width: '100%', padding: '12px 40px 12px 14px', 
             border: isDark ? (isOpen ? '1px solid #3b82f6' : '1px solid rgba(255,255,255,0.3)') : (isOpen ? '1px solid #3b82f6' : '1px solid #cbd5e1'),
@@ -81,7 +67,7 @@ export const SearchableSelect: React.FC<{
             transition: 'all 0.2s', cursor: 'text'
           }}
         />
-        <Search size={18} color={isDark ? "#cbd5e1" : "#94a3b8"} style={{ position: 'absolute', right: '14px' }} />
+        <Search size={18} color={isDark ? "#cbd5e1" : "#94a3b8"} style={{ position: 'absolute', right: '14px', pointerEvents: 'none' }} />
       </div>
       
       {isOpen && (
@@ -89,33 +75,33 @@ export const SearchableSelect: React.FC<{
           position: 'absolute', top: '100%', left: 0, right: 0, 
           background: isDark ? '#475569' : 'white', 
           border: isDark ? '1px solid #64748b' : '1px solid #e2e8f0', 
-          borderRadius: '8px', marginTop: '6px', maxHeight: '300px', 
-          overflowY: 'auto', zIndex: 1000, listStyle: 'none', padding: '6px', 
-          boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.25)'
+          borderRadius: '8px', marginTop: '4px', maxHeight: '250px', 
+          overflowY: 'auto', zIndex: 1000, listStyle: 'none', padding: '0', margin: '4px 0 0 0',
+          boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.25)'
         }}>
           {filteredOptions.length > 0 ? (
             filteredOptions.map(opt => (
               <li
                 key={opt.id}
                 onClick={() => {
-                  onChange(opt.id);
+                  onChange(opt.id, opt.label);
                   setSearchTerm(opt.label);
                   setIsOpen(false);
                 }}
                 style={{ 
-                  padding: '12px 14px', cursor: 'pointer', 
+                  padding: '10px 14px', cursor: 'pointer', 
                   borderBottom: isDark ? '1px solid #64748b' : '1px solid #f1f5f9', 
                   color: isDark ? '#f8fafc' : '#334155',
-                  borderRadius: '6px', transition: 'background-color 0.2s'
+                  fontSize: '0.9rem'
                 }}
-                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = isDark ? '#64748b' : '#f8fafc'}
+                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = isDark ? '#64748b' : '#f1f5f9'}
                 onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
               >
-                {opt.render ? opt.render : opt.label}
+                {opt.label}
               </li>
             ))
           ) : (
-            <li style={{ padding: '15px', color: isDark ? '#cbd5e1' : '#94a3b8', fontSize: '0.95rem', textAlign: 'center' }}>No results found...</li>
+            <li style={{ padding: '15px', color: isDark ? '#cbd5e1' : '#94a3b8', fontSize: '0.95rem', textAlign: 'center' }}>No se encontraron coincidencias</li>
           )}
         </ul>
       )}

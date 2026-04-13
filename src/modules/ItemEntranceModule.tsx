@@ -3,7 +3,7 @@ import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc } from 'firebase
 import { db } from '../firebase'; 
 import { PackageSearch, Plus, X, Settings, Edit2, Trash2, Maximize2 } from 'lucide-react';
 import { ItemEntranceRecord, JobProduct, JobOrder, ItemEntranceFormData } from '../types';
-import { SearchBar, FieldConfigModal, SeqBadge } from '../components/SharedUI';
+import { SearchBar, FieldConfigModal, SeqBadge, SearchableSelect } from '../components/SharedUI';
 import { useCatalogOptions, useFormConfig } from '../hooks/useAppHooks';
 import { getTodayString, formatDateDisplay, getInventoryStatusStyles } from '../utils/helpers';
 import { AuditLogger } from '../utils/logger';
@@ -189,7 +189,6 @@ export const ItemEntrance: React.FC = () => {
         <table className="responsive-table">
           <thead>
             <tr>
-              {/* 🔥 COLUMNA DE ACCIONES AL INICIO */}
               <th style={{ textAlign: 'center', width: '100px' }}>Actions</th>
               <th>#</th>
               <th style={{ textAlign: 'center' }}>Status</th>
@@ -210,7 +209,6 @@ export const ItemEntrance: React.FC = () => {
               const isAvailable = currentStock > 0;
               return (
                 <tr key={item.id} className="clickable-row">
-                  {/* 🔥 BOTONES DE ACCIONES AL INICIO DE LA FILA */}
                   <td data-label="Actions" style={{ textAlign: 'center' }}>
                     <div className="action-btns" style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
                       <RequirePermission permission="edit_item_entrance">
@@ -278,10 +276,13 @@ export const ItemEntrance: React.FC = () => {
                 <div className="form-group"><label style={{ color: 'var(--primary-color)', fontWeight: 'bold' }}>PO # {isRequired('po') && '*'}</label><input type="text" value={formData.po} onChange={e => setFormData({...formData, po: e.target.value})} required={isRequired('po')} /></div>
                 <div className="form-group">
                   <label>Supply Company {isRequired('supplyCompany') && '*'}</label>
-                  <select value={formData.supplyCompany} onChange={e => setFormData({...formData, supplyCompany: e.target.value})} required={isRequired('supplyCompany')}>
-                    <option value="">-- Select Company --</option>
-                    {supplyCompanies.map(c => <option key={c.id} value={c.label}>{c.label}</option>)}
-                  </select>
+                  <SearchableSelect 
+                    options={supplyCompanies.map(c => ({ id: String(c.label), label: String(c.label) }))}
+                    value={formData.supplyCompany} 
+                    onChange={(id) => setFormData({...formData, supplyCompany: id})} 
+                    placeholder="-- Select Company --"
+                    required={isRequired('supplyCompany')}
+                  />
                 </div>
                 <div className="form-group"><label>Order Date {isRequired('orderDate') && '*'}</label><input type="date" value={formData.orderDate} onChange={e => setFormData({...formData, orderDate: e.target.value})} required={isRequired('orderDate')} /></div>
                 <div className="form-group"><label>Quantity Ordered {isRequired('quantityOrdered') && '*'}</label><input type="number" value={formData.quantityOrdered} onChange={e => setFormData({...formData, quantityOrdered: Number(e.target.value)})} required={isRequired('quantityOrdered')} /></div>

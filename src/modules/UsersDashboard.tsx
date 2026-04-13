@@ -16,11 +16,9 @@ export const UsersDashboard: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [isProcessing, setIsProcessing] = useState(false); 
   
-  // 🔥 Máquina de estados para el Modal (Crear, Editar, Ver Detalle)
   const [modalState, setModalState] = useState<'closed' | 'add' | 'edit' | 'detail'>('closed');
   const [selectedUser, setSelectedUser] = useState<SystemUser | null>(null);
   
-  // Estados del Formulario Unificado
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
@@ -50,7 +48,6 @@ export const UsersDashboard: React.FC = () => {
     fetchData();
   }, []);
 
-  // Controladores de apertura de Modales
   const handleOpenAdd = () => {
     setSelectedUser(null);
     setFirstName('');
@@ -82,7 +79,6 @@ export const UsersDashboard: React.FC = () => {
     
     try {
       if (modalState === 'add') {
-        // 🔥 LÓGICA DE CREACIÓN (Con invitación por correo)
         const mainApp = getApp();
         const secondaryAppName = `SecondaryApp_${Date.now()}`;
         const secondaryApp = initializeApp(mainApp.options, secondaryAppName);
@@ -107,13 +103,11 @@ export const UsersDashboard: React.FC = () => {
         alert(`Success! An invitation email has been sent to ${email}.`);
 
       } else if (modalState === 'edit' && selectedUser?.id) {
-        // 🔥 LÓGICA DE EDICIÓN (Actualización simple en Firestore)
         const updatedData = {
           firstName: firstName.trim(),
           lastName: lastName.trim(),
           roleId: roleId,
           status: status
-          // El email no se edita aquí por seguridad de Firebase Auth
         };
 
         await updateDoc(doc(db, 'users', selectedUser.id), updatedData);
@@ -168,8 +162,8 @@ export const UsersDashboard: React.FC = () => {
         <table className="responsive-table">
           <thead>
             <tr>
-              {/* 🔥 COLUMNA DE ACCIÓN REUBICADA AL PRINCIPIO */}
-              <th style={{ textAlign: 'center', width: '80px' }}>Action</th>
+              {/* 🔥 COLUMNA DE ACCIÓN EN LA PRIMERA POSICIÓN */}
+              <th style={{ textAlign: 'center', width: '90px' }}>Action</th>
               <th>Account User</th>
               <th>Assigned Role</th>
               <th style={{ textAlign: 'center' }}>Status</th>
@@ -179,19 +173,17 @@ export const UsersDashboard: React.FC = () => {
             {filteredUsers.length === 0 && <tr><td colSpan={4} className="empty-state">No users found.</td></tr>}
             {filteredUsers.map(user => {
               const roleName = availableRoles.find(r => r.id === user.roleId)?.name || 'Unknown Role';
-              // Manejo de registros antiguos que no tengan nombre
               const displayName = user.firstName || user.lastName 
                 ? `${user.firstName || ''} ${user.lastName || ''}`.trim() 
                 : 'No Name Set';
               
               return (
                 <tr key={user.id} className="clickable-row" onClick={() => handleOpenDetail(user)}>
-                  {/* 🔥 BOTONES DE ACCIÓN CON e.stopPropagation() PARA NO ABRIR EL DETALLE */}
+                  {/* 🔥 BOTONES DE ACCIÓN CON e.stopPropagation() AL INICIO */}
                   <td data-label="Action" style={{ textAlign: 'center', verticalAlign: 'middle' }}>
                     <div className="action-btns" style={{ display: 'flex', justifyContent: 'center', gap: '8px' }}>
                       <RequirePermission permission="manage_security">
                         <button 
-                          type="button"
                           className="icon-btn edit" 
                           onClick={(e) => { e.stopPropagation(); handleOpenEdit(user); }} 
                           title="Edit User"
@@ -199,7 +191,6 @@ export const UsersDashboard: React.FC = () => {
                           <Edit2 size={16}/>
                         </button>
                         <button 
-                          type="button"
                           className="icon-btn delete" 
                           onClick={(e) => { e.stopPropagation(); handleDeleteUser(user.id!, user.email); }} 
                           title="Revoke Access"
@@ -209,7 +200,6 @@ export const UsersDashboard: React.FC = () => {
                       </RequirePermission>
                     </div>
                   </td>
-                  
                   <td data-label="User">
                     <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                       <div style={{ backgroundColor: '#f1f5f9', padding: '8px', borderRadius: '50%', color: '#64748b' }}>
@@ -245,7 +235,6 @@ export const UsersDashboard: React.FC = () => {
         </table>
       </div>
 
-      {/* 🔥 MODAL MULTIPROPÓSITO: ADD, EDIT, DETAIL */}
       {modalState !== 'closed' && (
         <div className="modal-overlay active">
           <div className="modal-content" style={{ maxWidth: '600px' }}>
@@ -266,7 +255,6 @@ export const UsersDashboard: React.FC = () => {
             </div>
 
             {modalState === 'detail' && selectedUser ? (
-              // VISTA DE DETALLES
               <div className="details-grid">
                 <div className="detail-item"><span>First Name:</span> <p>{selectedUser.firstName || '-'}</p></div>
                 <div className="detail-item"><span>Last Name:</span> <p>{selectedUser.lastName || '-'}</p></div>
@@ -281,7 +269,6 @@ export const UsersDashboard: React.FC = () => {
                 <div className="detail-item"><span>Registration Date:</span> <p>{formatDateDisplay(selectedUser.createdAt)}</p></div>
               </div>
             ) : (
-              // FORMULARIO (ADD & EDIT)
               <form onSubmit={handleSaveUser}>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '15px', marginBottom: '15px' }}>
                   <div className="form-group">
@@ -307,7 +294,7 @@ export const UsersDashboard: React.FC = () => {
                   <input 
                     type="email" required 
                     value={email} onChange={e => setEmail(e.target.value)} 
-                    disabled={isProcessing || modalState === 'edit'} // Bloqueado en edición
+                    disabled={isProcessing || modalState === 'edit'} 
                     placeholder="name@company.com"
                     style={{ backgroundColor: modalState === 'edit' ? '#f1f5f9' : 'white' }}
                   />

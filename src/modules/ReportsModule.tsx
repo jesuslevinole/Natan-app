@@ -10,7 +10,9 @@ import { formatDateDisplay } from '../utils/helpers';
 export const ReportsModule: React.FC = () => {
   const [orders, setOrders] = useState<JobOrder[]>([]);
   const [allProducts, setAllProducts] = useState<JobProduct[]>([]);
-  const destinations = useCatalogOptions('destinations', 'description', 'property_name');
+  
+  // 🔥 SOLUCIÓN: Cambiado a catalog_destinations para leer la data oficial
+  const destinations = useCatalogOptions('catalog_destinations', 'description', 'property_name');
   
   const [accountUsers, setAccountUsers] = useState<{name: string, email: string}[]>([]);
   
@@ -149,17 +151,11 @@ export const ReportsModule: React.FC = () => {
           <div className="form-group"><label>End Date</label><input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} style={{ padding: '8px' }}/></div>
           <div className="form-group">
             <label>Destination (Apt)</label>
-            
-            {/* 🔥 BUSCADOR ESTRICTO POR DESCRIPCIÓN EN EL TEMA OSCURO */}
             <SearchableSelect 
               theme="dark"
-              options={[{id: '', label: '', searchKeywords: ''}, ...destinations.map(d => ({
-                id: d.value, 
-                label: d.label, 
-                searchKeywords: String(d.label || ''), // Filtro estricto por Descripción
-                render: (
-                  <span style={{ fontWeight: 'bold', color: '#f8fafc' }}>{d.label}</span>
-                )
+              options={[{id: '', label: ''}, ...destinations.map(d => ({
+                id: String(d.value), 
+                label: String(d.label)
               }))]}
               value={selectedDest} onChange={setSelectedDest} placeholder="-- Select Apt --"
             />
