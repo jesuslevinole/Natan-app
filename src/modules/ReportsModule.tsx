@@ -3,16 +3,13 @@ import { collection, getDocs } from 'firebase/firestore';
 import { db } from '../firebase'; 
 import { BarChart2, Filter, Award, Activity, Wrench, MapPin } from 'lucide-react';
 import { JobOrder, JobProduct, SystemUser } from '../types';
-import { SearchableSelect } from '../components/SharedUI';
-import { useCatalogOptions } from '../hooks/useAppHooks';
+// 🔥 IMPORTAMOS DestinationSearch
+import { DestinationSearch } from '../components/SharedUI';
 import { formatDateDisplay } from '../utils/helpers';
 
 export const ReportsModule: React.FC = () => {
   const [orders, setOrders] = useState<JobOrder[]>([]);
   const [allProducts, setAllProducts] = useState<JobProduct[]>([]);
-  
-  // 🔥 SOLUCIÓN: Cambiado a catalog_destinations para leer la data oficial
-  const destinations = useCatalogOptions('catalog_destinations', 'description', 'property_name');
   
   const [accountUsers, setAccountUsers] = useState<{name: string, email: string}[]>([]);
   
@@ -112,11 +109,6 @@ export const ReportsModule: React.FC = () => {
   filteredOrders.forEach(o => { workerCounts[o.jobOrder] = (workerCounts[o.jobOrder] || 0) + 1; });
   const topWorkerEntry = Object.entries(workerCounts).sort((a, b) => b[1] - a[1])[0];
 
-  const getDestLabel = (val: string) => {
-    const d = destinations.find(x => x.value === val);
-    return d ? d.label : val;
-  };
-
   return (
     <div className="card catalog-manager-anim" style={{ maxWidth: '1400px' }}>
       <style>{`
@@ -151,13 +143,11 @@ export const ReportsModule: React.FC = () => {
           <div className="form-group"><label>End Date</label><input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} style={{ padding: '8px' }}/></div>
           <div className="form-group">
             <label>Destination (Apt)</label>
-            <SearchableSelect 
-              theme="dark"
-              options={[{id: '', label: ''}, ...destinations.map(d => ({
-                id: String(d.value), 
-                label: String(d.label)
-              }))]}
-              value={selectedDest} onChange={setSelectedDest} placeholder="-- Select Apt --"
+            {/* 🔥 REEMPLAZO POR BUSCADOR NATIVO DE DESTINOS */}
+            <DestinationSearch 
+              value={selectedDest} 
+              onSelect={setSelectedDest} 
+              placeholder="-- Select Apt --"
             />
           </div>
           <div className="form-group">
@@ -194,7 +184,8 @@ export const ReportsModule: React.FC = () => {
           <div style={{ backgroundColor: '#22c55e', color: 'white', padding: '12px', borderRadius: '12px' }}><MapPin size={24}/></div>
           <div>
             <p style={{ margin: 0, fontSize: '0.85rem', color: '#64748b', fontWeight: 'bold', textTransform: 'uppercase' }}>Top Apt.</p>
-            <h3 style={{ margin: 0, fontSize: '1.1rem', color: '#1e293b', lineHeight: '1.2' }}>{mostWorkedApt ? getDestLabel(mostWorkedApt.dest) : '-'}</h3>
+            {/* 🔥 OPTIMIZACIÓN EN MEMORIA */}
+            <h3 style={{ margin: 0, fontSize: '1.1rem', color: '#1e293b', lineHeight: '1.2' }}>{mostWorkedApt ? mostWorkedApt.dest : '-'}</h3>
           </div>
         </div>
         <div style={{ backgroundColor: '#fff7ed', padding: '20px', borderRadius: '16px', border: '1px solid #fed7aa', display: 'flex', alignItems: 'center', gap: '15px' }}>
@@ -218,7 +209,8 @@ export const ReportsModule: React.FC = () => {
                 {aptList.length === 0 && <tr><td colSpan={2} className="empty-state">No data available.</td></tr>}
                 {aptList.map((item, i) => (
                   <tr key={i}>
-                    <td data-label="Apt" style={{ fontWeight: 'bold' }}>{getDestLabel(item.dest)}</td>
+                    {/* 🔥 OPTIMIZACIÓN EN MEMORIA */}
+                    <td data-label="Apt" style={{ fontWeight: 'bold' }}>{item.dest}</td>
                     <td data-label="Total" style={{ textAlign: 'center' }}><span style={{ backgroundColor: '#eff6ff', color: '#2563eb', padding: '4px 12px', borderRadius: '12px', fontWeight: 'bold' }}>{item.count}</span></td>
                   </tr>
                 ))}
@@ -237,7 +229,8 @@ export const ReportsModule: React.FC = () => {
                 {repeatedList.length === 0 && <tr><td colSpan={3} className="empty-state">No data available.</td></tr>}
                 {repeatedList.map((item, i) => (
                   <tr key={i}>
-                    <td data-label="Apt">{getDestLabel(item.dest)}</td>
+                    {/* 🔥 OPTIMIZACIÓN EN MEMORIA */}
+                    <td data-label="Apt">{item.dest}</td>
                     <td data-label="Desc" style={{ color: '#475569' }}>{item.desc}</td>
                     <td data-label="Times" style={{ textAlign: 'center' }}><span style={{ backgroundColor: item.count > 1 ? '#fef2f2' : '#f0fdf4', color: item.count > 1 ? '#ef4444' : '#22c55e', padding: '4px 12px', borderRadius: '12px', fontWeight: 'bold' }}>{item.count}</span></td>
                   </tr>
@@ -263,7 +256,8 @@ export const ReportsModule: React.FC = () => {
               {filteredProductsDetailed.map((p, i) => (
                 <tr key={i}>
                   <td data-label="Date">{formatDateDisplay(p.orderDate)}</td>
-                  <td data-label="Apt">{getDestLabel(p.orderDestination)}</td>
+                  {/* 🔥 OPTIMIZACIÓN EN MEMORIA */}
+                  <td data-label="Apt">{p.orderDestination}</td>
                   <td data-label="Account User" style={{ fontWeight: 'bold', color: '#334155' }}>{p.orderWorker}</td>
                   <td data-label="Item" style={{ fontWeight: 'bold' }}>{p.itemName}</td>
                   <td data-label="Model" style={{ color: '#475569' }}>{p.modelPart || '-'}</td>
