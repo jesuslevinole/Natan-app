@@ -3,8 +3,9 @@ import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, query, where } 
 import { db } from '../firebase'; 
 import { Briefcase, Plus, X, Settings, Edit2, Trash2 } from 'lucide-react';
 import { JobOrder, JobProduct, ItemEntranceRecord, JobFormData, ProductFormData } from '../types';
-import { SearchBar, FieldConfigModal, SeqBadge, SearchableSelect } from '../components/SharedUI';
-import { useCatalogOptions, useFormConfig } from '../hooks/useAppHooks';
+// 🔥 IMPORTAMOS DestinationSearch
+import { SearchBar, FieldConfigModal, SeqBadge, SearchableSelect, DestinationSearch } from '../components/SharedUI';
+import { useFormConfig } from '../hooks/useAppHooks';
 import { getTodayString, formatDateDisplay, getStatusStyles, formatSeq } from '../utils/helpers';
 import { AuditLogger } from '../utils/logger';
 import { useAuth, RequirePermission } from '../hooks/useAuth';
@@ -27,15 +28,14 @@ export const WorkActivity: React.FC = () => {
   const [isProductConfigOpen, setIsProductConfigOpen] = useState<boolean>(false);
   
   const [isQuickDestOpen, setIsQuickDestOpen] = useState<boolean>(false);
-  const [newDestData, setNewDestData] = useState({ property_name: '', description: '', contact: '' });
+  const [newDestData, setNewDestData] = useState({ description: '' });
 
   const [editingJob, setEditingJob] = useState<string | null>(null);
   const [viewingJob, setViewingJob] = useState<JobOrder | null>(null);
   const [viewProducts, setViewProducts] = useState<JobProduct[]>([]);
   const [showHistoric, setShowHistoric] = useState<boolean>(false); 
 
-  // 🔥 SOLUCIÓN CRÍTICA: Cambiado de 'destinations' a 'catalog_destinations'
-  const destinations = useCatalogOptions('catalog_destinations', 'description', 'property_name');
+  // 🔥 ELIMINADO: useCatalogOptions('catalog_destinations'). Ya no es necesario.
 
   const jobFields = [
     { name: 'createdAt', label: 'Registration Date' },
@@ -179,16 +179,16 @@ export const WorkActivity: React.FC = () => {
       });
 
       const docRef = await addDoc(collection(db, 'catalog_destinations'), {
-        ...newDestData,
+        description: newDestData.description,
         seq: maxSeq + 1,
         createdAt: new Date().toISOString()
       });
       
       AuditLogger.logCreate('Catalogs (Destinations)', authorName, docRef.id, newDestData);
       
-      setFormData({ ...formData, destination: newDestData.property_name });
+      setFormData({ ...formData, destination: newDestData.description });
       setIsQuickDestOpen(false);
-      setNewDestData({ property_name: '', description: '', contact: '' });
+      setNewDestData({ description: '' });
     } catch (error) {
       console.error("Error adding quick destination", error);
       alert("Error adding destination");
@@ -311,9 +311,6 @@ export const WorkActivity: React.FC = () => {
           <tbody>
             {displayedOrders.length === 0 && <tr><td colSpan={9} className="empty-state">No records found.</td></tr>}
             {displayedOrders.map(order => {
-              const destObj = destinations.find(d => d.value === order.destination);
-              const displayDestination = destObj ? destObj.label : order.destination;
-
               return (
                 <tr key={order.id} className="clickable-row" onClick={() => handleViewDetails(order)}>
                   <td data-label="Actions" style={{ textAlign: 'center' }}>
@@ -343,7 +340,8 @@ export const WorkActivity: React.FC = () => {
                   <td data-label="#"><SeqBadge seq={order.visualSeq} /></td>
                   <td data-label="Date">{formatDateDisplay(order.createdAt)}</td>
                   <td data-label="Ordered by" style={{ fontWeight: 'bold' }}>{order.jobOrder}</td>
-                  <td data-label="Destination">{displayDestination}</td>
+                  {/* 🔥 OPTIMIZACIÓN: Como destination es la description, lo imprimimos directamente sin buscar */}
+                  <td data-label="Destination">{order.destination}</td>
                   <td data-label="Description">{order.description}</td>
                   <td data-label="Status" style={{ textAlign: 'center' }}><span style={getStatusStyles(order.workFinish)}>{order.workFinish}</span></td>
                   <td data-label="Pending Work">{order.pendingWork || '-'}</td>
@@ -380,7 +378,8 @@ export const WorkActivity: React.FC = () => {
               <div className="detail-item"><span>Registration Date:</span> <p>{formatDateDisplay(viewingJob.createdAt)}</p></div>
               <div className="detail-item">
                 <span>Destination:</span> 
-                <p>{destinations.find(d => d.value === viewingJob.destination)?.label || viewingJob.destination}</p>
+                {/* 🔥 OPTIMIZACIÓN */}
+                <p>{viewingJob.destination}</p>
               </div>
               <div className="detail-item"><span>Ordered by:</span> <p>{viewingJob.jobOrder}</p></div>
               <div className="detail-item"><span>Schedule:</span> <p>{formatDateDisplay(viewingJob.schedule)}</p></div>
@@ -448,16 +447,13 @@ export const WorkActivity: React.FC = () => {
                 <div className="form-group"><label>Registration Date {isJobReq('createdAt') && '*'}</label><input type="date" value={formData.createdAt} onChange={e => setFormData({...formData, createdAt: e.target.value})} required={isJobReq('createdAt')} /></div>
                 
                 <div className="form-group">
-                  <label>Destination (Description) {isJobReq('destination') && '*'}</label>
+                  <label>Destination {isJobReq('destination') && '*'}</label>
                   <div style={{ display: 'flex', gap: '8px', alignItems: 'stretch' }}>
                     <div style={{ flex: 1 }}>
-                      <SearchableSelect 
-                        options={destinations.map(d => ({
-                          id: String(d.value),
-                          label: String(d.label)
-                        }))}
+                      {/* 🔥 APLICACIÓN DEL NUEVO BUSCADOR DIRECTO */}
+                      <DestinationSearch 
                         value={formData.destination}
-                        onChange={(val) => setFormData({...formData, destination: val})}
+                        onSelect={(val) => setFormData({...formData, destination: val})}
                         placeholder="Search description..."
                         required={isJobReq('destination')}
                       />
@@ -544,29 +540,13 @@ export const WorkActivity: React.FC = () => {
               </div>
               <div className="form-grid">
                 <div className="form-group full-width">
-                  <label>Property Name * (Ej. 260)</label>
+                  <label>Description *</label>
                   <input 
                     type="text" 
                     required 
-                    value={newDestData.property_name} 
-                    onChange={e => setNewDestData({...newDestData, property_name: e.target.value})} 
-                  />
-                </div>
-                <div className="form-group full-width">
-                  <label>Description * (Visible Name)</label>
-                  <input 
-                    type="text" 
-                    required 
+                    placeholder="Enter destination description..."
                     value={newDestData.description} 
                     onChange={e => setNewDestData({...newDestData, description: e.target.value})} 
-                  />
-                </div>
-                <div className="form-group full-width">
-                  <label>Contact (Optional)</label>
-                  <input 
-                    type="text" 
-                    value={newDestData.contact} 
-                    onChange={e => setNewDestData({...newDestData, contact: e.target.value})} 
                   />
                 </div>
               </div>
@@ -594,6 +574,7 @@ export const WorkActivity: React.FC = () => {
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '20px', marginTop: '15px' }}>
                 <div className="form-group" style={{ flex: '3 1 250px' }}>
                   <label>Select Item {isProdReq('itemEntranceId') && '*'}</label>
+                  {/* 🔥 Mantenemos SearchableSelect para el inventario porque requiere cruzar IDs con Labels */}
                   <SearchableSelect 
                     options={entranceList.map(item => {
                       const stock = getAvailableStock(item.id);
@@ -629,12 +610,6 @@ export const WorkActivity: React.FC = () => {
                       cursor: (!currentProduct.itemEntranceId || getAvailableStock(currentProduct.itemEntranceId) <= 0) ? 'not-allowed' : 'text'
                     }}
                   />
-                  {currentProduct.itemEntranceId && getAvailableStock(currentProduct.itemEntranceId) <= 0 && (
-                    <span style={{color: '#ef4444', fontSize: '0.75rem', marginTop: '4px', display: 'block', fontWeight: 'bold'}}>Out of stock</span>
-                  )}
-                  {currentProduct.itemEntranceId && getAvailableStock(currentProduct.itemEntranceId) > 0 && (
-                    <span style={{color: '#64748b', fontSize: '0.75rem', marginTop: '4px', display: 'block'}}>Max available: {getAvailableStock(currentProduct.itemEntranceId)}</span>
-                  )}
                 </div>
               </div>
             </form>

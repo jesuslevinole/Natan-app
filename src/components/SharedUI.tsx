@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
-import { Search, Settings, X, Briefcase, ArrowLeft, ShieldAlert } from 'lucide-react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { Search, Settings, X, Briefcase, ArrowLeft, ShieldAlert, MapPin } from 'lucide-react';
 import { getAuth, signInWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth';
-import { collection, query, where, getDocs } from 'firebase/firestore';
+import { collection, query, where, getDocs, onSnapshot } from 'firebase/firestore';
 import { db } from '../firebase'; 
 import { formatSeq } from '../utils/helpers';
 import { User, SystemUser } from '../types';
@@ -14,7 +14,7 @@ export const SeqBadge: React.FC<{ seq?: number }> = ({ seq }) => (
 );
 
 // =========================================
-// 🔥 BUSCADOR EXACTO (Réplica de tu FormularioConvenioCliente)
+// 🔥 SELECTOR GENÉRICO (Conservado para Productos/Inventario)
 // =========================================
 export const SearchableSelect: React.FC<{
   options: { id: string, label: string }[];
@@ -109,6 +109,121 @@ export const SearchableSelect: React.FC<{
   );
 };
 
+// =========================================
+// 🔥 NUEVO: SELECTOR ESPECIALIZADO EN DESTINOS (Búsqueda única por description)
+// =========================================
+export const DestinationSearch: React.FC<{
+  value?: string;
+  onSelect: (description: string) => void;
+  placeholder?: string;
+  required?: boolean;
+}> = ({ value = '', onSelect, placeholder = "Search destination...", required = false }) => {
+  const [searchTerm, setSearchTerm] = useState(value);
+  const [destinations, setDestinations] = useState<string[]>([]);
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const wrapperRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const unsubscribe = onSnapshot(collection(db, 'catalog_destinations'), (snapshot) => {
+      const descriptions = snapshot.docs
+        .map(doc => doc.data().description as string)
+        .filter(desc => !!desc);
+      setDestinations(descriptions);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    setSearchTerm(value);
+  }, [value]);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (wrapperRef.current && !wrapperRef.current.contains(event.target as Node)) {
+        setIsDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const filteredDestinations = useMemo(() => {
+    if (!searchTerm.trim()) return destinations;
+    const lowerSearch = searchTerm.toLowerCase();
+    return destinations.filter(desc => desc.toLowerCase().includes(lowerSearch));
+  }, [searchTerm, destinations]);
+
+  return (
+    <div ref={wrapperRef} style={{ position: 'relative', width: '100%' }}>
+      <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+        <input 
+          type="text"
+          value={searchTerm}
+          onChange={(e) => {
+            setSearchTerm(e.target.value);
+            setIsDropdownOpen(true);
+            if (e.target.value === '') onSelect('');
+          }}
+          onFocus={() => setIsDropdownOpen(true)}
+          placeholder={placeholder}
+          required={required && !searchTerm}
+          style={{ 
+            width: '100%', padding: '12px 40px 12px 14px', 
+            border: isDropdownOpen ? '1px solid #3b82f6' : '1px solid #cbd5e1',
+            backgroundColor: '#ffffff', color: '#334155', borderRadius: '8px', 
+            fontSize: '0.95rem', outline: 'none', transition: 'all 0.2s'
+          }}
+        />
+        <Search size={18} color="#94a3b8" style={{ position: 'absolute', right: '14px', pointerEvents: 'none' }} />
+      </div>
+
+      {isDropdownOpen && filteredDestinations.length > 0 && (
+        <ul style={{
+          position: 'absolute', top: '100%', left: 0, right: 0, backgroundColor: 'white',
+          border: '1px solid #e2e8f0', borderRadius: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+          marginTop: '4px', maxHeight: '200px', overflowY: 'auto', listStyle: 'none', padding: 0, zIndex: 1000
+        }}>
+          {filteredDestinations.map((desc, idx) => (
+            <li 
+              key={idx}
+              onClick={() => {
+                setSearchTerm(desc);
+                onSelect(desc); 
+                setIsDropdownOpen(false);
+              }}
+              style={{
+                padding: '10px 15px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px',
+                borderBottom: idx === filteredDestinations.length - 1 ? 'none' : '1px solid #f1f5f9',
+                transition: 'background-color 0.2s'
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8fafc'}
+              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+            >
+              <MapPin size={16} color="var(--primary-color)" />
+              <span style={{ fontSize: '0.9rem', color: 'var(--text-main)', fontWeight: 500 }}>
+                {desc}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {isDropdownOpen && filteredDestinations.length === 0 && (
+        <div style={{
+          position: 'absolute', top: '100%', left: 0, right: 0, backgroundColor: 'white',
+          border: '1px solid #e2e8f0', borderRadius: '8px', padding: '15px',
+          marginTop: '4px', textAlign: 'center', color: '#94a3b8', fontSize: '0.85rem', zIndex: 1000
+        }}>
+          No se encontraron descripciones.
+        </div>
+      )}
+    </div>
+  );
+};
+
+// =========================================
+// COMPONENTES EXISTENTES
+// =========================================
 export const SearchBar: React.FC<{ value: string, onChange: (val: string) => void }> = ({ value, onChange }) => (
   <div style={{ 
     display: 'flex', alignItems: 'center', backgroundColor: '#ffffff', border: '1px solid #e2e8f0', 

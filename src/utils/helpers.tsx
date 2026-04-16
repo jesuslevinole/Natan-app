@@ -10,9 +10,8 @@ export const catalogsConfig: Record<string, CatalogSchema> = {
     // Usamos React.createElement para evitar errores de compilación en utilidades
     icon: React.createElement(MapPin, { size: 32 }),
     fields: [
-      { name: 'property_name', label: 'Property Name', type: 'text', required: true },
-      { name: 'description', label: 'Description', type: 'text' },
-      { name: 'contact', label: 'Contact', type: 'text' }
+      // Se eliminan Property Name y Contact; se conserva solo Description como requerido
+      { name: 'description', label: 'Description', type: 'text', required: true }
     ]
   },
   supply_companies: {
@@ -68,17 +67,26 @@ export const getTodayString = (): string => {
   return `${year}-${month}-${day}`;
 };
 
+/** Formatea las fechas dinámicas garantizando la salida en español */
 export const formatDateDisplay = (dateStr: string): string => {
   if (!dateStr) return '-';
   try {
-    const cleanDate = dateStr.includes('T') ? dateStr.split('T')[0] : dateStr;
-    const parts = cleanDate.split('-');
-    if (parts.length === 3) {
-      const [year, month, day] = parts;
-      return `${month}/${day}/${year}`;
+    // Normalización de la cadena de entrada para prevenir desajustes de zona horaria
+    const normalizedDateStr = dateStr.includes('T') ? dateStr : `${dateStr}T12:00:00`;
+    const dateObj = new Date(normalizedDateStr);
+    
+    if (!isNaN(dateObj.getTime())) {
+      // Formato localizado en español (ej: 15 abr 2026)
+      return new Intl.DateTimeFormat('es-ES', { 
+        day: '2-digit', 
+        month: 'short', 
+        year: 'numeric' 
+      }).format(dateObj);
     }
-    return cleanDate;
-  } catch { return dateStr; }
+    return dateStr;
+  } catch { 
+    return dateStr; 
+  }
 };
 
 export const formatSeq = (seq?: number): string => {

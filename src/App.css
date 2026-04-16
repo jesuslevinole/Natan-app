@@ -104,6 +104,7 @@ body { background-color: var(--bg-color); color: var(--text-main); height: 100vh
 .card-header-text h2 { font-size: 1.4rem; color: var(--text-main); display: flex; align-items: center; gap: 10px;}
 .card-header-text p { color: var(--text-muted); font-size: 0.9rem; margin-top: 5px; }
 
+/* CSS Grid nativo para auto-adaptación de formularios a 1 o múltiples columnas */
 .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 24px; text-align: left; }
 .form-group { display: flex; flex-direction: column; gap: 8px; }
 .full-width { grid-column: 1 / -1 !important; }
@@ -180,7 +181,7 @@ tr:hover { background-color: #f8fafc; }
   .card { padding: 20px; }
   .modal-content { padding: 20px; }
   
-  /* Técnica UI de Tablas a Tarjetas Verticales */
+  /* Técnica UI de Tablas a Tarjetas Verticales (Integración Exitosa) */
   .responsive-table { min-width: 100%; white-space: normal; }
   .table-container { border: none; background: transparent; }
   .table-container table, .table-container thead, .table-container tbody, .table-container th, .table-container td, .table-container tr { display: block; width: 100%; }
@@ -195,6 +196,7 @@ tr:hover { background-color: #f8fafc; }
       padding: 10px 0; border-bottom: 1px solid #f1f5f9; text-align: right; font-size: 0.9rem;
   }
   .table-container td:last-child { border-bottom: none; justify-content: center; padding-top: 15px; }
+  /* El data-label inyectado dinámicamente desde el componente React */
   .table-container td:before { 
       content: attr(data-label); font-weight: 600; color: var(--text-muted); 
       font-size: 0.75rem; text-transform: uppercase; text-align: left; margin-right: 15px;
