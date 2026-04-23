@@ -2,12 +2,16 @@ import React, { useState, useEffect } from 'react';
 import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, query, where, runTransaction } from 'firebase/firestore';
 import { db } from '../firebase'; 
 import { Briefcase, Plus, X, Settings, Edit2, Trash2, Lock } from 'lucide-react';
-import { JobOrder, JobProduct, ItemEntranceRecord, JobFormData, ProductFormData, Role } from '../types';
+import { JobOrder, JobProduct, ItemEntranceRecord, JobFormData, ProductFormData, Role, SystemUser } from '../types';
 import { SearchBar, FieldConfigModal, SeqBadge, SearchableSelect, DestinationSearch } from '../components/SharedUI';
 import { useFormConfig } from '../hooks/useAppHooks';
 import { getTodayString, formatDateDisplay, getStatusStyles, formatSeq } from '../utils/helpers';
 import { AuditLogger } from '../utils/logger';
 import { useAuth, RequirePermission } from '../hooks/useAuth';
+
+// 🔥 TRUCO DE TYPESCRIPT: Extendemos dinámicamente los tipos para no tocar 'types.ts'
+type ExtendedJobFormData = JobFormData & { madeBy?: string };
+type ExtendedJobOrder = JobOrder & { madeBy?: string };
 
 export const WorkActivity: React.FC = () => {
   const { currentUser } = useAuth();
@@ -16,10 +20,11 @@ export const WorkActivity: React.FC = () => {
     ? `${currentUser.firstName || ''} ${currentUser.lastName || ''}`.trim() || currentUser.username 
     : 'Unknown User';
   
-  const [orders, setOrders] = useState<JobOrder[]>([]);
+  const [orders, setOrders] = useState<ExtendedJobOrder[]>([]);
   const [entranceList, setEntranceList] = useState<ItemEntranceRecord[]>([]); 
   const [allJobProducts, setAllJobProducts] = useState<JobProduct[]>([]);
   const [systemRoles, setSystemRoles] = useState<Role[]>([]); 
+  const [systemUsers, setSystemUsers] = useState<SystemUser[]>([]); 
 
   const [searchTerm, setSearchTerm] = useState(''); 
   const [isJobModalOpen, setIsJobModalOpen] = useState<boolean>(false);
@@ -29,7 +34,7 @@ export const WorkActivity: React.FC = () => {
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
 
   const [editingJob, setEditingJob] = useState<string | null>(null);
-  const [viewingJob, setViewingJob] = useState<JobOrder | null>(null);
+  const [viewingJob, setViewingJob] = useState<ExtendedJobOrder | null>(null);
   const [viewProducts, setViewProducts] = useState<JobProduct[]>([]);
   const [showHistoric, setShowHistoric] = useState<boolean>(false); 
   const [isQuickDestOpen, setIsQuickDestOpen] = useState<boolean>(false);
@@ -39,13 +44,14 @@ export const WorkActivity: React.FC = () => {
     { name: 'createdAt', label: 'Registration Date' },
     { name: 'destination', label: 'Address' },
     { name: 'jobOrder', label: 'Ordered by' },
+    { name: 'madeBy', label: 'Made by' }, // 🔥 CAMBIADO
     { name: 'workFinish', label: 'Work Finish' },
     { name: 'description', label: 'Description' },
     { name: 'pendingWork', label: 'Pending Work' },
     { name: 'schedule', label: 'Schedule' }
   ];
   
-  const { toggleRequired: toggleJobReq, isRequired: isJobReq } = useFormConfig('jobOrder', ['createdAt', 'destination', 'jobOrder', 'workFinish']);
+  const { toggleRequired: toggleJobReq, isRequired: isJobReq } = useFormConfig('jobOrder', ['createdAt', 'destination', 'jobOrder', 'madeBy', 'workFinish']);
   
   const [jobFieldRoles, setJobFieldRoles] = useState<Record<string, string>>({});
 
@@ -55,8 +61,9 @@ export const WorkActivity: React.FC = () => {
   ];
   const { requiredFields: reqProd, toggleRequired: toggleProdReq, isRequired: isProdReq } = useFormConfig('addProduct', ['itemEntranceId', 'quantity']);
 
-  const initialFormState: JobFormData = {
+  const initialFormState: ExtendedJobFormData = {
     jobOrder: authorName, 
+    madeBy: '', // 🔥 INICIALIZACIÓN
     destination: '', 
     description: '', 
     workFinish: 'NO', 
@@ -65,7 +72,7 @@ export const WorkActivity: React.FC = () => {
     createdAt: getTodayString()
   };
   
-  const [formData, setFormData] = useState<JobFormData>(initialFormState);
+  const [formData, setFormData] = useState<ExtendedJobFormData>(initialFormState);
   const [formProducts, setFormProducts] = useState<JobProduct[]>([]);
   
   const [currentProduct, setCurrentProduct] = useState<ProductFormData>({
@@ -89,7 +96,7 @@ export const WorkActivity: React.FC = () => {
         visualSeq: o.seq || (totalOrders - idx) 
       }));
       
-      setOrders(mappedOrders as JobOrder[]);
+      setOrders(mappedOrders as ExtendedJobOrder[]);
 
       const entranceData = await getDocs(entranceCollectionRef);
       setEntranceList(entranceData.docs.map(doc => ({ ...doc.data(), id: doc.id })) as ItemEntranceRecord[]);
@@ -99,6 +106,9 @@ export const WorkActivity: React.FC = () => {
 
       const rolesSnap = await getDocs(collection(db, 'roles'));
       setSystemRoles(rolesSnap.docs.map(d => ({id: d.id, ...d.data()} as Role)));
+
+      const usersSnap = await getDocs(collection(db, 'users'));
+      setSystemUsers(usersSnap.docs.map(d => ({id: d.id, ...d.data()} as SystemUser)));
 
     } catch (error) { console.error("Error", error); }
   };
@@ -128,7 +138,7 @@ export const WorkActivity: React.FC = () => {
     return item.itemsArrived - usedInDB - usedInForm;
   };
 
-  const handleViewDetails = async (job: JobOrder) => {
+  const handleViewDetails = async (job: ExtendedJobOrder) => {
     setViewingJob(job);
     try {
       const q = query(productsCollectionRef, where("jobOrderId", "==", job.id));
@@ -137,12 +147,13 @@ export const WorkActivity: React.FC = () => {
     } catch (error) { console.error("Error", error); }
   };
 
-  const handleOpenModal = async (job: JobOrder | null = null) => {
+  const handleOpenModal = async (job: ExtendedJobOrder | null = null) => {
     setViewingJob(null); 
     if (job) {
-      setEditingJob(job.id);
+      setEditingJob(job.id!);
       setFormData({ 
         jobOrder: job.jobOrder, 
+        madeBy: job.madeBy || '', // 🔥 CARGA EL VALOR
         destination: job.destination, 
         description: job.description, 
         workFinish: job.workFinish, 
@@ -306,9 +317,18 @@ export const WorkActivity: React.FC = () => {
     ? orders.filter(o => o.workFinish === 'YES') 
     : orders.filter(o => o.workFinish === 'NO')
   ).filter(order => {
+    const isAdmin = currentUser?.roleId === 'admin_role';
+    const isMadeByMe = order.madeBy === authorName; // 🔥 CAMBIADO
+    const isCreatedByMe = order.jobOrder === authorName;
+    
+    if (!isAdmin && !isMadeByMe && !isCreatedByMe) {
+      return false; 
+    }
+
     const searchLower = searchTerm.toLowerCase();
     return (
       String(order.jobOrder || '').toLowerCase().includes(searchLower) ||
+      String(order.madeBy || '').toLowerCase().includes(searchLower) || // 🔥 CAMBIADO
       String(order.destination || '').toLowerCase().includes(searchLower) ||
       String(order.description || '').toLowerCase().includes(searchLower) ||
       String(order.pendingWork || '').toLowerCase().includes(searchLower) ||
@@ -350,9 +370,9 @@ export const WorkActivity: React.FC = () => {
               <th style={{ textAlign: 'center', width: '100px' }}>Actions</th>
               <th>#</th>
               <th>Registration Date</th>
-              {/* 🔥 COLUMNA SCHEDULE AGREGADA A LA TABLA */}
               <th>Schedule</th>
               <th>Ordered by</th>
+              <th>Made by</th> {/* 🔥 CAMBIADO */}
               <th>Address</th>
               <th>Description</th>
               <th style={{ textAlign: 'center' }}>Work Finish</th>
@@ -380,7 +400,7 @@ export const WorkActivity: React.FC = () => {
                         <button 
                           type="button" 
                           className="icon-btn delete" 
-                          onClick={(e) => { e.stopPropagation(); handleDelete(order.id, e); }} 
+                          onClick={(e) => { e.stopPropagation(); handleDelete(order.id!, e); }} 
                           title="Delete Order"
                         >
                           <Trash2 size={16}/>
@@ -390,9 +410,9 @@ export const WorkActivity: React.FC = () => {
                   </td>
                   <td data-label="#"><SeqBadge seq={order.visualSeq} /></td>
                   <td data-label="Registration Date">{formatDateDisplay(order.createdAt)}</td>
-                  {/* 🔥 DATO DE SCHEDULE AGREGADO A LA FILA */}
                   <td data-label="Schedule" style={{ fontWeight: 'bold', color: 'var(--primary-color)' }}>{formatDateDisplay(order.schedule)}</td>
                   <td data-label="Ordered by" style={{ fontWeight: 'bold' }}>{order.jobOrder}</td>
+                  <td data-label="Made by" style={{ fontWeight: 'bold', color: '#3b82f6' }}>{order.madeBy || 'Unassigned'}</td>
                   <td data-label="Address">{order.destination}</td>
                   <td data-label="Description">{order.description}</td>
                   <td data-label="Status" style={{ textAlign: 'center' }}><span style={getStatusStyles(order.workFinish)}>{order.workFinish}</span></td>
@@ -480,7 +500,7 @@ export const WorkActivity: React.FC = () => {
                   <button className="action btn-primary" onClick={() => handleOpenModal(viewingJob)}><Edit2 size={16}/> Edit</button>
                 </RequirePermission>
                 <RequirePermission permission="delete_work_activity">
-                  <button className="action btn-danger" onClick={(e) => handleDelete(viewingJob.id, e)}><Trash2 size={16}/> Delete</button>
+                  <button className="action btn-danger" onClick={(e) => handleDelete(viewingJob.id!, e)}><Trash2 size={16}/> Delete</button>
                 </RequirePermission>
                 <button className="close-modal" onClick={() => setViewingJob(null)}><X size={24}/></button>
               </div>
@@ -490,6 +510,7 @@ export const WorkActivity: React.FC = () => {
               <div className="detail-item"><span>Registration Date:</span> <p>{formatDateDisplay(viewingJob.createdAt)}</p></div>
               <div className="detail-item"><span>Address:</span> <p>{viewingJob.destination}</p></div>
               <div className="detail-item"><span>Ordered by:</span> <p>{viewingJob.jobOrder}</p></div>
+              <div className="detail-item"><span>Made by:</span> <p style={{ fontWeight: 'bold', color: '#3b82f6' }}>{viewingJob.madeBy || 'Unassigned'}</p></div>
               <div className="detail-item"><span>Schedule:</span> <p>{formatDateDisplay(viewingJob.schedule)}</p></div>
               <div className="detail-item"><span>Status:</span> <p><span style={getStatusStyles(viewingJob.workFinish)}>{viewingJob.workFinish}</span></p></div>
               <div className="detail-item"><span>Pending Work:</span> <p>{viewingJob.pendingWork || '-'}</p></div>
@@ -588,7 +609,7 @@ export const WorkActivity: React.FC = () => {
                 </div>
 
                 <div className="form-group">
-                  <label>Ordered by {isJobReq('jobOrder') && '*'}</label>
+                  <label>Ordered by {isJobReq('jobOrder') && '*'} {!isJobFieldEditable('jobOrder') && <span style={{fontSize:'0.75rem', color:'#ef4444'}}><Lock size={12}/> Locked</span>}</label>
                   <input 
                     type="text" 
                     value={formData.jobOrder} 
@@ -598,28 +619,28 @@ export const WorkActivity: React.FC = () => {
                   />
                 </div>
 
+                {/* 🔥 SELECTOR MODIFICADO: Made by */}
                 <div className="form-group">
-                  <label>Work Finish {isJobReq('workFinish') && '*'} {!isJobFieldEditable('workFinish') && <span style={{fontSize:'0.75rem', color:'#ef4444'}}><Lock size={12}/> Locked</span>}</label>
-                  <select value={formData.workFinish} onChange={e => setFormData({...formData, workFinish: e.target.value as 'YES' | 'NO'})} required={isJobReq('workFinish')} disabled={!isJobFieldEditable('workFinish')} style={{ backgroundColor: !isJobFieldEditable('workFinish') ? '#f1f5f9' : 'white', cursor: !isJobFieldEditable('workFinish') ? 'not-allowed' : 'text' }}>
-                    <option value="YES">YES</option>
-                    <option value="NO">NO</option>
+                  <label>Made by {isJobReq('madeBy') && '*'} {!isJobFieldEditable('madeBy') && <span style={{fontSize:'0.75rem', color:'#ef4444'}}><Lock size={12}/> Locked</span>}</label>
+                  <select 
+                    value={formData.madeBy || ''} 
+                    onChange={e => setFormData({...formData, madeBy: e.target.value})} 
+                    required={isJobReq('madeBy')} 
+                    disabled={!isJobFieldEditable('madeBy')} 
+                    style={{ backgroundColor: !isJobFieldEditable('madeBy') ? '#f1f5f9' : 'white', cursor: !isJobFieldEditable('madeBy') ? 'not-allowed' : 'pointer' }}
+                  >
+                    <option value="">-- Unassigned --</option>
+                    {systemUsers.map(u => {
+                      const name = `${u.firstName || ''} ${u.lastName || ''}`.trim() || u.email;
+                      return <option key={u.id} value={name}>{name}</option>;
+                    })}
                   </select>
                 </div>
-                
-                <div className="form-group" style={{ gridColumn: 'span 2' }}>
-                  <label>Description {isJobReq('description') && '*'} {!isJobFieldEditable('description') && <span style={{fontSize:'0.75rem', color:'#ef4444'}}><Lock size={12}/> Locked</span>}</label>
-                  <input type="text" value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} required={isJobReq('description')} disabled={!isJobFieldEditable('description')} style={{ backgroundColor: !isJobFieldEditable('description') ? '#f1f5f9' : 'white', cursor: !isJobFieldEditable('description') ? 'not-allowed' : 'text' }}/>
-                </div>
-                
-                <div className="form-group">
-                  <label>Schedule {isJobReq('schedule') && '*'} {!isJobFieldEditable('schedule') && <span style={{fontSize:'0.75rem', color:'#ef4444'}}><Lock size={12}/> Locked</span>}</label>
-                  <input type="date" value={formData.schedule} onChange={e => setFormData({...formData, schedule: e.target.value})} required={isJobReq('schedule')} disabled={!isJobFieldEditable('schedule')} style={{ backgroundColor: !isJobFieldEditable('schedule') ? '#f1f5f9' : 'white', cursor: !isJobFieldEditable('schedule') ? 'not-allowed' : 'text' }}/>
-                </div>
-                
-                <div className="form-group">
-                  <label>Pending Work {isJobReq('pendingWork') && '*'} {!isJobFieldEditable('pendingWork') && <span style={{fontSize:'0.75rem', color:'#ef4444'}}><Lock size={12}/> Locked</span>}</label>
-                  <input type="text" value={formData.pendingWork} onChange={e => setFormData({...formData, pendingWork: e.target.value})} required={isJobReq('pendingWork')} disabled={!isJobFieldEditable('pendingWork')} style={{ backgroundColor: !isJobFieldEditable('pendingWork') ? '#f1f5f9' : 'white', cursor: !isJobFieldEditable('pendingWork') ? 'not-allowed' : 'text' }}/>
-                </div>
+
+                <div className="form-group"><label>Work Finish {isJobReq('workFinish') && '*'} {!isJobFieldEditable('workFinish') && <span style={{fontSize:'0.75rem', color:'#ef4444'}}><Lock size={12}/> Locked</span>}</label><select value={formData.workFinish} onChange={e => setFormData({...formData, workFinish: e.target.value as 'YES' | 'NO'})} required={isJobReq('workFinish')} disabled={!isJobFieldEditable('workFinish')} style={{ backgroundColor: !isJobFieldEditable('workFinish') ? '#f1f5f9' : 'white', cursor: !isJobFieldEditable('workFinish') ? 'not-allowed' : 'pointer' }}><option value="YES">YES</option><option value="NO">NO</option></select></div>
+                <div className="form-group" style={{ gridColumn: 'span 2' }}><label>Description {isJobReq('description') && '*'} {!isJobFieldEditable('description') && <span style={{fontSize:'0.75rem', color:'#ef4444'}}><Lock size={12}/> Locked</span>}</label><input type="text" value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} required={isJobReq('description')} disabled={!isJobFieldEditable('description')} style={{ backgroundColor: !isJobFieldEditable('description') ? '#f1f5f9' : 'white', cursor: !isJobFieldEditable('description') ? 'not-allowed' : 'text' }}/></div>
+                <div className="form-group"><label>Schedule {isJobReq('schedule') && '*'} {!isJobFieldEditable('schedule') && <span style={{fontSize:'0.75rem', color:'#ef4444'}}><Lock size={12}/> Locked</span>}</label><input type="date" value={formData.schedule} onChange={e => setFormData({...formData, schedule: e.target.value})} required={isJobReq('schedule')} disabled={!isJobFieldEditable('schedule')} style={{ backgroundColor: !isJobFieldEditable('schedule') ? '#f1f5f9' : 'white', cursor: !isJobFieldEditable('schedule') ? 'not-allowed' : 'text' }}/></div>
+                <div className="form-group"><label>Pending Work {isJobReq('pendingWork') && '*'} {!isJobFieldEditable('pendingWork') && <span style={{fontSize:'0.75rem', color:'#ef4444'}}><Lock size={12}/> Locked</span>}</label><input type="text" value={formData.pendingWork} onChange={e => setFormData({...formData, pendingWork: e.target.value})} required={isJobReq('pendingWork')} disabled={!isJobFieldEditable('pendingWork')} style={{ backgroundColor: !isJobFieldEditable('pendingWork') ? '#f1f5f9' : 'white', cursor: !isJobFieldEditable('pendingWork') ? 'not-allowed' : 'text' }}/></div>
               </div>
               
               <div className="products-section">

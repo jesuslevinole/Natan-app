@@ -45,7 +45,7 @@ export const ItemEntrance: React.FC = () => {
     { name: 'itemsArrived', label: 'Items Arrived' }
   ];
   
-  // 🔥 CORRECCIÓN APLICADA: Se eliminó 'requiredFields' de la desestructuración ya que no se utiliza
+  // 🔥 CORRECCIÓN APLICADA: Se eliminó 'requiredFields' para limpiar la alerta de TypeScript
   const { toggleRequired, isRequired } = useFormConfig('itemEntrance', ['date', 'itemName', 'supplyCompany', 'quantityOrdered']);
 
   const [fieldRoles, setFieldRoles] = useState<Record<string, string>>({});
