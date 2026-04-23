@@ -45,7 +45,6 @@ export const WorkActivity: React.FC = () => {
     { name: 'schedule', label: 'Schedule' }
   ];
   
-  // 🔥 CORRECCIÓN: Se eliminó 'requiredFields: reqJob' ya que no se utiliza en el nuevo modal avanzado
   const { toggleRequired: toggleJobReq, isRequired: isJobReq } = useFormConfig('jobOrder', ['createdAt', 'destination', 'jobOrder', 'workFinish']);
   
   const [jobFieldRoles, setJobFieldRoles] = useState<Record<string, string>>({});
@@ -351,16 +350,17 @@ export const WorkActivity: React.FC = () => {
               <th style={{ textAlign: 'center', width: '100px' }}>Actions</th>
               <th>#</th>
               <th>Registration Date</th>
+              {/* 🔥 COLUMNA SCHEDULE AGREGADA A LA TABLA */}
+              <th>Schedule</th>
               <th>Ordered by</th>
               <th>Address</th>
               <th>Description</th>
               <th style={{ textAlign: 'center' }}>Work Finish</th>
               <th>Pending Work</th>
-              <th>Schedule</th>
             </tr>
           </thead>
           <tbody>
-            {displayedOrders.length === 0 && <tr><td colSpan={9} className="empty-state">No records found.</td></tr>}
+            {displayedOrders.length === 0 && <tr><td colSpan={10} className="empty-state">No records found.</td></tr>}
             {displayedOrders.map(order => {
               return (
                 <tr key={order.id} className="clickable-row" onClick={() => handleViewDetails(order)}>
@@ -389,13 +389,14 @@ export const WorkActivity: React.FC = () => {
                     </div>
                   </td>
                   <td data-label="#"><SeqBadge seq={order.visualSeq} /></td>
-                  <td data-label="Date">{formatDateDisplay(order.createdAt)}</td>
+                  <td data-label="Registration Date">{formatDateDisplay(order.createdAt)}</td>
+                  {/* 🔥 DATO DE SCHEDULE AGREGADO A LA FILA */}
+                  <td data-label="Schedule" style={{ fontWeight: 'bold', color: 'var(--primary-color)' }}>{formatDateDisplay(order.schedule)}</td>
                   <td data-label="Ordered by" style={{ fontWeight: 'bold' }}>{order.jobOrder}</td>
                   <td data-label="Address">{order.destination}</td>
                   <td data-label="Description">{order.description}</td>
                   <td data-label="Status" style={{ textAlign: 'center' }}><span style={getStatusStyles(order.workFinish)}>{order.workFinish}</span></td>
                   <td data-label="Pending Work">{order.pendingWork || '-'}</td>
-                  <td data-label="Schedule">{formatDateDisplay(order.schedule)}</td>
                 </tr>
               )
             })}
