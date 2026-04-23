@@ -1,9 +1,8 @@
 import React, { useState, useEffect } from 'react';
-// 🔥 IMPORTAMOS runTransaction PARA EVITAR DUPLICADOS EN CONCURRENCIA
 import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, query, where, runTransaction } from 'firebase/firestore';
 import { db } from '../firebase'; 
-import { Briefcase, Plus, X, Settings, Edit2, Trash2 } from 'lucide-react';
-import { JobOrder, JobProduct, ItemEntranceRecord, JobFormData, ProductFormData } from '../types';
+import { Briefcase, Plus, X, Settings, Edit2, Trash2, Lock } from 'lucide-react';
+import { JobOrder, JobProduct, ItemEntranceRecord, JobFormData, ProductFormData, Role } from '../types';
 import { SearchBar, FieldConfigModal, SeqBadge, SearchableSelect, DestinationSearch } from '../components/SharedUI';
 import { useFormConfig } from '../hooks/useAppHooks';
 import { getTodayString, formatDateDisplay, getStatusStyles, formatSeq } from '../utils/helpers';
@@ -20,18 +19,21 @@ export const WorkActivity: React.FC = () => {
   const [orders, setOrders] = useState<JobOrder[]>([]);
   const [entranceList, setEntranceList] = useState<ItemEntranceRecord[]>([]); 
   const [allJobProducts, setAllJobProducts] = useState<JobProduct[]>([]);
+  const [systemRoles, setSystemRoles] = useState<Role[]>([]); 
 
   const [searchTerm, setSearchTerm] = useState(''); 
   const [isJobModalOpen, setIsJobModalOpen] = useState<boolean>(false);
   const [isProductModalOpen, setIsProductModalOpen] = useState<boolean>(false);
   const [isJobConfigOpen, setIsJobConfigOpen] = useState<boolean>(false);
   const [isProductConfigOpen, setIsProductConfigOpen] = useState<boolean>(false);
-  const [isProcessing, setIsProcessing] = useState<boolean>(false); // Estado de carga seguro
+  const [isProcessing, setIsProcessing] = useState<boolean>(false);
 
   const [editingJob, setEditingJob] = useState<string | null>(null);
   const [viewingJob, setViewingJob] = useState<JobOrder | null>(null);
   const [viewProducts, setViewProducts] = useState<JobProduct[]>([]);
   const [showHistoric, setShowHistoric] = useState<boolean>(false); 
+  const [isQuickDestOpen, setIsQuickDestOpen] = useState<boolean>(false);
+  const [newDestData, setNewDestData] = useState({ property_name: '', description: '', contact: '' });
 
   const jobFields = [
     { name: 'createdAt', label: 'Registration Date' },
@@ -42,7 +44,11 @@ export const WorkActivity: React.FC = () => {
     { name: 'pendingWork', label: 'Pending Work' },
     { name: 'schedule', label: 'Schedule' }
   ];
-  const { requiredFields: reqJob, toggleRequired: toggleJobReq, isRequired: isJobReq } = useFormConfig('jobOrder', ['createdAt', 'destination', 'jobOrder', 'workFinish']);
+  
+  // 🔥 CORRECCIÓN: Se eliminó 'requiredFields: reqJob' ya que no se utiliza en el nuevo modal avanzado
+  const { toggleRequired: toggleJobReq, isRequired: isJobReq } = useFormConfig('jobOrder', ['createdAt', 'destination', 'jobOrder', 'workFinish']);
+  
+  const [jobFieldRoles, setJobFieldRoles] = useState<Record<string, string>>({});
 
   const productFields = [
     { name: 'itemEntranceId', label: 'Select Item' },
@@ -76,11 +82,9 @@ export const WorkActivity: React.FC = () => {
       const orderData = await getDocs(ordersCollectionRef);
       const fetchedOrders = orderData.docs.map((doc) => ({ ...doc.data(), id: doc.id } as any));
       
-      // 🔥 CORRECCIÓN 1: Ordenamiento descendente ESTRICTO (El más nuevo arriba)
       fetchedOrders.sort((a: any, b: any) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
       
       const totalOrders = fetchedOrders.length;
-      // Inyectamos el visualSeq basado en el orden para mantener compatibilidad con data vieja
       const mappedOrders = fetchedOrders.map((o: any, idx: number) => ({ 
         ...o, 
         visualSeq: o.seq || (totalOrders - idx) 
@@ -93,10 +97,29 @@ export const WorkActivity: React.FC = () => {
 
       const productsData = await getDocs(productsCollectionRef);
       setAllJobProducts(productsData.docs.map(doc => ({ ...doc.data(), id: doc.id })) as JobProduct[]);
+
+      const rolesSnap = await getDocs(collection(db, 'roles'));
+      setSystemRoles(rolesSnap.docs.map(d => ({id: d.id, ...d.data()} as Role)));
+
     } catch (error) { console.error("Error", error); }
   };
 
-  useEffect(() => { fetchData(); }, []);
+  useEffect(() => { 
+    fetchData(); 
+    const savedJobFieldRoles = localStorage.getItem('workActivity_jobFieldRoles');
+    if (savedJobFieldRoles) setJobFieldRoles(JSON.parse(savedJobFieldRoles));
+  }, []);
+
+  const isJobFieldEditable = (fieldName: string) => {
+    if (isProcessing) return false;
+    if (currentUser?.roleId === 'admin_role') return true; 
+
+    const requiredRole = jobFieldRoles[fieldName];
+    if (requiredRole && currentUser?.roleId !== requiredRole) {
+      return false;
+    }
+    return true; 
+  };
 
   const getAvailableStock = (itemId: string) => {
     const item = entranceList.find(i => i.id === itemId);
@@ -152,22 +175,18 @@ export const WorkActivity: React.FC = () => {
 
   const handleSaveOrder = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    setIsProcessing(true); // Bloqueamos el botón para evitar doble click
+    setIsProcessing(true);
     try {
       let savedJobId = editingJob;
       
       if (editingJob) {
-        // MODO EDICIÓN
         await updateDoc(doc(db, "jobOrders", editingJob), { ...formData });
         AuditLogger.logUpdate('WorkActivity', authorName, editingJob, formData);
       } else {
-        // 🔥 CORRECCIÓN 2: MODO CREACIÓN CON TRANSACCIÓN ATÓMICA (Cero duplicados de Consecutivo)
         const counterRef = doc(db, 'counters', 'jobOrdersSeq');
-        
         const nextSeq = await runTransaction(db, async (transaction) => {
           const counterDoc = await transaction.get(counterRef);
-          let newSeq = 1; // Si es el primer registro de la historia
-          
+          let newSeq = 1;
           if (counterDoc.exists()) {
             newSeq = (counterDoc.data().value || 0) + 1;
             transaction.update(counterRef, { value: newSeq });
@@ -177,7 +196,6 @@ export const WorkActivity: React.FC = () => {
           return newSeq;
         });
 
-        // Guardamos con el consecutivo asegurado por el servidor
         const docRef = await addDoc(ordersCollectionRef, { 
           ...formData, 
           createdBy: authorName, 
@@ -198,6 +216,33 @@ export const WorkActivity: React.FC = () => {
       alert("Error al guardar el registro.");
     } finally {
       setIsProcessing(false);
+    }
+  };
+
+  const handleSaveQuickDestination = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const destSnap = await getDocs(collection(db, 'catalog_destinations'));
+      let maxSeq = 0;
+      destSnap.forEach(d => {
+        const data = d.data();
+        if (data.seq > maxSeq) maxSeq = data.seq;
+      });
+
+      const docRef = await addDoc(collection(db, 'catalog_destinations'), {
+        ...newDestData,
+        seq: maxSeq + 1,
+        createdAt: new Date().toISOString()
+      });
+      
+      AuditLogger.logCreate('Catalogs (Destinations)', authorName, docRef.id, newDestData);
+      
+      setFormData({ ...formData, destination: newDestData.property_name });
+      setIsQuickDestOpen(false);
+      setNewDestData({ property_name: '', description: '', contact: '' });
+    } catch (error) {
+      console.error("Error adding quick destination", error);
+      alert("Error adding destination");
     }
   };
 
@@ -358,8 +403,69 @@ export const WorkActivity: React.FC = () => {
         </table>
       </div>
 
-      <FieldConfigModal isOpen={isJobConfigOpen} onClose={() => setIsJobConfigOpen(false)} fields={jobFields} requiredFields={reqJob} toggleRequired={toggleJobReq} />
       <FieldConfigModal isOpen={isProductConfigOpen} onClose={() => setIsProductConfigOpen(false)} fields={productFields} requiredFields={reqProd} toggleRequired={toggleProdReq} />
+
+      {isJobConfigOpen && (
+        <div className="modal-overlay active" style={{ zIndex: 2000 }}>
+          <div className="modal-content modal-large" style={{ maxWidth: '650px' }}>
+            <div className="modal-header">
+              <h3 style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><Settings size={20}/> Form Security & Fields</h3>
+              <button type="button" className="close-modal" onClick={() => setIsJobConfigOpen(false)}><X size={24}/></button>
+            </div>
+            <div style={{ padding: '15px 0' }}>
+              <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '15px' }}>
+                Set which fields are mandatory and configure Field-Level Security (which Role is allowed to edit each field).
+              </p>
+              <div className="table-container">
+                <table className="responsive-table">
+                  <thead>
+                    <tr>
+                      <th>Field Name</th>
+                      <th style={{ textAlign: 'center' }}>Required</th>
+                      <th>Allowed Role (Edit Access)</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {jobFields.map(f => (
+                      <tr key={f.name}>
+                        <td style={{ fontWeight: 'bold', color: '#334155' }}>{f.label}</td>
+                        <td style={{ textAlign: 'center' }}>
+                          <input 
+                            type="checkbox" 
+                            checked={isJobReq(f.name)} 
+                            onChange={() => toggleJobReq(f.name)} 
+                            style={{ width: '18px', height: '18px', accentColor: 'var(--primary-color)', cursor: 'pointer' }}
+                          />
+                        </td>
+                        <td>
+                          <select 
+                            value={jobFieldRoles[f.name] || ''} 
+                            onChange={e => {
+                              const updated = { ...jobFieldRoles, [f.name]: e.target.value };
+                              if (!e.target.value) delete updated[f.name];
+                              setJobFieldRoles(updated);
+                              localStorage.setItem('workActivity_jobFieldRoles', JSON.stringify(updated));
+                            }}
+                            style={{ width: '100%', padding: '6px', borderRadius: '6px', border: '1px solid #cbd5e1' }}
+                          >
+                            <option value="">All Roles (Unrestricted)</option>
+                            {systemRoles.map(r => (
+                              <option key={r.id} value={r.id}>{r.name}</option>
+                            ))}
+                          </select>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            <div className="btn-container" style={{ marginTop: '20px' }}>
+              <button type="button" className="action btn-primary" onClick={() => setIsJobConfigOpen(false)} style={{ width: '100%' }}>Done</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {viewingJob && (
         <div className="modal-overlay active">
@@ -440,7 +546,9 @@ export const WorkActivity: React.FC = () => {
               <div className="modal-header">
                 <h3>{editingJob ? "Edit Order" : "Create New Order"}</h3>
                 <div style={{ display: 'flex', gap: '10px' }}>
-                  <button type="button" className="icon-btn" onClick={() => setIsJobConfigOpen(true)} title="Configure Required Fields"><Settings size={20}/></button>
+                  <RequirePermission permission="manage_security">
+                    <button type="button" className="icon-btn" onClick={() => setIsJobConfigOpen(true)} title="Configure Field Security"><Settings size={20}/></button>
+                  </RequirePermission>
                   <button type="submit" className="action btn-primary" disabled={isProcessing}>
                     {isProcessing ? 'Saving...' : 'Save Order'}
                   </button>
@@ -448,16 +556,34 @@ export const WorkActivity: React.FC = () => {
                 </div>
               </div>
               <div className="form-grid">
-                <div className="form-group"><label>Registration Date {isJobReq('createdAt') && '*'}</label><input type="date" value={formData.createdAt} onChange={e => setFormData({...formData, createdAt: e.target.value})} required={isJobReq('createdAt')} disabled={isProcessing}/></div>
                 
                 <div className="form-group">
-                  <label>Address {isJobReq('destination') && '*'}</label>
-                  <DestinationSearch 
-                    value={formData.destination}
-                    onSelect={(val) => setFormData({...formData, destination: val})}
-                    placeholder="Search address..."
-                    required={isJobReq('destination')}
-                  />
+                  <label>Registration Date {isJobReq('createdAt') && '*'} {!isJobFieldEditable('createdAt') && <span style={{fontSize:'0.75rem', color:'#ef4444'}}><Lock size={12}/> Locked</span>}</label>
+                  <input type="date" value={formData.createdAt} onChange={e => setFormData({...formData, createdAt: e.target.value})} required={isJobReq('createdAt')} disabled={!isJobFieldEditable('createdAt')} style={{ backgroundColor: !isJobFieldEditable('createdAt') ? '#f1f5f9' : 'white', cursor: !isJobFieldEditable('createdAt') ? 'not-allowed' : 'text' }}/>
+                </div>
+                
+                <div className="form-group">
+                  <label>Address {isJobReq('destination') && '*'} {!isJobFieldEditable('destination') && <span style={{fontSize:'0.75rem', color:'#ef4444'}}><Lock size={12}/> Locked</span>}</label>
+                  <div style={{ display: 'flex', gap: '8px', alignItems: 'stretch', pointerEvents: !isJobFieldEditable('destination') ? 'none' : 'auto', opacity: !isJobFieldEditable('destination') ? 0.6 : 1 }}>
+                    <div style={{ flex: 1 }}>
+                      <DestinationSearch 
+                        value={formData.destination}
+                        onSelect={(val) => setFormData({...formData, destination: val})}
+                        placeholder="Search address..."
+                        required={isJobReq('destination')}
+                      />
+                    </div>
+                    <button 
+                      type="button" 
+                      className="action btn-secondary" 
+                      style={{ padding: '0 14px', height: '46px' }}
+                      onClick={() => setIsQuickDestOpen(true)}
+                      title="Add New Destination"
+                      disabled={!isJobFieldEditable('destination')}
+                    >
+                      <Plus size={20} />
+                    </button>
+                  </div>
                 </div>
 
                 <div className="form-group">
@@ -467,21 +593,34 @@ export const WorkActivity: React.FC = () => {
                     value={formData.jobOrder} 
                     readOnly 
                     title="This field is auto-populated and cannot be changed for auditing purposes."
-                    style={{
-                      backgroundColor: '#f1f5f9',
-                      color: '#64748b',
-                      cursor: 'not-allowed',
-                      fontWeight: '600',
-                      border: '1px solid #cbd5e1'
-                    }}
+                    style={{ backgroundColor: '#f1f5f9', color: '#64748b', cursor: 'not-allowed', fontWeight: '600', border: '1px solid #cbd5e1' }}
                   />
                 </div>
 
-                <div className="form-group"><label>Work Finish {isJobReq('workFinish') && '*'}</label><select value={formData.workFinish} onChange={e => setFormData({...formData, workFinish: e.target.value as 'YES' | 'NO'})} required={isJobReq('workFinish')} disabled={isProcessing}><option value="YES">YES</option><option value="NO">NO</option></select></div>
-                <div className="form-group" style={{ gridColumn: 'span 2' }}><label>Description {isJobReq('description') && '*'}</label><input type="text" value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} required={isJobReq('description')} disabled={isProcessing}/></div>
-                <div className="form-group"><label>Schedule {isJobReq('schedule') && '*'}</label><input type="date" value={formData.schedule} onChange={e => setFormData({...formData, schedule: e.target.value})} required={isJobReq('schedule')} disabled={isProcessing}/></div>
-                <div className="form-group"><label>Pending Work {isJobReq('pendingWork') && '*'}</label><input type="text" value={formData.pendingWork} onChange={e => setFormData({...formData, pendingWork: e.target.value})} required={isJobReq('pendingWork')} disabled={isProcessing}/></div>
+                <div className="form-group">
+                  <label>Work Finish {isJobReq('workFinish') && '*'} {!isJobFieldEditable('workFinish') && <span style={{fontSize:'0.75rem', color:'#ef4444'}}><Lock size={12}/> Locked</span>}</label>
+                  <select value={formData.workFinish} onChange={e => setFormData({...formData, workFinish: e.target.value as 'YES' | 'NO'})} required={isJobReq('workFinish')} disabled={!isJobFieldEditable('workFinish')} style={{ backgroundColor: !isJobFieldEditable('workFinish') ? '#f1f5f9' : 'white', cursor: !isJobFieldEditable('workFinish') ? 'not-allowed' : 'text' }}>
+                    <option value="YES">YES</option>
+                    <option value="NO">NO</option>
+                  </select>
+                </div>
+                
+                <div className="form-group" style={{ gridColumn: 'span 2' }}>
+                  <label>Description {isJobReq('description') && '*'} {!isJobFieldEditable('description') && <span style={{fontSize:'0.75rem', color:'#ef4444'}}><Lock size={12}/> Locked</span>}</label>
+                  <input type="text" value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} required={isJobReq('description')} disabled={!isJobFieldEditable('description')} style={{ backgroundColor: !isJobFieldEditable('description') ? '#f1f5f9' : 'white', cursor: !isJobFieldEditable('description') ? 'not-allowed' : 'text' }}/>
+                </div>
+                
+                <div className="form-group">
+                  <label>Schedule {isJobReq('schedule') && '*'} {!isJobFieldEditable('schedule') && <span style={{fontSize:'0.75rem', color:'#ef4444'}}><Lock size={12}/> Locked</span>}</label>
+                  <input type="date" value={formData.schedule} onChange={e => setFormData({...formData, schedule: e.target.value})} required={isJobReq('schedule')} disabled={!isJobFieldEditable('schedule')} style={{ backgroundColor: !isJobFieldEditable('schedule') ? '#f1f5f9' : 'white', cursor: !isJobFieldEditable('schedule') ? 'not-allowed' : 'text' }}/>
+                </div>
+                
+                <div className="form-group">
+                  <label>Pending Work {isJobReq('pendingWork') && '*'} {!isJobFieldEditable('pendingWork') && <span style={{fontSize:'0.75rem', color:'#ef4444'}}><Lock size={12}/> Locked</span>}</label>
+                  <input type="text" value={formData.pendingWork} onChange={e => setFormData({...formData, pendingWork: e.target.value})} required={isJobReq('pendingWork')} disabled={!isJobFieldEditable('pendingWork')} style={{ backgroundColor: !isJobFieldEditable('pendingWork') ? '#f1f5f9' : 'white', cursor: !isJobFieldEditable('pendingWork') ? 'not-allowed' : 'text' }}/>
+                </div>
               </div>
+              
               <div className="products-section">
                 <div className="products-header">
                   <h4 style={{ margin: 0 }}>Products List</h4>
@@ -514,6 +653,50 @@ export const WorkActivity: React.FC = () => {
                     </tbody>
                   </table>
                 </div>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {isQuickDestOpen && (
+        <div className="modal-overlay active" style={{ zIndex: 1300 }}>
+          <div className="modal-content" style={{ maxWidth: '500px' }}>
+            <form onSubmit={handleSaveQuickDestination}>
+              <div className="modal-header">
+                <h3>Quick Add Destination</h3>
+                <button type="button" className="close-modal" onClick={() => setIsQuickDestOpen(false)}><X size={24}/></button>
+              </div>
+              <div className="form-grid">
+                <div className="form-group full-width">
+                  <label>Property Name * (Ej. 260)</label>
+                  <input 
+                    type="text" 
+                    required 
+                    value={newDestData.property_name} 
+                    onChange={e => setNewDestData({...newDestData, property_name: e.target.value})} 
+                  />
+                </div>
+                <div className="form-group full-width">
+                  <label>Description * (Visible Name)</label>
+                  <input 
+                    type="text" 
+                    required 
+                    value={newDestData.description} 
+                    onChange={e => setNewDestData({...newDestData, description: e.target.value})} 
+                  />
+                </div>
+                <div className="form-group full-width">
+                  <label>Contact (Optional)</label>
+                  <input 
+                    type="text" 
+                    value={newDestData.contact} 
+                    onChange={e => setNewDestData({...newDestData, contact: e.target.value})} 
+                  />
+                </div>
+              </div>
+              <div className="modal-footer-actions" style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '20px' }}>
+                <button type="submit" className="action btn-primary">Save Destination</button>
               </div>
             </form>
           </div>

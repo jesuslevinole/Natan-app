@@ -1,10 +1,9 @@
 import React, { useState, useEffect } from 'react';
-// 🔥 IMPORTAMOS runTransaction PARA EVITAR DUPLICADOS EN CONCURRENCIA
 import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, runTransaction } from 'firebase/firestore';
 import { db } from '../firebase'; 
-import { PackageSearch, Plus, X, Settings, Edit2, Trash2, Maximize2 } from 'lucide-react';
-import { ItemEntranceRecord, JobProduct, JobOrder, ItemEntranceFormData } from '../types';
-import { SearchBar, FieldConfigModal, SeqBadge, SearchableSelect } from '../components/SharedUI';
+import { PackageSearch, Plus, X, Settings, Edit2, Trash2, Maximize2, Lock } from 'lucide-react';
+import { ItemEntranceRecord, JobProduct, JobOrder, ItemEntranceFormData, Role } from '../types';
+import { SearchBar, SeqBadge, SearchableSelect } from '../components/SharedUI';
 import { useCatalogOptions, useFormConfig } from '../hooks/useAppHooks';
 import { getTodayString, formatDateDisplay, getInventoryStatusStyles } from '../utils/helpers';
 import { AuditLogger } from '../utils/logger';
@@ -19,6 +18,7 @@ export const ItemEntrance: React.FC = () => {
   const [items, setItems] = useState<ItemEntranceRecord[]>([]);
   const [allJobProducts, setAllJobProducts] = useState<JobProduct[]>([]);
   const [allOrders, setAllOrders] = useState<JobOrder[]>([]); 
+  const [systemRoles, setSystemRoles] = useState<Role[]>([]); 
   
   const [searchTerm, setSearchTerm] = useState(''); 
   const [stockFilter, setStockFilter] = useState<'ALL' | 'AVAILABLE' | 'UNAVAILABLE'>('ALL'); 
@@ -27,7 +27,7 @@ export const ItemEntrance: React.FC = () => {
   const [isConfigOpen, setIsConfigOpen] = useState<boolean>(false);
   const [isExpandHistoryOpen, setIsExpandHistoryOpen] = useState<boolean>(false);
   const [historySearchTerm, setHistorySearchTerm] = useState('');
-  const [isProcessing, setIsProcessing] = useState<boolean>(false); // Bloqueo de botón
+  const [isProcessing, setIsProcessing] = useState<boolean>(false);
   
   const [editingId, setEditingId] = useState<string | null>(null);
   
@@ -44,7 +44,11 @@ export const ItemEntrance: React.FC = () => {
     { name: 'quantityOrdered', label: 'Quantity Ordered' },
     { name: 'itemsArrived', label: 'Items Arrived' }
   ];
-  const { requiredFields, toggleRequired, isRequired } = useFormConfig('itemEntrance', ['date', 'itemName', 'supplyCompany', 'quantityOrdered']);
+  
+  // 🔥 CORRECCIÓN APLICADA: Se eliminó 'requiredFields' de la desestructuración ya que no se utiliza
+  const { toggleRequired, isRequired } = useFormConfig('itemEntrance', ['date', 'itemName', 'supplyCompany', 'quantityOrdered']);
+
+  const [fieldRoles, setFieldRoles] = useState<Record<string, string>>({});
 
   const initialForm: ItemEntranceFormData = {
     date: getTodayString(), modelPart: '', serial: '', po: '', orderDate: '', 
@@ -58,11 +62,9 @@ export const ItemEntrance: React.FC = () => {
     const data = await getDocs(collectionRef);
     const fetched = data.docs.map(doc => ({ ...doc.data(), id: doc.id } as any));
     
-    // 🔥 CORRECCIÓN 1: Ordenamiento descendente ESTRICTO (El más nuevo arriba)
     fetched.sort((a: any, b: any) => new Date(b.createdAt || b.date).getTime() - new Date(a.createdAt || a.date).getTime());
     
     const totalItems = fetched.length;
-    // Inyectamos visualSeq para compatibilidad con data anterior
     const mapped = fetched.map((item: any, idx: number) => ({ 
       ...item, 
       visualSeq: item.seq || (totalItems - idx) 
@@ -75,9 +77,27 @@ export const ItemEntrance: React.FC = () => {
     
     const ordersData = await getDocs(collection(db, "jobOrders"));
     setAllOrders(ordersData.docs.map(doc => ({ ...doc.data(), id: doc.id }) as JobOrder));
+    
+    const rolesSnap = await getDocs(collection(db, 'roles'));
+    setSystemRoles(rolesSnap.docs.map(d => ({id: d.id, ...d.data()} as Role)));
   };
 
-  useEffect(() => { fetchItems(); }, []);
+  useEffect(() => { 
+    fetchItems(); 
+    const savedFieldRoles = localStorage.getItem('itemEntrance_fieldRoles');
+    if (savedFieldRoles) setFieldRoles(JSON.parse(savedFieldRoles));
+  }, []);
+
+  const isFieldEditable = (fieldName: string) => {
+    if (isProcessing) return false;
+    if (currentUser?.roleId === 'admin_role') return true; 
+
+    const requiredRole = fieldRoles[fieldName];
+    if (requiredRole && currentUser?.roleId !== requiredRole) {
+      return false;
+    }
+    return true; 
+  };
 
   const getStock = (itemId: string, initialArrived: number) => {
     const used = allJobProducts.filter(p => p.itemEntranceId === itemId).reduce((acc, p) => acc + p.quantity, 0);
@@ -120,20 +140,16 @@ export const ItemEntrance: React.FC = () => {
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsProcessing(true); // Bloquear botón mientras guarda
+    setIsProcessing(true);
     try {
       if (editingId) {
-        // MODO EDICIÓN
         await updateDoc(doc(db, "itemEntrance", editingId), { ...formData });
         AuditLogger.logUpdate('Item Entrance', authorName, editingId, formData);
       } else {
-        // 🔥 CORRECCIÓN 2: MODO CREACIÓN CON TRANSACCIÓN ATÓMICA (Cero duplicados)
         const counterRef = doc(db, 'counters', 'itemEntranceSeq');
-        
         const nextSeq = await runTransaction(db, async (transaction) => {
           const counterDoc = await transaction.get(counterRef);
           let newSeq = 1;
-          
           if (counterDoc.exists()) {
             newSeq = (counterDoc.data().value || 0) + 1;
             transaction.update(counterRef, { value: newSeq });
@@ -143,7 +159,6 @@ export const ItemEntrance: React.FC = () => {
           return newSeq;
         });
 
-        // Guardamos usando el consecutivo seguro del servidor
         const docRef = await addDoc(collectionRef, { 
           ...formData, 
           seq: nextSeq, 
@@ -291,7 +306,67 @@ export const ItemEntrance: React.FC = () => {
         </table>
       </div>
 
-      <FieldConfigModal isOpen={isConfigOpen} onClose={() => setIsConfigOpen(false)} fields={entranceFields} requiredFields={requiredFields} toggleRequired={toggleRequired} />
+      {isConfigOpen && (
+        <div className="modal-overlay active" style={{ zIndex: 2000 }}>
+          <div className="modal-content modal-large" style={{ maxWidth: '650px' }}>
+            <div className="modal-header">
+              <h3 style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><Settings size={20}/> Form Security & Fields</h3>
+              <button type="button" className="close-modal" onClick={() => setIsConfigOpen(false)}><X size={24}/></button>
+            </div>
+            <div style={{ padding: '15px 0' }}>
+              <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '15px' }}>
+                Set which fields are mandatory and configure Field-Level Security (which Role is allowed to edit each field).
+              </p>
+              <div className="table-container">
+                <table className="responsive-table">
+                  <thead>
+                    <tr>
+                      <th>Field Name</th>
+                      <th style={{ textAlign: 'center' }}>Required</th>
+                      <th>Allowed Role (Edit Access)</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {entranceFields.map(f => (
+                      <tr key={f.name}>
+                        <td style={{ fontWeight: 'bold', color: '#334155' }}>{f.label}</td>
+                        <td style={{ textAlign: 'center' }}>
+                          <input 
+                            type="checkbox" 
+                            checked={isRequired(f.name)} 
+                            onChange={() => toggleRequired(f.name)} 
+                            style={{ width: '18px', height: '18px', accentColor: 'var(--primary-color)', cursor: 'pointer' }}
+                          />
+                        </td>
+                        <td>
+                          <select 
+                            value={fieldRoles[f.name] || ''} 
+                            onChange={e => {
+                              const updated = { ...fieldRoles, [f.name]: e.target.value };
+                              if (!e.target.value) delete updated[f.name];
+                              setFieldRoles(updated);
+                              localStorage.setItem('itemEntrance_fieldRoles', JSON.stringify(updated));
+                            }}
+                            style={{ width: '100%', padding: '6px', borderRadius: '6px', border: '1px solid #cbd5e1' }}
+                          >
+                            <option value="">All Roles (Unrestricted)</option>
+                            {systemRoles.map(r => (
+                              <option key={r.id} value={r.id}>{r.name}</option>
+                            ))}
+                          </select>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            <div className="btn-container" style={{ marginTop: '20px' }}>
+              <button type="button" className="action btn-primary" onClick={() => setIsConfigOpen(false)} style={{ width: '100%' }}>Done</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {isModalOpen && (
         <div className="modal-overlay active">
@@ -300,7 +375,9 @@ export const ItemEntrance: React.FC = () => {
               <div className="modal-header">
                 <h3>{editingId ? "Edit Entrance" : "New Entrance"}</h3>
                 <div style={{ display: 'flex', gap: '10px' }}>
-                  <button type="button" className="icon-btn" onClick={() => setIsConfigOpen(true)} title="Configure Required Fields"><Settings size={20}/></button>
+                  <RequirePermission permission="manage_security">
+                    <button type="button" className="icon-btn" onClick={() => setIsConfigOpen(true)} title="Configure Field Security"><Settings size={20}/></button>
+                  </RequirePermission>
                   <button type="submit" className="action btn-primary" disabled={isProcessing}>
                     {isProcessing ? 'Saving...' : 'Save Changes'}
                   </button>
@@ -308,24 +385,50 @@ export const ItemEntrance: React.FC = () => {
                 </div>
               </div>
               <div className="form-grid">
-                <div className="form-group"><label>Date (Registration) {isRequired('date') && '*'}</label><input type="date" value={formData.date} onChange={e => setFormData({...formData, date: e.target.value})} required={isRequired('date')} disabled={isProcessing}/></div>
-                <div className="form-group"><label>Item Name {isRequired('itemName') && '*'}</label><input type="text" value={formData.itemName} onChange={e => setFormData({...formData, itemName: e.target.value})} required={isRequired('itemName')} disabled={isProcessing}/></div>
-                <div className="form-group"><label>Model / Part # {isRequired('modelPart') && '*'}</label><input type="text" value={formData.modelPart} onChange={e => setFormData({...formData, modelPart: e.target.value})} required={isRequired('modelPart')} disabled={isProcessing}/></div>
-                <div className="form-group"><label style={{ color: 'var(--primary-color)', fontWeight: 'bold' }}>Serial # {isRequired('serial') && '*'}</label><input type="text" value={formData.serial} onChange={e => setFormData({...formData, serial: e.target.value})} required={isRequired('serial')} disabled={isProcessing}/></div>
-                <div className="form-group"><label style={{ color: 'var(--primary-color)', fontWeight: 'bold' }}>PO # {isRequired('po') && '*'}</label><input type="text" value={formData.po} onChange={e => setFormData({...formData, po: e.target.value})} required={isRequired('po')} disabled={isProcessing}/></div>
                 <div className="form-group">
-                  <label>Supply Company {isRequired('supplyCompany') && '*'}</label>
-                  <SearchableSelect 
-                    options={supplyCompanies.map(c => ({ id: String(c.label), label: String(c.label) }))}
-                    value={formData.supplyCompany} 
-                    onChange={(id) => setFormData({...formData, supplyCompany: id})} 
-                    placeholder="-- Select Company --"
-                    required={isRequired('supplyCompany')}
-                  />
+                  <label>Date (Registration) {isRequired('date') && '*'} {!isFieldEditable('date') && <span style={{fontSize:'0.75rem', color:'#ef4444'}}><Lock size={12}/> Locked</span>}</label>
+                  <input type="date" value={formData.date} onChange={e => setFormData({...formData, date: e.target.value})} required={isRequired('date')} disabled={!isFieldEditable('date')} style={{ backgroundColor: !isFieldEditable('date') ? '#f1f5f9' : 'white', cursor: !isFieldEditable('date') ? 'not-allowed' : 'text' }}/>
                 </div>
-                <div className="form-group"><label>Order Date {isRequired('orderDate') && '*'}</label><input type="date" value={formData.orderDate} onChange={e => setFormData({...formData, orderDate: e.target.value})} required={isRequired('orderDate')} disabled={isProcessing}/></div>
-                <div className="form-group"><label>Quantity Ordered {isRequired('quantityOrdered') && '*'}</label><input type="number" value={formData.quantityOrdered} onChange={e => setFormData({...formData, quantityOrdered: Number(e.target.value)})} required={isRequired('quantityOrdered')} disabled={isProcessing}/></div>
-                <div className="form-group"><label>Items Arrived (Initial Total)</label><input type="number" value={formData.itemsArrived} onChange={e => setFormData({...formData, itemsArrived: Number(e.target.value)})} disabled={isProcessing}/></div>
+                <div className="form-group">
+                  <label>Item Name {isRequired('itemName') && '*'} {!isFieldEditable('itemName') && <span style={{fontSize:'0.75rem', color:'#ef4444'}}><Lock size={12}/> Locked</span>}</label>
+                  <input type="text" value={formData.itemName} onChange={e => setFormData({...formData, itemName: e.target.value})} required={isRequired('itemName')} disabled={!isFieldEditable('itemName')} style={{ backgroundColor: !isFieldEditable('itemName') ? '#f1f5f9' : 'white', cursor: !isFieldEditable('itemName') ? 'not-allowed' : 'text' }}/>
+                </div>
+                <div className="form-group">
+                  <label>Model / Part # {isRequired('modelPart') && '*'} {!isFieldEditable('modelPart') && <span style={{fontSize:'0.75rem', color:'#ef4444'}}><Lock size={12}/> Locked</span>}</label>
+                  <input type="text" value={formData.modelPart} onChange={e => setFormData({...formData, modelPart: e.target.value})} required={isRequired('modelPart')} disabled={!isFieldEditable('modelPart')} style={{ backgroundColor: !isFieldEditable('modelPart') ? '#f1f5f9' : 'white', cursor: !isFieldEditable('modelPart') ? 'not-allowed' : 'text' }}/>
+                </div>
+                <div className="form-group">
+                  <label style={{ color: 'var(--primary-color)', fontWeight: 'bold' }}>Serial # {isRequired('serial') && '*'} {!isFieldEditable('serial') && <span style={{fontSize:'0.75rem', color:'#ef4444'}}><Lock size={12}/> Locked</span>}</label>
+                  <input type="text" value={formData.serial} onChange={e => setFormData({...formData, serial: e.target.value})} required={isRequired('serial')} disabled={!isFieldEditable('serial')} style={{ backgroundColor: !isFieldEditable('serial') ? '#f1f5f9' : 'white', cursor: !isFieldEditable('serial') ? 'not-allowed' : 'text' }}/>
+                </div>
+                <div className="form-group">
+                  <label style={{ color: 'var(--primary-color)', fontWeight: 'bold' }}>PO # {isRequired('po') && '*'} {!isFieldEditable('po') && <span style={{fontSize:'0.75rem', color:'#ef4444'}}><Lock size={12}/> Locked</span>}</label>
+                  <input type="text" value={formData.po} onChange={e => setFormData({...formData, po: e.target.value})} required={isRequired('po')} disabled={!isFieldEditable('po')} style={{ backgroundColor: !isFieldEditable('po') ? '#f1f5f9' : 'white', cursor: !isFieldEditable('po') ? 'not-allowed' : 'text' }}/>
+                </div>
+                <div className="form-group">
+                  <label>Supply Company {isRequired('supplyCompany') && '*'} {!isFieldEditable('supplyCompany') && <span style={{fontSize:'0.75rem', color:'#ef4444'}}><Lock size={12}/> Locked</span>}</label>
+                  <div style={{ pointerEvents: !isFieldEditable('supplyCompany') ? 'none' : 'auto', opacity: !isFieldEditable('supplyCompany') ? 0.6 : 1 }}>
+                    <SearchableSelect 
+                      options={supplyCompanies.map(c => ({ id: String(c.label), label: String(c.label) }))}
+                      value={formData.supplyCompany} 
+                      onChange={(id) => setFormData({...formData, supplyCompany: id})} 
+                      placeholder="-- Select Company --"
+                      required={isRequired('supplyCompany')}
+                    />
+                  </div>
+                </div>
+                <div className="form-group">
+                  <label>Order Date {isRequired('orderDate') && '*'} {!isFieldEditable('orderDate') && <span style={{fontSize:'0.75rem', color:'#ef4444'}}><Lock size={12}/> Locked</span>}</label>
+                  <input type="date" value={formData.orderDate} onChange={e => setFormData({...formData, orderDate: e.target.value})} required={isRequired('orderDate')} disabled={!isFieldEditable('orderDate')} style={{ backgroundColor: !isFieldEditable('orderDate') ? '#f1f5f9' : 'white', cursor: !isFieldEditable('orderDate') ? 'not-allowed' : 'text' }}/>
+                </div>
+                <div className="form-group">
+                  <label>Quantity Ordered {isRequired('quantityOrdered') && '*'} {!isFieldEditable('quantityOrdered') && <span style={{fontSize:'0.75rem', color:'#ef4444'}}><Lock size={12}/> Locked</span>}</label>
+                  <input type="number" value={formData.quantityOrdered} onChange={e => setFormData({...formData, quantityOrdered: Number(e.target.value)})} required={isRequired('quantityOrdered')} disabled={!isFieldEditable('quantityOrdered')} style={{ backgroundColor: !isFieldEditable('quantityOrdered') ? '#f1f5f9' : 'white', cursor: !isFieldEditable('quantityOrdered') ? 'not-allowed' : 'text' }}/>
+                </div>
+                <div className="form-group">
+                  <label>Items Arrived (Initial Total) {!isFieldEditable('itemsArrived') && <span style={{fontSize:'0.75rem', color:'#ef4444'}}><Lock size={12}/> Locked</span>}</label>
+                  <input type="number" value={formData.itemsArrived} onChange={e => setFormData({...formData, itemsArrived: Number(e.target.value)})} disabled={!isFieldEditable('itemsArrived')} style={{ backgroundColor: !isFieldEditable('itemsArrived') ? '#f1f5f9' : 'white', cursor: !isFieldEditable('itemsArrived') ? 'not-allowed' : 'text' }}/>
+                </div>
               </div>
             </form>
 
