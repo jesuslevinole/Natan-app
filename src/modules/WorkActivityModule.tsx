@@ -9,7 +9,6 @@ import { getTodayString, formatDateDisplay, getStatusStyles, formatSeq } from '.
 import { AuditLogger } from '../utils/logger';
 import { useAuth, RequirePermission } from '../hooks/useAuth';
 
-// 🔥 TRUCO DE TYPESCRIPT: Extendemos dinámicamente los tipos para no tocar 'types.ts'
 type ExtendedJobFormData = JobFormData & { madeBy?: string };
 type ExtendedJobOrder = JobOrder & { madeBy?: string };
 
@@ -44,7 +43,7 @@ export const WorkActivity: React.FC = () => {
     { name: 'createdAt', label: 'Registration Date' },
     { name: 'destination', label: 'Address' },
     { name: 'jobOrder', label: 'Ordered by' },
-    { name: 'madeBy', label: 'Made by' }, // 🔥 CAMBIADO
+    { name: 'madeBy', label: 'Made by' },
     { name: 'workFinish', label: 'Work Finish' },
     { name: 'description', label: 'Description' },
     { name: 'pendingWork', label: 'Pending Work' },
@@ -63,7 +62,7 @@ export const WorkActivity: React.FC = () => {
 
   const initialFormState: ExtendedJobFormData = {
     jobOrder: authorName, 
-    madeBy: '', // 🔥 INICIALIZACIÓN
+    madeBy: authorName, // 🔥 Por defecto al crear, se pone al usuario actual
     destination: '', 
     description: '', 
     workFinish: 'NO', 
@@ -153,7 +152,7 @@ export const WorkActivity: React.FC = () => {
       setEditingJob(job.id!);
       setFormData({ 
         jobOrder: job.jobOrder, 
-        madeBy: job.madeBy || '', // 🔥 CARGA EL VALOR
+        madeBy: authorName, // 🔥 REQUERIMIENTO: Al editar, auto-asigna al usuario que hizo clic en editar
         destination: job.destination, 
         description: job.description, 
         workFinish: job.workFinish, 
@@ -166,7 +165,7 @@ export const WorkActivity: React.FC = () => {
       setFormProducts(querySnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })) as JobProduct[]);
     } else {
       setEditingJob(null);
-      setFormData({ ...initialFormState, jobOrder: authorName, createdAt: getTodayString() });
+      setFormData({ ...initialFormState, jobOrder: authorName, madeBy: authorName, createdAt: getTodayString() });
       setFormProducts([]);
     }
     setIsJobModalOpen(true);
@@ -313,22 +312,15 @@ export const WorkActivity: React.FC = () => {
     setFormProducts(formProducts.filter((_, i) => i !== index));
   };
 
+  // 🔥 REQUERIMIENTO: Todos pueden ver todo (Sin filtro restrictivo por rol)
   const displayedOrders = (showHistoric 
     ? orders.filter(o => o.workFinish === 'YES') 
     : orders.filter(o => o.workFinish === 'NO')
   ).filter(order => {
-    const isAdmin = currentUser?.roleId === 'admin_role';
-    const isMadeByMe = order.madeBy === authorName; // 🔥 CAMBIADO
-    const isCreatedByMe = order.jobOrder === authorName;
-    
-    if (!isAdmin && !isMadeByMe && !isCreatedByMe) {
-      return false; 
-    }
-
     const searchLower = searchTerm.toLowerCase();
     return (
       String(order.jobOrder || '').toLowerCase().includes(searchLower) ||
-      String(order.madeBy || '').toLowerCase().includes(searchLower) || // 🔥 CAMBIADO
+      String(order.madeBy || '').toLowerCase().includes(searchLower) ||
       String(order.destination || '').toLowerCase().includes(searchLower) ||
       String(order.description || '').toLowerCase().includes(searchLower) ||
       String(order.pendingWork || '').toLowerCase().includes(searchLower) ||
@@ -372,7 +364,7 @@ export const WorkActivity: React.FC = () => {
               <th>Registration Date</th>
               <th>Schedule</th>
               <th>Ordered by</th>
-              <th>Made by</th> {/* 🔥 CAMBIADO */}
+              <th>Made by</th>
               <th>Address</th>
               <th>Description</th>
               <th style={{ textAlign: 'center' }}>Work Finish</th>
@@ -609,7 +601,7 @@ export const WorkActivity: React.FC = () => {
                 </div>
 
                 <div className="form-group">
-                  <label>Ordered by {isJobReq('jobOrder') && '*'} {!isJobFieldEditable('jobOrder') && <span style={{fontSize:'0.75rem', color:'#ef4444'}}><Lock size={12}/> Locked</span>}</label>
+                  <label>Ordered by {isJobReq('jobOrder') && '*'}</label>
                   <input 
                     type="text" 
                     value={formData.jobOrder} 
@@ -619,7 +611,6 @@ export const WorkActivity: React.FC = () => {
                   />
                 </div>
 
-                {/* 🔥 SELECTOR MODIFICADO: Made by */}
                 <div className="form-group">
                   <label>Made by {isJobReq('madeBy') && '*'} {!isJobFieldEditable('madeBy') && <span style={{fontSize:'0.75rem', color:'#ef4444'}}><Lock size={12}/> Locked</span>}</label>
                   <select 
