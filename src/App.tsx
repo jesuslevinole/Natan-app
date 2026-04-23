@@ -76,7 +76,7 @@ function AppShell() {
                 <ShieldCheck size={20}/> <span>Manage Roles</span>
               </li>
               <li className={activeModule === 'audit_logs' ? 'active' : ''} onClick={() => handleModuleChange('audit_logs')}>
-                <ShieldAlert size={20}/> <span>Audit Logs</span>
+                <ShieldAlert size={20}/> <span>Activity History</span>
               </li>
             </>
           </RequirePermission>

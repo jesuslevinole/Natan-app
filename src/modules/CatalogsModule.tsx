@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot } from 'firebase/firestore';
+// 🔥 IMPORTAMOS runTransaction PARA EVITAR DUPLICADOS EN CONCURRENCIA
+import { collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, runTransaction } from 'firebase/firestore';
 import { db } from '../firebase'; 
 import { BookOpen, ArrowLeft, Plus, Edit2, Trash2, X } from 'lucide-react';
 import { CatalogSchema } from '../types';
 import { SeqBadge, SearchBar } from '../components/SharedUI';
 import { catalogsConfig } from '../utils/helpers';
-
 
 export const CatalogsModule: React.FC = () => {
   const [selectedCatalog, setSelectedCatalog] = useState<CatalogSchema | null>(null);
@@ -14,16 +14,24 @@ export const CatalogsModule: React.FC = () => {
   const [modalState, setModalState] = useState<'closed' | 'form' | 'detail'>('closed');
   const [currentRecord, setCurrentRecord] = useState<any | null>(null);
   const [formData, setFormData] = useState<any>({});
+  const [isProcessing, setIsProcessing] = useState<boolean>(false); // Bloqueo de botón
 
   // Suscripción en tiempo real a la colección dinámica
   useEffect(() => {
     if (!selectedCatalog) return;
     const unsubscribe = onSnapshot(collection(db, `catalog_${selectedCatalog.id}`), (snapshot) => {
       const fetched = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as any));
-      fetched.sort((a: any, b: any) => new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime());
-      // Inyección del consecutivo visual basado en el índice o sec guardado
-      const mapped = fetched.map((item: any, idx: number) => ({ ...item, visualSeq: item.seq || (idx + 1) }));
-      mapped.reverse(); 
+      
+      // 🔥 CORRECCIÓN: Ordenamiento descendente ESTRICTO (El más nuevo arriba)
+      fetched.sort((a: any, b: any) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+      
+      const totalRecords = fetched.length;
+      // Inyección del consecutivo visual basado en la base de datos
+      const mapped = fetched.map((item: any, idx: number) => ({ 
+        ...item, 
+        visualSeq: item.seq || (totalRecords - idx) 
+      }));
+      
       setRecords(mapped);
     });
     return () => unsubscribe();
@@ -31,14 +39,33 @@ export const CatalogsModule: React.FC = () => {
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!selectedCatalog) return;
+    setIsProcessing(true); // Bloqueo de doble clic
+    
     try {
-      const colName = `catalog_${selectedCatalog!.id}`;
+      const colName = `catalog_${selectedCatalog.id}`;
+      
       if (currentRecord) {
         // Actualización de registro existente
         await updateDoc(doc(db, colName, currentRecord.id), formData);
       } else {
-        // Captura automática de consecutivo y creación
-        const nextSeq = records.length > 0 ? Math.max(...records.map(r => r.visualSeq || 0)) + 1 : 1;
+        // 🔥 MODO CREACIÓN CON TRANSACCIÓN ATÓMICA (Cero duplicados en concurrencia)
+        const counterRef = doc(db, 'counters', `seq_${colName}`);
+        
+        const nextSeq = await runTransaction(db, async (transaction) => {
+          const counterDoc = await transaction.get(counterRef);
+          let newSeq = 1;
+          
+          if (counterDoc.exists()) {
+            newSeq = (counterDoc.data().value || 0) + 1;
+            transaction.update(counterRef, { value: newSeq });
+          } else {
+            transaction.set(counterRef, { value: 1 });
+          }
+          return newSeq;
+        });
+
+        // Guardamos asegurando el consecutivo otorgado por el servidor
         await addDoc(collection(db, colName), { 
           ...formData, 
           seq: nextSeq, 
@@ -48,14 +75,16 @@ export const CatalogsModule: React.FC = () => {
       setModalState('closed');
     } catch (error) { 
       console.error("Error Saving Record:", error); 
-      alert('Error saving record.'); 
+      alert('Error saving record. Check console for details.'); 
+    } finally {
+      setIsProcessing(false);
     }
   };
 
-  const handleDelete = async (id: string) => {
+  const handleDelete = async (id: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
     if (window.confirm('Delete this record?')) {
       await deleteDoc(doc(db, `catalog_${selectedCatalog!.id}`, id));
-      setModalState('closed');
     }
   };
 
@@ -122,9 +151,10 @@ export const CatalogsModule: React.FC = () => {
         <table className="responsive-table">
           <thead>
             <tr>
+              {/* 🔥 COLUMNA DE ACCIÓN REUBICADA AL PRINCIPIO */}
+              <th style={{ textAlign: 'center', width: '90px' }}>Actions</th>
               <th>#</th>
               {selectedCatalog.fields.map(f => (<th key={f.name}>{f.label}</th>))}
-              <th style={{ textAlign: 'center' }}>Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -137,27 +167,33 @@ export const CatalogsModule: React.FC = () => {
             )}
             {filteredRecords.map((reg) => (
               <tr key={reg.id}>
+                {/* 🔥 ACCIONES A LA IZQUIERDA CON PREVENCIÓN DE CLIC */}
+                <td data-label="Actions" style={{ textAlign: 'center' }}>
+                  <div className="action-btns" style={{ display: 'flex', justifyContent: 'center', gap: '10px' }}>
+                    <button 
+                      className="icon-btn edit" 
+                      onClick={(e) => { e.stopPropagation(); setCurrentRecord(reg); setFormData(reg); setModalState('form'); }}
+                    >
+                      <Edit2 size={16}/>
+                    </button>
+                    <button 
+                      className="icon-btn delete" 
+                      onClick={(e) => handleDelete(reg.id, e)}
+                    >
+                      <Trash2 size={16}/>
+                    </button>
+                  </div>
+                </td>
+
                 {/* Consecutivo automático */}
                 <td data-label="#"><SeqBadge seq={reg.visualSeq} /></td>
                 
-                {/* Iteración de campos dinámicos (ahora solo 'Description') */}
+                {/* Iteración de campos dinámicos */}
                 {selectedCatalog.fields.map(f => (
                   <td key={f.name} data-label={f.label} style={{ fontWeight: f.name === 'description' ? 'bold' : 'normal' }}>
                     {reg[f.name] || '-'}
                   </td>
                 ))}
-                
-                {/* Acciones */}
-                <td data-label="Actions" style={{ textAlign: 'center' }}>
-                  <div className="action-btns" style={{ display: 'flex', justifyContent: 'center', gap: '10px' }}>
-                    <button className="icon-btn edit" onClick={() => { setCurrentRecord(reg); setFormData(reg); setModalState('form'); }}>
-                      <Edit2 size={16}/>
-                    </button>
-                    <button className="icon-btn delete" onClick={() => handleDelete(reg.id)}>
-                      <Trash2 size={16}/>
-                    </button>
-                  </div>
-                </td>
               </tr>
             ))}
           </tbody>
@@ -171,8 +207,12 @@ export const CatalogsModule: React.FC = () => {
             <div className="modal-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <h3 style={{ margin: 0 }}>{currentRecord ? 'Edit Record' : 'New Record'}</h3>
               <div style={{ display: 'flex', gap: '10px' }}>
-                {modalState === 'form' && <button className="action btn-primary" onClick={handleSave}>Save</button>}
-                <button className="close-modal icon-btn" onClick={() => setModalState('closed')}>
+                {modalState === 'form' && (
+                  <button className="action btn-primary" onClick={handleSave} disabled={isProcessing}>
+                    {isProcessing ? 'Saving...' : 'Save'}
+                  </button>
+                )}
+                <button className="close-modal icon-btn" onClick={() => setModalState('closed')} disabled={isProcessing}>
                   <X size={24}/>
                 </button>
               </div>
@@ -193,6 +233,7 @@ export const CatalogsModule: React.FC = () => {
                         value={formData[field.name] || ''} 
                         onChange={(e) => setFormData({...formData, [field.name]: e.target.value})} 
                         required={field.required}
+                        disabled={isProcessing}
                         style={{ padding: '10px', borderRadius: '6px', border: '1px solid var(--border-color)', width: '100%' }}
                       />
                     </div>

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc } from 'firebase/firestore';
+// 🔥 IMPORTAMOS runTransaction PARA EVITAR DUPLICADOS EN CONCURRENCIA
+import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, runTransaction } from 'firebase/firestore';
 import { db } from '../firebase'; 
 import { PackageSearch, Plus, X, Settings, Edit2, Trash2, Maximize2 } from 'lucide-react';
 import { ItemEntranceRecord, JobProduct, JobOrder, ItemEntranceFormData } from '../types';
@@ -26,6 +27,7 @@ export const ItemEntrance: React.FC = () => {
   const [isConfigOpen, setIsConfigOpen] = useState<boolean>(false);
   const [isExpandHistoryOpen, setIsExpandHistoryOpen] = useState<boolean>(false);
   const [historySearchTerm, setHistorySearchTerm] = useState('');
+  const [isProcessing, setIsProcessing] = useState<boolean>(false); // Bloqueo de botón
   
   const [editingId, setEditingId] = useState<string | null>(null);
   
@@ -55,9 +57,17 @@ export const ItemEntrance: React.FC = () => {
   const fetchItems = async () => {
     const data = await getDocs(collectionRef);
     const fetched = data.docs.map(doc => ({ ...doc.data(), id: doc.id } as any));
-    fetched.sort((a: any, b: any) => new Date(a.createdAt || a.date).getTime() - new Date(b.createdAt || b.date).getTime());
-    const mapped = fetched.map((item: any, idx: number) => ({ ...item, visualSeq: item.seq || (idx + 1) }));
-    mapped.reverse(); 
+    
+    // 🔥 CORRECCIÓN 1: Ordenamiento descendente ESTRICTO (El más nuevo arriba)
+    fetched.sort((a: any, b: any) => new Date(b.createdAt || b.date).getTime() - new Date(a.createdAt || a.date).getTime());
+    
+    const totalItems = fetched.length;
+    // Inyectamos visualSeq para compatibilidad con data anterior
+    const mapped = fetched.map((item: any, idx: number) => ({ 
+      ...item, 
+      visualSeq: item.seq || (totalItems - idx) 
+    }));
+    
     setItems(mapped as ItemEntranceRecord[]);
 
     const prodData = await getDocs(collection(db, "jobProducts"));
@@ -110,18 +120,45 @@ export const ItemEntrance: React.FC = () => {
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
+    setIsProcessing(true); // Bloquear botón mientras guarda
     try {
       if (editingId) {
+        // MODO EDICIÓN
         await updateDoc(doc(db, "itemEntrance", editingId), { ...formData });
         AuditLogger.logUpdate('Item Entrance', authorName, editingId, formData);
       } else {
-        const nextSeq = items.length > 0 ? Math.max(...items.map(i => i.visualSeq || 0)) + 1 : 1;
-        const docRef = await addDoc(collectionRef, { ...formData, seq: nextSeq, createdAt: new Date().toISOString() });
+        // 🔥 CORRECCIÓN 2: MODO CREACIÓN CON TRANSACCIÓN ATÓMICA (Cero duplicados)
+        const counterRef = doc(db, 'counters', 'itemEntranceSeq');
+        
+        const nextSeq = await runTransaction(db, async (transaction) => {
+          const counterDoc = await transaction.get(counterRef);
+          let newSeq = 1;
+          
+          if (counterDoc.exists()) {
+            newSeq = (counterDoc.data().value || 0) + 1;
+            transaction.update(counterRef, { value: newSeq });
+          } else {
+            transaction.set(counterRef, { value: 1 });
+          }
+          return newSeq;
+        });
+
+        // Guardamos usando el consecutivo seguro del servidor
+        const docRef = await addDoc(collectionRef, { 
+          ...formData, 
+          seq: nextSeq, 
+          createdAt: new Date().toISOString() 
+        });
         AuditLogger.logCreate('Item Entrance', authorName, docRef.id, formData);
       }
-      fetchItems();
+      await fetchItems();
       setIsModalOpen(false);
-    } catch (error) { console.error("Error saving data", error); }
+    } catch (error) { 
+      console.error("Error saving data", error); 
+      alert("Error saving record.");
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   const handleDeleteEntrance = async (id: string, e?: React.MouseEvent) => {
@@ -264,16 +301,18 @@ export const ItemEntrance: React.FC = () => {
                 <h3>{editingId ? "Edit Entrance" : "New Entrance"}</h3>
                 <div style={{ display: 'flex', gap: '10px' }}>
                   <button type="button" className="icon-btn" onClick={() => setIsConfigOpen(true)} title="Configure Required Fields"><Settings size={20}/></button>
-                  <button type="submit" className="action btn-primary">Save Changes</button>
+                  <button type="submit" className="action btn-primary" disabled={isProcessing}>
+                    {isProcessing ? 'Saving...' : 'Save Changes'}
+                  </button>
                   <button type="button" className="close-modal" onClick={() => setIsModalOpen(false)}><X size={24}/></button>
                 </div>
               </div>
               <div className="form-grid">
-                <div className="form-group"><label>Date (Registration) {isRequired('date') && '*'}</label><input type="date" value={formData.date} onChange={e => setFormData({...formData, date: e.target.value})} required={isRequired('date')} /></div>
-                <div className="form-group"><label>Item Name {isRequired('itemName') && '*'}</label><input type="text" value={formData.itemName} onChange={e => setFormData({...formData, itemName: e.target.value})} required={isRequired('itemName')} /></div>
-                <div className="form-group"><label>Model / Part # {isRequired('modelPart') && '*'}</label><input type="text" value={formData.modelPart} onChange={e => setFormData({...formData, modelPart: e.target.value})} required={isRequired('modelPart')} /></div>
-                <div className="form-group"><label style={{ color: 'var(--primary-color)', fontWeight: 'bold' }}>Serial # {isRequired('serial') && '*'}</label><input type="text" value={formData.serial} onChange={e => setFormData({...formData, serial: e.target.value})} required={isRequired('serial')} /></div>
-                <div className="form-group"><label style={{ color: 'var(--primary-color)', fontWeight: 'bold' }}>PO # {isRequired('po') && '*'}</label><input type="text" value={formData.po} onChange={e => setFormData({...formData, po: e.target.value})} required={isRequired('po')} /></div>
+                <div className="form-group"><label>Date (Registration) {isRequired('date') && '*'}</label><input type="date" value={formData.date} onChange={e => setFormData({...formData, date: e.target.value})} required={isRequired('date')} disabled={isProcessing}/></div>
+                <div className="form-group"><label>Item Name {isRequired('itemName') && '*'}</label><input type="text" value={formData.itemName} onChange={e => setFormData({...formData, itemName: e.target.value})} required={isRequired('itemName')} disabled={isProcessing}/></div>
+                <div className="form-group"><label>Model / Part # {isRequired('modelPart') && '*'}</label><input type="text" value={formData.modelPart} onChange={e => setFormData({...formData, modelPart: e.target.value})} required={isRequired('modelPart')} disabled={isProcessing}/></div>
+                <div className="form-group"><label style={{ color: 'var(--primary-color)', fontWeight: 'bold' }}>Serial # {isRequired('serial') && '*'}</label><input type="text" value={formData.serial} onChange={e => setFormData({...formData, serial: e.target.value})} required={isRequired('serial')} disabled={isProcessing}/></div>
+                <div className="form-group"><label style={{ color: 'var(--primary-color)', fontWeight: 'bold' }}>PO # {isRequired('po') && '*'}</label><input type="text" value={formData.po} onChange={e => setFormData({...formData, po: e.target.value})} required={isRequired('po')} disabled={isProcessing}/></div>
                 <div className="form-group">
                   <label>Supply Company {isRequired('supplyCompany') && '*'}</label>
                   <SearchableSelect 
@@ -284,9 +323,9 @@ export const ItemEntrance: React.FC = () => {
                     required={isRequired('supplyCompany')}
                   />
                 </div>
-                <div className="form-group"><label>Order Date {isRequired('orderDate') && '*'}</label><input type="date" value={formData.orderDate} onChange={e => setFormData({...formData, orderDate: e.target.value})} required={isRequired('orderDate')} /></div>
-                <div className="form-group"><label>Quantity Ordered {isRequired('quantityOrdered') && '*'}</label><input type="number" value={formData.quantityOrdered} onChange={e => setFormData({...formData, quantityOrdered: Number(e.target.value)})} required={isRequired('quantityOrdered')} /></div>
-                <div className="form-group"><label>Items Arrived (Initial Total)</label><input type="number" value={formData.itemsArrived} onChange={e => setFormData({...formData, itemsArrived: Number(e.target.value)})} /></div>
+                <div className="form-group"><label>Order Date {isRequired('orderDate') && '*'}</label><input type="date" value={formData.orderDate} onChange={e => setFormData({...formData, orderDate: e.target.value})} required={isRequired('orderDate')} disabled={isProcessing}/></div>
+                <div className="form-group"><label>Quantity Ordered {isRequired('quantityOrdered') && '*'}</label><input type="number" value={formData.quantityOrdered} onChange={e => setFormData({...formData, quantityOrdered: Number(e.target.value)})} required={isRequired('quantityOrdered')} disabled={isProcessing}/></div>
+                <div className="form-group"><label>Items Arrived (Initial Total)</label><input type="number" value={formData.itemsArrived} onChange={e => setFormData({...formData, itemsArrived: Number(e.target.value)})} disabled={isProcessing}/></div>
               </div>
             </form>
 
@@ -307,7 +346,7 @@ export const ItemEntrance: React.FC = () => {
                       <tr>
                         <th>Date</th>
                         <th>Ordered By</th>
-                        <th>Destination</th>
+                        <th>Address</th>
                         <th style={{ textAlign: 'center' }}>Qty Used</th>
                       </tr>
                     </thead>
@@ -317,7 +356,7 @@ export const ItemEntrance: React.FC = () => {
                         <tr key={i}>
                           <td data-label="Date">{formatDateDisplay(h.date)}</td>
                           <td data-label="Ordered By" style={{ fontWeight: 'bold' }}>{h.jobOrder}</td>
-                          <td data-label="Destination">{h.destination}</td>
+                          <td data-label="Address">{h.destination}</td>
                           <td data-label="Qty Used" style={{ textAlign: 'center', fontWeight: 'bold', color: '#ef4444' }}>-{h.quantity}</td>
                         </tr>
                       ))}
@@ -346,7 +385,7 @@ export const ItemEntrance: React.FC = () => {
                   <tr>
                     <th>Date</th>
                     <th>Ordered By</th>
-                    <th>Destination</th>
+                    <th>Address</th>
                     <th style={{ textAlign: 'center' }}>Qty Used</th>
                   </tr>
                 </thead>
@@ -356,7 +395,7 @@ export const ItemEntrance: React.FC = () => {
                     <tr key={i}>
                       <td data-label="Date">{formatDateDisplay(h.date)}</td>
                       <td data-label="Ordered By" style={{ fontWeight: 'bold' }}>{h.jobOrder}</td>
-                      <td data-label="Destination">{h.destination}</td>
+                      <td data-label="Address">{h.destination}</td>
                       <td data-label="Qty Used" style={{ textAlign: 'center', fontWeight: 'bold', color: '#ef4444' }}>-{h.quantity}</td>
                     </tr>
                   ))}

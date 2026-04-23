@@ -45,7 +45,7 @@ export const LogsDashboard: React.FC = () => {
     <div className="card catalog-manager-anim" style={{ maxWidth: '1400px' }}>
       <div className="card-header" style={{ flexWrap: 'wrap', gap: '15px' }}>
         <div className="card-header-text" style={{ flex: 1, minWidth: '200px' }}>
-          <h2 style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><Activity size={28}/> System Audit Logs</h2>
+          <h2 style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><Activity size={28}/> System Activity History</h2>
           <p>Traceability and security monitoring panel.</p>
         </div>
         <div style={{ flex: 2, display: 'flex', justifyContent: 'center', minWidth: '250px' }}>

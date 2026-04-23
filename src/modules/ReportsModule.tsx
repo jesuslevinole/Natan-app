@@ -3,13 +3,14 @@ import { collection, getDocs } from 'firebase/firestore';
 import { db } from '../firebase'; 
 import { BarChart2, Filter, Award, Activity, Wrench, MapPin } from 'lucide-react';
 import { JobOrder, JobProduct, SystemUser } from '../types';
-// 🔥 IMPORTAMOS DestinationSearch
-import { DestinationSearch } from '../components/SharedUI';
+import { SearchableSelect } from '../components/SharedUI';
+import { useCatalogOptions } from '../hooks/useAppHooks';
 import { formatDateDisplay } from '../utils/helpers';
 
 export const ReportsModule: React.FC = () => {
   const [orders, setOrders] = useState<JobOrder[]>([]);
   const [allProducts, setAllProducts] = useState<JobProduct[]>([]);
+  const destinations = useCatalogOptions('catalog_destinations', 'description', 'property_name');
   
   const [accountUsers, setAccountUsers] = useState<{name: string, email: string}[]>([]);
   
@@ -109,6 +110,11 @@ export const ReportsModule: React.FC = () => {
   filteredOrders.forEach(o => { workerCounts[o.jobOrder] = (workerCounts[o.jobOrder] || 0) + 1; });
   const topWorkerEntry = Object.entries(workerCounts).sort((a, b) => b[1] - a[1])[0];
 
+  const getDestLabel = (val: string) => {
+    const d = destinations.find(x => x.value === val);
+    return d ? d.label : val;
+  };
+
   return (
     <div className="card catalog-manager-anim" style={{ maxWidth: '1400px' }}>
       <style>{`
@@ -142,12 +148,15 @@ export const ReportsModule: React.FC = () => {
           <div className="form-group"><label>Start Date</label><input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} style={{ padding: '8px' }}/></div>
           <div className="form-group"><label>End Date</label><input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} style={{ padding: '8px' }}/></div>
           <div className="form-group">
-            <label>Destination (Apt)</label>
-            {/* 🔥 REEMPLAZO POR BUSCADOR NATIVO DE DESTINOS */}
-            <DestinationSearch 
-              value={selectedDest} 
-              onSelect={setSelectedDest} 
-              placeholder="-- Select Apt --"
+            {/* 🔥 CAMBIO VISUAL: Destination -> Address */}
+            <label>Address</label>
+            <SearchableSelect 
+              theme="dark"
+              options={[{id: '', label: ''}, ...destinations.map(d => ({
+                id: String(d.value), 
+                label: String(d.label)
+              }))]}
+              value={selectedDest} onChange={setSelectedDest} placeholder="-- Select Address --"
             />
           </div>
           <div className="form-group">
@@ -183,9 +192,9 @@ export const ReportsModule: React.FC = () => {
         <div style={{ backgroundColor: '#f0fdf4', padding: '20px', borderRadius: '16px', border: '1px solid #bbf7d0', display: 'flex', alignItems: 'center', gap: '15px' }}>
           <div style={{ backgroundColor: '#22c55e', color: 'white', padding: '12px', borderRadius: '12px' }}><MapPin size={24}/></div>
           <div>
-            <p style={{ margin: 0, fontSize: '0.85rem', color: '#64748b', fontWeight: 'bold', textTransform: 'uppercase' }}>Top Apt.</p>
-            {/* 🔥 OPTIMIZACIÓN EN MEMORIA */}
-            <h3 style={{ margin: 0, fontSize: '1.1rem', color: '#1e293b', lineHeight: '1.2' }}>{mostWorkedApt ? mostWorkedApt.dest : '-'}</h3>
+            {/* 🔥 CAMBIO VISUAL: Top Apt. -> Top Address */}
+            <p style={{ margin: 0, fontSize: '0.85rem', color: '#64748b', fontWeight: 'bold', textTransform: 'uppercase' }}>Top Address</p>
+            <h3 style={{ margin: 0, fontSize: '1.1rem', color: '#1e293b', lineHeight: '1.2' }}>{mostWorkedApt ? getDestLabel(mostWorkedApt.dest) : '-'}</h3>
           </div>
         </div>
         <div style={{ backgroundColor: '#fff7ed', padding: '20px', borderRadius: '16px', border: '1px solid #fed7aa', display: 'flex', alignItems: 'center', gap: '15px' }}>
@@ -200,17 +209,17 @@ export const ReportsModule: React.FC = () => {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))', gap: '30px', marginBottom: '30px' }}>
         <div style={{ border: '1px solid #e2e8f0', borderRadius: '12px', overflow: 'hidden' }}>
           <div style={{ backgroundColor: '#f8fafc', padding: '15px 20px', borderBottom: '1px solid #e2e8f0' }}>
-            <h4 style={{ margin: 0, color: '#334155' }}>Works per Apartment</h4>
+            <h4 style={{ margin: 0, color: '#334155' }}>Works per Address</h4>
           </div>
           <div className="table-container" style={{ border: 'none', borderRadius: 0, maxHeight: '350px', overflowY: 'auto' }}>
             <table className="responsive-table">
-              <thead><tr><th>Destination (Apt)</th><th style={{ textAlign: 'center' }}>Total Interventions</th></tr></thead>
+              {/* 🔥 CAMBIO VISUAL: Destination (Apt) -> Address */}
+              <thead><tr><th>Address</th><th style={{ textAlign: 'center' }}>Total Interventions</th></tr></thead>
               <tbody>
                 {aptList.length === 0 && <tr><td colSpan={2} className="empty-state">No data available.</td></tr>}
                 {aptList.map((item, i) => (
                   <tr key={i}>
-                    {/* 🔥 OPTIMIZACIÓN EN MEMORIA */}
-                    <td data-label="Apt" style={{ fontWeight: 'bold' }}>{item.dest}</td>
+                    <td data-label="Address" style={{ fontWeight: 'bold' }}>{getDestLabel(item.dest)}</td>
                     <td data-label="Total" style={{ textAlign: 'center' }}><span style={{ backgroundColor: '#eff6ff', color: '#2563eb', padding: '4px 12px', borderRadius: '12px', fontWeight: 'bold' }}>{item.count}</span></td>
                   </tr>
                 ))}
@@ -220,17 +229,17 @@ export const ReportsModule: React.FC = () => {
         </div>
         <div style={{ border: '1px solid #e2e8f0', borderRadius: '12px', overflow: 'hidden' }}>
           <div style={{ backgroundColor: '#f8fafc', padding: '15px 20px', borderBottom: '1px solid #e2e8f0' }}>
-            <h4 style={{ margin: 0, color: '#334155' }}>Repeated Tasks per Apartment</h4>
+            <h4 style={{ margin: 0, color: '#334155' }}>Repeated Tasks per Address</h4>
           </div>
           <div className="table-container" style={{ border: 'none', borderRadius: 0, maxHeight: '350px', overflowY: 'auto' }}>
             <table className="responsive-table">
-              <thead><tr><th>Destination</th><th>Description (Task)</th><th style={{ textAlign: 'center' }}>Times Done</th></tr></thead>
+              {/* 🔥 CAMBIO VISUAL: Destination -> Address */}
+              <thead><tr><th>Address</th><th>Description (Task)</th><th style={{ textAlign: 'center' }}>Times Done</th></tr></thead>
               <tbody>
                 {repeatedList.length === 0 && <tr><td colSpan={3} className="empty-state">No data available.</td></tr>}
                 {repeatedList.map((item, i) => (
                   <tr key={i}>
-                    {/* 🔥 OPTIMIZACIÓN EN MEMORIA */}
-                    <td data-label="Apt">{item.dest}</td>
+                    <td data-label="Address">{getDestLabel(item.dest)}</td>
                     <td data-label="Desc" style={{ color: '#475569' }}>{item.desc}</td>
                     <td data-label="Times" style={{ textAlign: 'center' }}><span style={{ backgroundColor: item.count > 1 ? '#fef2f2' : '#f0fdf4', color: item.count > 1 ? '#ef4444' : '#22c55e', padding: '4px 12px', borderRadius: '12px', fontWeight: 'bold' }}>{item.count}</span></td>
                   </tr>
@@ -249,15 +258,15 @@ export const ReportsModule: React.FC = () => {
         <div className="table-container" style={{ border: 'none', borderRadius: 0, maxHeight: '450px', overflowY: 'auto' }}>
           <table className="responsive-table">
             <thead>
-              <tr><th>Date</th><th>Apt / Dest</th><th>Account User</th><th>Item Name</th><th>Model #</th><th>Serial #</th><th>PO #</th><th style={{ textAlign: 'center' }}>Qty Installed</th></tr>
+              {/* 🔥 CAMBIO VISUAL: Apt / Dest -> Address */}
+              <tr><th>Date</th><th>Address</th><th>Account User</th><th>Item Name</th><th>Model #</th><th>Serial #</th><th>PO #</th><th style={{ textAlign: 'center' }}>Qty Installed</th></tr>
             </thead>
             <tbody>
               {filteredProductsDetailed.length === 0 && <tr><td colSpan={8} className="empty-state">No products found for current filters.</td></tr>}
               {filteredProductsDetailed.map((p, i) => (
                 <tr key={i}>
                   <td data-label="Date">{formatDateDisplay(p.orderDate)}</td>
-                  {/* 🔥 OPTIMIZACIÓN EN MEMORIA */}
-                  <td data-label="Apt">{p.orderDestination}</td>
+                  <td data-label="Address">{getDestLabel(p.orderDestination)}</td>
                   <td data-label="Account User" style={{ fontWeight: 'bold', color: '#334155' }}>{p.orderWorker}</td>
                   <td data-label="Item" style={{ fontWeight: 'bold' }}>{p.itemName}</td>
                   <td data-label="Model" style={{ color: '#475569' }}>{p.modelPart || '-'}</td>

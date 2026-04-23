@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, query, where } from 'firebase/firestore';
+// 🔥 IMPORTAMOS runTransaction PARA EVITAR DUPLICADOS EN CONCURRENCIA
+import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, query, where, runTransaction } from 'firebase/firestore';
 import { db } from '../firebase'; 
 import { Briefcase, Plus, X, Settings, Edit2, Trash2 } from 'lucide-react';
 import { JobOrder, JobProduct, ItemEntranceRecord, JobFormData, ProductFormData } from '../types';
@@ -25,6 +26,7 @@ export const WorkActivity: React.FC = () => {
   const [isProductModalOpen, setIsProductModalOpen] = useState<boolean>(false);
   const [isJobConfigOpen, setIsJobConfigOpen] = useState<boolean>(false);
   const [isProductConfigOpen, setIsProductConfigOpen] = useState<boolean>(false);
+  const [isProcessing, setIsProcessing] = useState<boolean>(false); // Estado de carga seguro
 
   const [editingJob, setEditingJob] = useState<string | null>(null);
   const [viewingJob, setViewingJob] = useState<JobOrder | null>(null);
@@ -33,7 +35,7 @@ export const WorkActivity: React.FC = () => {
 
   const jobFields = [
     { name: 'createdAt', label: 'Registration Date' },
-    { name: 'destination', label: 'Destination' },
+    { name: 'destination', label: 'Address' },
     { name: 'jobOrder', label: 'Ordered by' },
     { name: 'workFinish', label: 'Work Finish' },
     { name: 'description', label: 'Description' },
@@ -73,9 +75,17 @@ export const WorkActivity: React.FC = () => {
     try {
       const orderData = await getDocs(ordersCollectionRef);
       const fetchedOrders = orderData.docs.map((doc) => ({ ...doc.data(), id: doc.id } as any));
-      fetchedOrders.sort((a: any, b: any) => new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime());
-      const mappedOrders = fetchedOrders.map((o: any, idx: number) => ({ ...o, visualSeq: o.seq || (idx + 1) }));
-      mappedOrders.reverse(); 
+      
+      // 🔥 CORRECCIÓN 1: Ordenamiento descendente ESTRICTO (El más nuevo arriba)
+      fetchedOrders.sort((a: any, b: any) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+      
+      const totalOrders = fetchedOrders.length;
+      // Inyectamos el visualSeq basado en el orden para mantener compatibilidad con data vieja
+      const mappedOrders = fetchedOrders.map((o: any, idx: number) => ({ 
+        ...o, 
+        visualSeq: o.seq || (totalOrders - idx) 
+      }));
+      
       setOrders(mappedOrders as JobOrder[]);
 
       const entranceData = await getDocs(entranceCollectionRef);
@@ -142,14 +152,37 @@ export const WorkActivity: React.FC = () => {
 
   const handleSaveOrder = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    setIsProcessing(true); // Bloqueamos el botón para evitar doble click
     try {
       let savedJobId = editingJob;
+      
       if (editingJob) {
+        // MODO EDICIÓN
         await updateDoc(doc(db, "jobOrders", editingJob), { ...formData });
         AuditLogger.logUpdate('WorkActivity', authorName, editingJob, formData);
       } else {
-        const nextSeq = orders.length > 0 ? Math.max(...orders.map(o => o.visualSeq || 0)) + 1 : 1;
-        const docRef = await addDoc(ordersCollectionRef, { ...formData, createdBy: authorName, seq: nextSeq });
+        // 🔥 CORRECCIÓN 2: MODO CREACIÓN CON TRANSACCIÓN ATÓMICA (Cero duplicados de Consecutivo)
+        const counterRef = doc(db, 'counters', 'jobOrdersSeq');
+        
+        const nextSeq = await runTransaction(db, async (transaction) => {
+          const counterDoc = await transaction.get(counterRef);
+          let newSeq = 1; // Si es el primer registro de la historia
+          
+          if (counterDoc.exists()) {
+            newSeq = (counterDoc.data().value || 0) + 1;
+            transaction.update(counterRef, { value: newSeq });
+          } else {
+            transaction.set(counterRef, { value: 1 });
+          }
+          return newSeq;
+        });
+
+        // Guardamos con el consecutivo asegurado por el servidor
+        const docRef = await addDoc(ordersCollectionRef, { 
+          ...formData, 
+          createdBy: authorName, 
+          seq: nextSeq 
+        });
         savedJobId = docRef.id;
         AuditLogger.logCreate('WorkActivity', authorName, docRef.id, formData);
       }
@@ -157,9 +190,15 @@ export const WorkActivity: React.FC = () => {
       for (const product of formProducts) {
         if (!product.id && savedJobId) await addDoc(productsCollectionRef, { ...product, jobOrderId: savedJobId });
       }
-      fetchData(); 
+      
+      await fetchData(); 
       setIsJobModalOpen(false);
-    } catch (error) { console.error("Error", error); }
+    } catch (error) { 
+      console.error("Error", error); 
+      alert("Error al guardar el registro.");
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   const handleItemEntranceSelection = (selectedId: string) => {
@@ -268,7 +307,7 @@ export const WorkActivity: React.FC = () => {
               <th>#</th>
               <th>Registration Date</th>
               <th>Ordered by</th>
-              <th>Destination</th>
+              <th>Address</th>
               <th>Description</th>
               <th style={{ textAlign: 'center' }}>Work Finish</th>
               <th>Pending Work</th>
@@ -307,7 +346,7 @@ export const WorkActivity: React.FC = () => {
                   <td data-label="#"><SeqBadge seq={order.visualSeq} /></td>
                   <td data-label="Date">{formatDateDisplay(order.createdAt)}</td>
                   <td data-label="Ordered by" style={{ fontWeight: 'bold' }}>{order.jobOrder}</td>
-                  <td data-label="Destination">{order.destination}</td>
+                  <td data-label="Address">{order.destination}</td>
                   <td data-label="Description">{order.description}</td>
                   <td data-label="Status" style={{ textAlign: 'center' }}><span style={getStatusStyles(order.workFinish)}>{order.workFinish}</span></td>
                   <td data-label="Pending Work">{order.pendingWork || '-'}</td>
@@ -342,14 +381,10 @@ export const WorkActivity: React.FC = () => {
             
             <div className="details-grid">
               <div className="detail-item"><span>Registration Date:</span> <p>{formatDateDisplay(viewingJob.createdAt)}</p></div>
-              <div className="detail-item">
-                <span>Destination:</span> 
-                <p>{viewingJob.destination}</p>
-              </div>
+              <div className="detail-item"><span>Address:</span> <p>{viewingJob.destination}</p></div>
               <div className="detail-item"><span>Ordered by:</span> <p>{viewingJob.jobOrder}</p></div>
               <div className="detail-item"><span>Schedule:</span> <p>{formatDateDisplay(viewingJob.schedule)}</p></div>
               <div className="detail-item"><span>Status:</span> <p><span style={getStatusStyles(viewingJob.workFinish)}>{viewingJob.workFinish}</span></p></div>
-              {/* 🔥 SE AGREGÓ EL PENDING WORK A LOS DETALLES */}
               <div className="detail-item"><span>Pending Work:</span> <p>{viewingJob.pendingWork || '-'}</p></div>
               <div className="detail-item full-width"><span>Description:</span> <p>{viewingJob.description}</p></div>
             </div>
@@ -406,20 +441,21 @@ export const WorkActivity: React.FC = () => {
                 <h3>{editingJob ? "Edit Order" : "Create New Order"}</h3>
                 <div style={{ display: 'flex', gap: '10px' }}>
                   <button type="button" className="icon-btn" onClick={() => setIsJobConfigOpen(true)} title="Configure Required Fields"><Settings size={20}/></button>
-                  <button type="submit" className="action btn-primary">Save Order</button>
+                  <button type="submit" className="action btn-primary" disabled={isProcessing}>
+                    {isProcessing ? 'Saving...' : 'Save Order'}
+                  </button>
                   <button type="button" className="close-modal" onClick={() => setIsJobModalOpen(false)}><X size={24}/></button>
                 </div>
               </div>
               <div className="form-grid">
-                <div className="form-group"><label>Registration Date {isJobReq('createdAt') && '*'}</label><input type="date" value={formData.createdAt} onChange={e => setFormData({...formData, createdAt: e.target.value})} required={isJobReq('createdAt')} /></div>
+                <div className="form-group"><label>Registration Date {isJobReq('createdAt') && '*'}</label><input type="date" value={formData.createdAt} onChange={e => setFormData({...formData, createdAt: e.target.value})} required={isJobReq('createdAt')} disabled={isProcessing}/></div>
                 
                 <div className="form-group">
-                  <label>Destination {isJobReq('destination') && '*'}</label>
-                  {/* 🔥 BOTÓN ELIMINADO Y GRID LIMPIO */}
+                  <label>Address {isJobReq('destination') && '*'}</label>
                   <DestinationSearch 
                     value={formData.destination}
                     onSelect={(val) => setFormData({...formData, destination: val})}
-                    placeholder="Search description..."
+                    placeholder="Search address..."
                     required={isJobReq('destination')}
                   />
                 </div>
@@ -441,15 +477,15 @@ export const WorkActivity: React.FC = () => {
                   />
                 </div>
 
-                <div className="form-group"><label>Work Finish {isJobReq('workFinish') && '*'}</label><select value={formData.workFinish} onChange={e => setFormData({...formData, workFinish: e.target.value as 'YES' | 'NO'})} required={isJobReq('workFinish')}><option value="YES">YES</option><option value="NO">NO</option></select></div>
-                <div className="form-group" style={{ gridColumn: 'span 2' }}><label>Description {isJobReq('description') && '*'}</label><input type="text" value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} required={isJobReq('description')} /></div>
-                <div className="form-group"><label>Schedule {isJobReq('schedule') && '*'}</label><input type="date" value={formData.schedule} onChange={e => setFormData({...formData, schedule: e.target.value})} required={isJobReq('schedule')} /></div>
-                <div className="form-group"><label>Pending Work {isJobReq('pendingWork') && '*'}</label><input type="text" value={formData.pendingWork} onChange={e => setFormData({...formData, pendingWork: e.target.value})} required={isJobReq('pendingWork')} /></div>
+                <div className="form-group"><label>Work Finish {isJobReq('workFinish') && '*'}</label><select value={formData.workFinish} onChange={e => setFormData({...formData, workFinish: e.target.value as 'YES' | 'NO'})} required={isJobReq('workFinish')} disabled={isProcessing}><option value="YES">YES</option><option value="NO">NO</option></select></div>
+                <div className="form-group" style={{ gridColumn: 'span 2' }}><label>Description {isJobReq('description') && '*'}</label><input type="text" value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} required={isJobReq('description')} disabled={isProcessing}/></div>
+                <div className="form-group"><label>Schedule {isJobReq('schedule') && '*'}</label><input type="date" value={formData.schedule} onChange={e => setFormData({...formData, schedule: e.target.value})} required={isJobReq('schedule')} disabled={isProcessing}/></div>
+                <div className="form-group"><label>Pending Work {isJobReq('pendingWork') && '*'}</label><input type="text" value={formData.pendingWork} onChange={e => setFormData({...formData, pendingWork: e.target.value})} required={isJobReq('pendingWork')} disabled={isProcessing}/></div>
               </div>
               <div className="products-section">
                 <div className="products-header">
                   <h4 style={{ margin: 0 }}>Products List</h4>
-                  <button type="button" className="action btn-secondary btn-sm" onClick={() => setIsProductModalOpen(true)}><Plus size={16}/> Add Product</button>
+                  <button type="button" className="action btn-secondary btn-sm" onClick={() => setIsProductModalOpen(true)} disabled={isProcessing}><Plus size={16}/> Add Product</button>
                 </div>
                 <div className="table-container large-table">
                   <table className="responsive-table">
@@ -467,7 +503,7 @@ export const WorkActivity: React.FC = () => {
                       {formProducts.map((p, index) => (
                         <tr key={index}>
                           <td data-label="Action" style={{ textAlign: 'center' }}>
-                            <button type="button" className="btn-text-danger" onClick={(e) => handleRemoveProductFromForm(index, e)}>Remove</button>
+                            <button type="button" className="btn-text-danger" onClick={(e) => handleRemoveProductFromForm(index, e)} disabled={isProcessing}>Remove</button>
                           </td>
                           <td data-label="#">{formatSeq(index + 1)}</td>
                           <td data-label="Item">{p.itemName}</td>
@@ -535,6 +571,12 @@ export const WorkActivity: React.FC = () => {
                       cursor: (!currentProduct.itemEntranceId || getAvailableStock(currentProduct.itemEntranceId) <= 0) ? 'not-allowed' : 'text'
                     }}
                   />
+                  {currentProduct.itemEntranceId && getAvailableStock(currentProduct.itemEntranceId) <= 0 && (
+                    <span style={{color: '#ef4444', fontSize: '0.75rem', marginTop: '4px', display: 'block', fontWeight: 'bold'}}>Out of stock</span>
+                  )}
+                  {currentProduct.itemEntranceId && getAvailableStock(currentProduct.itemEntranceId) > 0 && (
+                    <span style={{color: '#64748b', fontSize: '0.75rem', marginTop: '4px', display: 'block'}}>Max available: {getAvailableStock(currentProduct.itemEntranceId)}</span>
+                  )}
                 </div>
               </div>
             </form>
