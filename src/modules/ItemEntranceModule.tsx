@@ -32,6 +32,7 @@ export const ItemEntrance: React.FC = () => {
   const [editingId, setEditingId] = useState<string | null>(null);
   
   const supplyCompanies = useCatalogOptions('supply_companies', 'company');
+  const catalogItemNames = useCatalogOptions('catalog_item_names', 'item_name', 'item_name');
 
   const entranceFields = [
     { name: 'date', label: 'Date (Registration)' },
@@ -40,16 +41,15 @@ export const ItemEntrance: React.FC = () => {
     { name: 'serial', label: 'Serial #' },
     { name: 'po', label: 'PO #' },
     { name: 'supplyCompany', label: 'Supply Company' },
-    { name: 'orderDate', label: 'Order Date' },
-    { name: 'quantityOrdered', label: 'Quantity Ordered' },
-    { name: 'itemsArrived', label: 'Items Arrived' }
+    { name: 'orderDate', label: 'Arrived Date' },
+    { name: 'itemsArrived', label: 'Items Arrived (Initial Total)' }
   ];
   
-  // 🔥 CORRECCIÓN APLICADA: Se eliminó 'requiredFields' para limpiar la alerta de TypeScript
-  const { toggleRequired, isRequired } = useFormConfig('itemEntrance', ['date', 'itemName', 'supplyCompany', 'quantityOrdered']);
+  const { toggleRequired, isRequired } = useFormConfig('itemEntrance', ['date', 'itemName', 'supplyCompany', 'itemsArrived']);
 
   const [fieldRoles, setFieldRoles] = useState<Record<string, string>>({});
 
+  // 🔥 SOLUCIÓN TS: quantityOrdered en 0 "por debajo de la mesa" para que Typescript no llore
   const initialForm: ItemEntranceFormData = {
     date: getTodayString(), modelPart: '', serial: '', po: '', orderDate: '', 
     quantityOrdered: 0, itemsArrived: 0, supplyCompany: '', itemName: ''
@@ -130,7 +130,18 @@ export const ItemEntrance: React.FC = () => {
   const handleOpenModal = (item: ItemEntranceRecord | null = null) => {
     if (item) { 
       setEditingId(item.id); 
-      setFormData(item); 
+      // 🔥 SOLUCIÓN TS: Mantenemos el quantityOrdered oculto
+      setFormData({
+        date: item.date || '',
+        itemName: item.itemName || '',
+        modelPart: item.modelPart || '',
+        serial: item.serial || '',
+        po: item.po || '',
+        orderDate: item.orderDate || '',
+        quantityOrdered: item.quantityOrdered || 0,
+        itemsArrived: item.itemsArrived || 0,
+        supplyCompany: item.supplyCompany || ''
+      }); 
     } else { 
       setEditingId(null); 
       setFormData({ ...initialForm, date: getTodayString() }); 
@@ -250,12 +261,11 @@ export const ItemEntrance: React.FC = () => {
               <th>Serial #</th>
               <th>PO #</th>
               <th>Company</th>
-              <th>Qty</th>
               <th>Stock</th>
             </tr>
           </thead>
           <tbody>
-            {filteredItems.length === 0 && <tr><td colSpan={11} className="empty-state">No records found.</td></tr>}
+            {filteredItems.length === 0 && <tr><td colSpan={10} className="empty-state">No records found.</td></tr>}
             {filteredItems.map(item => {
               const currentStock = getStock(item.id, item.itemsArrived);
               const isAvailable = currentStock > 0;
@@ -295,9 +305,8 @@ export const ItemEntrance: React.FC = () => {
                   <td data-label="Serial" style={{fontWeight: '600'}} onClick={() => handleOpenModal(item)}>{item.serial || '-'}</td>
                   <td data-label="PO" style={{fontWeight: '600'}} onClick={() => handleOpenModal(item)}>{item.po || '-'}</td>
                   <td data-label="Company" onClick={() => handleOpenModal(item)}>{item.supplyCompany || '-'}</td>
-                  <td data-label="Qty" onClick={() => handleOpenModal(item)}>{item.quantityOrdered}</td>
                   <td data-label="Stock" style={{ color: isAvailable ? 'inherit' : '#ef4444', fontWeight: isAvailable ? 'normal' : 'bold' }} onClick={() => handleOpenModal(item)}>
-                    {currentStock}
+                    {currentStock} / {item.itemsArrived}
                   </td>
                 </tr>
               );
@@ -389,10 +398,20 @@ export const ItemEntrance: React.FC = () => {
                   <label>Date (Registration) {isRequired('date') && '*'} {!isFieldEditable('date') && <span style={{fontSize:'0.75rem', color:'#ef4444'}}><Lock size={12}/> Locked</span>}</label>
                   <input type="date" value={formData.date} onChange={e => setFormData({...formData, date: e.target.value})} required={isRequired('date')} disabled={!isFieldEditable('date')} style={{ backgroundColor: !isFieldEditable('date') ? '#f1f5f9' : 'white', cursor: !isFieldEditable('date') ? 'not-allowed' : 'text' }}/>
                 </div>
+                
                 <div className="form-group">
                   <label>Item Name {isRequired('itemName') && '*'} {!isFieldEditable('itemName') && <span style={{fontSize:'0.75rem', color:'#ef4444'}}><Lock size={12}/> Locked</span>}</label>
-                  <input type="text" value={formData.itemName} onChange={e => setFormData({...formData, itemName: e.target.value})} required={isRequired('itemName')} disabled={!isFieldEditable('itemName')} style={{ backgroundColor: !isFieldEditable('itemName') ? '#f1f5f9' : 'white', cursor: !isFieldEditable('itemName') ? 'not-allowed' : 'text' }}/>
+                  <div style={{ pointerEvents: !isFieldEditable('itemName') ? 'none' : 'auto', opacity: !isFieldEditable('itemName') ? 0.6 : 1 }}>
+                    <SearchableSelect 
+                      options={catalogItemNames.map(c => ({ id: String(c.label), label: String(c.label) }))}
+                      value={formData.itemName} 
+                      onChange={(val) => setFormData({...formData, itemName: val})} 
+                      placeholder="-- Search from Catalog --"
+                      required={isRequired('itemName')}
+                    />
+                  </div>
                 </div>
+
                 <div className="form-group">
                   <label>Model / Part # {isRequired('modelPart') && '*'} {!isFieldEditable('modelPart') && <span style={{fontSize:'0.75rem', color:'#ef4444'}}><Lock size={12}/> Locked</span>}</label>
                   <input type="text" value={formData.modelPart} onChange={e => setFormData({...formData, modelPart: e.target.value})} required={isRequired('modelPart')} disabled={!isFieldEditable('modelPart')} style={{ backgroundColor: !isFieldEditable('modelPart') ? '#f1f5f9' : 'white', cursor: !isFieldEditable('modelPart') ? 'not-allowed' : 'text' }}/>
@@ -417,17 +436,15 @@ export const ItemEntrance: React.FC = () => {
                     />
                   </div>
                 </div>
+
                 <div className="form-group">
-                  <label>Order Date {isRequired('orderDate') && '*'} {!isFieldEditable('orderDate') && <span style={{fontSize:'0.75rem', color:'#ef4444'}}><Lock size={12}/> Locked</span>}</label>
+                  <label>Arrived Date {isRequired('orderDate') && '*'} {!isFieldEditable('orderDate') && <span style={{fontSize:'0.75rem', color:'#ef4444'}}><Lock size={12}/> Locked</span>}</label>
                   <input type="date" value={formData.orderDate} onChange={e => setFormData({...formData, orderDate: e.target.value})} required={isRequired('orderDate')} disabled={!isFieldEditable('orderDate')} style={{ backgroundColor: !isFieldEditable('orderDate') ? '#f1f5f9' : 'white', cursor: !isFieldEditable('orderDate') ? 'not-allowed' : 'text' }}/>
                 </div>
+
                 <div className="form-group">
-                  <label>Quantity Ordered {isRequired('quantityOrdered') && '*'} {!isFieldEditable('quantityOrdered') && <span style={{fontSize:'0.75rem', color:'#ef4444'}}><Lock size={12}/> Locked</span>}</label>
-                  <input type="number" value={formData.quantityOrdered} onChange={e => setFormData({...formData, quantityOrdered: Number(e.target.value)})} required={isRequired('quantityOrdered')} disabled={!isFieldEditable('quantityOrdered')} style={{ backgroundColor: !isFieldEditable('quantityOrdered') ? '#f1f5f9' : 'white', cursor: !isFieldEditable('quantityOrdered') ? 'not-allowed' : 'text' }}/>
-                </div>
-                <div className="form-group">
-                  <label>Items Arrived (Initial Total) {!isFieldEditable('itemsArrived') && <span style={{fontSize:'0.75rem', color:'#ef4444'}}><Lock size={12}/> Locked</span>}</label>
-                  <input type="number" value={formData.itemsArrived} onChange={e => setFormData({...formData, itemsArrived: Number(e.target.value)})} disabled={!isFieldEditable('itemsArrived')} style={{ backgroundColor: !isFieldEditable('itemsArrived') ? '#f1f5f9' : 'white', cursor: !isFieldEditable('itemsArrived') ? 'not-allowed' : 'text' }}/>
+                  <label>Items Arrived (Initial Total) {isRequired('itemsArrived') && '*'} {!isFieldEditable('itemsArrived') && <span style={{fontSize:'0.75rem', color:'#ef4444'}}><Lock size={12}/> Locked</span>}</label>
+                  <input type="number" value={formData.itemsArrived} onChange={e => setFormData({...formData, itemsArrived: Number(e.target.value)})} required={isRequired('itemsArrived')} disabled={!isFieldEditable('itemsArrived')} style={{ backgroundColor: !isFieldEditable('itemsArrived') ? '#f1f5f9' : 'white', cursor: !isFieldEditable('itemsArrived') ? 'not-allowed' : 'text' }}/>
                 </div>
               </div>
             </form>
