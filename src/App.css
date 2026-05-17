@@ -36,7 +36,7 @@ body { background-color: var(--bg-color); color: var(--text-main); height: 100vh
    ========================================= */
 .app-layout { width: 100vw; height: 100vh; position: relative; display: flex; }
 .main-wrapper { flex: 1; display: flex; flex-direction: column; height: 100vh; overflow: hidden; transition: all 0.3s ease; }
-.main-content { flex: 1; padding: 30px 40px; overflow-y: auto; position: relative; background-color: var(--bg-color); }
+.main-content { flex: 1; padding: 24px 30px; overflow-y: auto; position: relative; background-color: var(--bg-color); }
 
 .sidebar { 
   width: 260px; background-color: var(--sidebar-bg); color: #f8fafc; 
@@ -99,12 +99,12 @@ body { background-color: var(--bg-color); color: var(--text-main); height: 100vh
 /* =========================================
    CARDS & FORMS & TABLAS
    ========================================= */
-.card { background-color: var(--card-bg); border-radius: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.03); padding: 30px; max-width: 1200px; margin: 0 auto; border: 1px solid var(--border-color); }
+/* 🔥 FIX: El card ahora usa el 100% de la pantalla para evitar que se aplaste la tabla en laptops */
+.card { background-color: var(--card-bg); border-radius: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.03); padding: 25px; max-width: 100%; border: 1px solid var(--border-color); }
 .card-header { margin-bottom: 25px; padding-bottom: 15px; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: flex-start; gap: 15px; }
 .card-header-text h2 { font-size: 1.4rem; color: var(--text-main); display: flex; align-items: center; gap: 10px;}
 .card-header-text p { color: var(--text-muted); font-size: 0.9rem; margin-top: 5px; }
 
-/* CSS Grid nativo para auto-adaptación de formularios a 1 o múltiples columnas */
 .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px; text-align: left; }
 .form-group { display: flex; flex-direction: column; gap: 8px; }
 .full-width { grid-column: 1 / -1 !important; }
@@ -129,18 +129,24 @@ button.action { padding: 12px 24px; border: none; border-radius: 8px; font-size:
 .icon-btn.edit:hover { color: var(--primary-color); border-color: #bfdbfe; background-color: #eff6ff; }
 .icon-btn.delete:hover { color: var(--danger-color); border-color: #fecaca; background-color: #fef2f2; }
 
-/* TABLAS RESPONSIVAS */
-.table-container { overflow-x: auto; border-radius: 12px; border: 1px solid var(--border-color); }
+/* =========================================
+   🔥 TABLAS RESPONSIVAS Y FLUIDAS (LA MAGIA)
+   ========================================= */
+.table-container { overflow-x: auto; border-radius: 12px; border: 1px solid var(--border-color); width: 100%; }
 table { width: 100%; border-collapse: collapse; text-align: left; }
-.responsive-table { min-width: 950px; white-space: nowrap; }
-th, td { padding: 16px 20px; border-bottom: 1px solid var(--border-color); font-size: 0.95rem; vertical-align: middle; }
-th { background-color: #f8fafc; font-weight: 600; color: var(--text-muted); text-transform: uppercase; font-size: 0.75rem; letter-spacing: 0.5px; }
+/* La tabla ahora abraza el 100% de la pantalla y permite envoltura */
+.responsive-table { width: 100%; min-width: 100%; }
+th, td { padding: 14px 16px; border-bottom: 1px solid var(--border-color); font-size: 0.9rem; vertical-align: middle; }
+th { background-color: #f8fafc; font-weight: 600; color: var(--text-muted); text-transform: uppercase; font-size: 0.75rem; letter-spacing: 0.5px; white-space: nowrap; }
+td { white-space: normal; word-break: break-word; line-height: 1.4; } /* 🔥 FIX: Permite que el texto largo (descripciones) baje de línea */
 tr:last-child td { border-bottom: none; }
 tr:hover { background-color: #f8fafc; }
 .clickable-row { cursor: pointer; transition: background-color 0.2s; }
-.action-btns { display: flex; gap: 8px; justify-content: center; }
+.action-btns { display: flex; gap: 8px; justify-content: center; flex-wrap: nowrap; }
 
-/* MODALS Y SEPARACIONES ELEGANTES */
+/* =========================================
+   MODALS Y SEPARACIONES ELEGANTES
+   ========================================= */
 .modal-overlay { position: fixed; inset: 0; background-color: rgba(15, 23, 42, 0.6); backdrop-filter: blur(4px); display: none; justify-content: center; align-items: center; z-index: 1000; opacity: 0; transition: opacity 0.3s ease; padding: 20px; }
 .modal-overlay.active { display: flex; opacity: 1; }
 .modal-content { background-color: var(--card-bg); width: 100%; max-width: 600px; max-height: 90vh; overflow-y: auto; border-radius: 20px; padding: 40px; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25); transform: scale(0.97); transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
@@ -164,24 +170,26 @@ tr:hover { background-color: #f8fafc; }
 .btn-text-danger:hover { color: #b91c1c; }
 
 /* =========================================
-   RESPONSIVE (MÓVIL TOTALMENTE OPTIMIZADO)
+   RESPONSIVE Y MÓVIL (100% OPTIMIZADO)
    ========================================= */
 .mobile-header { display: none; background-color: var(--sidebar-bg); color: white; padding: 15px 20px; align-items: center; justify-content: space-between; box-shadow: 0 2px 4px rgba(0,0,0,0.1); z-index: 40; }
 .mobile-header button { background: none; border: none; color: white; cursor: pointer; display: flex; align-items: center; }
 
-@media (max-width: 900px) {
-  .card-header { flex-direction: column; }
+/* Tablets y Laptops Pequeñas */
+@media (max-width: 1024px) {
+  .main-content { padding: 20px; }
+  .card { padding: 20px; }
 }
 
+/* Teléfonos y Dispositivos Verticales */
 @media (max-width: 768px) {
   .desktop-only { display: none; }
   .mobile-header { display: flex; }
   .sidebar { position: fixed; top: 0; left: 0; height: 100vh; transform: translateX(-100%); width: 280px; }
   .sidebar.open { transform: translateX(0); }
   .main-content { padding: 15px; }
-  .card { padding: 20px; }
+  .card { padding: 15px; }
   
-  /* 🔥 FIX MÓVIL ABSOLUTO: Formularios y Detalles SIEMPRE en 1 sola columna */
   .form-grid { 
       display: flex !important; 
       flex-direction: column !important; 
@@ -195,18 +203,15 @@ tr:hover { background-color: #f8fafc; }
   .form-group { 
       width: 100% !important; 
   }
-  /* Anula el "span 2" de las descripciones largas en móviles */
   .form-group[style] { 
       grid-column: auto !important; 
   }
 
-  /* 🔥 FIX MÓVIL: Padding del modal extra grande abajo para que no se corten los Dropdowns (SearchableSelect) */
   .modal-content { 
       padding: 20px; 
-      padding-bottom: 180px !important; /* Espacio crítico para el buscador */
+      padding-bottom: 180px !important; 
   }
   
-  /* 🔥 FIX MÓVIL: Evitar que el título sea aplastado por los botones (Save / Edit) */
   .modal-header { 
       flex-direction: column; 
       align-items: flex-start; 
@@ -221,12 +226,10 @@ tr:hover { background-color: #f8fafc; }
       font-size: 1.25rem; 
   }
 
-  /* 🔥 FIX MÓVIL: Mejoras en la sección de productos y botones de cabecera */
   .products-section { padding: 15px; margin-top: 25px; }
   .products-header { flex-direction: column; align-items: flex-start; gap: 15px; }
   .products-header button { width: 100%; justify-content: center; }
   
-  /* 🔥 FIX MÓVIL: Técnica UI de Tablas a Tarjetas Verticales */
   .responsive-table { min-width: 100%; white-space: normal; }
   .table-container { border: none; background: transparent; }
   .table-container table, .table-container thead, .table-container tbody, .table-container th, .table-container td, .table-container tr { display: block; width: 100%; }
@@ -237,7 +240,6 @@ tr:hover { background-color: #f8fafc; }
       box-shadow: 0 2px 4px rgba(0,0,0,0.02); 
   }
   
-  /* 🔥 FIX MÓVIL: Alineación flex-start y wrap para que las descripciones largas bajen solas */
   .table-container td { 
       display: flex; justify-content: space-between; align-items: flex-start; 
       padding: 12px 0; border-bottom: 1px solid #f1f5f9; text-align: right; 
@@ -245,13 +247,11 @@ tr:hover { background-color: #f8fafc; }
   }
   .table-container td:last-child { border-bottom: none; justify-content: flex-end; padding-top: 15px; }
   
-  /* 🔥 FIX MÓVIL: Etiquetas de tabla (Registration Date, Address, etc) */
   .table-container td:before { 
       flex-shrink: 0;
       content: attr(data-label); font-weight: 600; color: var(--text-muted); 
       font-size: 0.75rem; text-transform: uppercase; text-align: left;
   }
   
-  /* 🔥 FIX MÓVIL: Botones de Acción de tabla alineados a la derecha */
   .action-btns { width: 100%; justify-content: flex-end; }
 }
