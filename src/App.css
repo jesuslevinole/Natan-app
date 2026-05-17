@@ -105,7 +105,7 @@ body { background-color: var(--bg-color); color: var(--text-main); height: 100vh
 .card-header-text p { color: var(--text-muted); font-size: 0.9rem; margin-top: 5px; }
 
 /* CSS Grid nativo para auto-adaptación de formularios a 1 o múltiples columnas */
-.form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 24px; text-align: left; }
+.form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px; text-align: left; }
 .form-group { display: flex; flex-direction: column; gap: 8px; }
 .full-width { grid-column: 1 / -1 !important; }
 label { font-size: 0.85rem; font-weight: 600; color: var(--text-main); }
@@ -146,7 +146,8 @@ tr:hover { background-color: #f8fafc; }
 .modal-content { background-color: var(--card-bg); width: 100%; max-width: 600px; max-height: 90vh; overflow-y: auto; border-radius: 20px; padding: 40px; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25); transform: scale(0.97); transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
 .modal-overlay.active .modal-content { transform: scale(1); }
 .modal-large { max-width: 1100px !important; }
-.modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; }
+
+.modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; gap: 15px;}
 .modal-header h3 { font-size: 1.4rem; color: var(--text-main); font-weight: 700;}
 .close-modal { background: none; border: none; color: var(--text-muted); cursor: pointer; padding: 6px; border-radius: 6px; display: flex; align-items: center; justify-content: center; transition: 0.2s;}
 .close-modal:hover { background-color: #f1f5f9; color: var(--danger-color); }
@@ -163,7 +164,7 @@ tr:hover { background-color: #f8fafc; }
 .btn-text-danger:hover { color: #b91c1c; }
 
 /* =========================================
-   RESPONSIVE (MAGIA CSS DE TABLAS A TARJETAS)
+   RESPONSIVE (MÓVIL TOTALMENTE OPTIMIZADO)
    ========================================= */
 .mobile-header { display: none; background-color: var(--sidebar-bg); color: white; padding: 15px 20px; align-items: center; justify-content: space-between; box-shadow: 0 2px 4px rgba(0,0,0,0.1); z-index: 40; }
 .mobile-header button { background: none; border: none; color: white; cursor: pointer; display: flex; align-items: center; }
@@ -179,9 +180,53 @@ tr:hover { background-color: #f8fafc; }
   .sidebar.open { transform: translateX(0); }
   .main-content { padding: 15px; }
   .card { padding: 20px; }
-  .modal-content { padding: 20px; }
   
-  /* Técnica UI de Tablas a Tarjetas Verticales (Integración Exitosa) */
+  /* 🔥 FIX MÓVIL ABSOLUTO: Formularios y Detalles SIEMPRE en 1 sola columna */
+  .form-grid { 
+      display: flex !important; 
+      flex-direction: column !important; 
+      gap: 16px !important; 
+  }
+  .details-grid { 
+      display: flex !important; 
+      flex-direction: column !important; 
+      gap: 16px !important; 
+  }
+  .form-group { 
+      width: 100% !important; 
+  }
+  /* Anula el "span 2" de las descripciones largas en móviles */
+  .form-group[style] { 
+      grid-column: auto !important; 
+  }
+
+  /* 🔥 FIX MÓVIL: Padding del modal extra grande abajo para que no se corten los Dropdowns (SearchableSelect) */
+  .modal-content { 
+      padding: 20px; 
+      padding-bottom: 180px !important; /* Espacio crítico para el buscador */
+  }
+  
+  /* 🔥 FIX MÓVIL: Evitar que el título sea aplastado por los botones (Save / Edit) */
+  .modal-header { 
+      flex-direction: column; 
+      align-items: flex-start; 
+      margin-bottom: 25px; 
+      gap: 15px; 
+  }
+  .modal-header > div { 
+      width: 100%; 
+      justify-content: space-between; 
+  }
+  .modal-header h3 { 
+      font-size: 1.25rem; 
+  }
+
+  /* 🔥 FIX MÓVIL: Mejoras en la sección de productos y botones de cabecera */
+  .products-section { padding: 15px; margin-top: 25px; }
+  .products-header { flex-direction: column; align-items: flex-start; gap: 15px; }
+  .products-header button { width: 100%; justify-content: center; }
+  
+  /* 🔥 FIX MÓVIL: Técnica UI de Tablas a Tarjetas Verticales */
   .responsive-table { min-width: 100%; white-space: normal; }
   .table-container { border: none; background: transparent; }
   .table-container table, .table-container thead, .table-container tbody, .table-container th, .table-container td, .table-container tr { display: block; width: 100%; }
@@ -191,14 +236,22 @@ tr:hover { background-color: #f8fafc; }
       border-radius: 12px; margin-bottom: 16px; padding: 12px; 
       box-shadow: 0 2px 4px rgba(0,0,0,0.02); 
   }
+  
+  /* 🔥 FIX MÓVIL: Alineación flex-start y wrap para que las descripciones largas bajen solas */
   .table-container td { 
-      display: flex; justify-content: space-between; align-items: center; 
-      padding: 10px 0; border-bottom: 1px solid #f1f5f9; text-align: right; font-size: 0.9rem;
+      display: flex; justify-content: space-between; align-items: flex-start; 
+      padding: 12px 0; border-bottom: 1px solid #f1f5f9; text-align: right; 
+      font-size: 0.9rem; gap: 15px; word-break: break-word; flex-wrap: wrap;
   }
-  .table-container td:last-child { border-bottom: none; justify-content: center; padding-top: 15px; }
-  /* El data-label inyectado dinámicamente desde el componente React */
+  .table-container td:last-child { border-bottom: none; justify-content: flex-end; padding-top: 15px; }
+  
+  /* 🔥 FIX MÓVIL: Etiquetas de tabla (Registration Date, Address, etc) */
   .table-container td:before { 
+      flex-shrink: 0;
       content: attr(data-label); font-weight: 600; color: var(--text-muted); 
-      font-size: 0.75rem; text-transform: uppercase; text-align: left; margin-right: 15px;
+      font-size: 0.75rem; text-transform: uppercase; text-align: left;
   }
+  
+  /* 🔥 FIX MÓVIL: Botones de Acción de tabla alineados a la derecha */
+  .action-btns { width: 100%; justify-content: flex-end; }
 }

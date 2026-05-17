@@ -1,244 +1,56 @@
 import React, { useState, useEffect } from 'react';
-// 🔥 IMPORTAMOS setDoc y onSnapshot PARA GUARDAR LA CONFIGURACIÓN GLOBALMENTE
-import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, query, where, runTransaction, setDoc, onSnapshot } from 'firebase/firestore';
+import { collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, runTransaction } from 'firebase/firestore';
 import { db } from '../firebase'; 
-import { Briefcase, Plus, X, Settings, Edit2, Trash2, Lock } from 'lucide-react';
-import { JobOrder, JobProduct, ItemEntranceRecord, JobFormData, ProductFormData, Role, SystemUser } from '../types';
-import { SearchBar, FieldConfigModal, SeqBadge, SearchableSelect, DestinationSearch } from '../components/SharedUI';
-import { getTodayString, formatDateDisplay, getStatusStyles, formatSeq } from '../utils/helpers';
-import { AuditLogger } from '../utils/logger';
-import { useAuth, RequirePermission } from '../hooks/useAuth';
+import { BookOpen, ArrowLeft, Plus, Edit2, Trash2, X } from 'lucide-react';
+import { CatalogSchema } from '../types';
+import { SeqBadge, SearchBar } from '../components/SharedUI';
+import { catalogsConfig } from '../utils/helpers';
 
-type ExtendedJobFormData = JobFormData & { madeBy?: string };
-type ExtendedJobOrder = JobOrder & { madeBy?: string };
-
-export const WorkActivity: React.FC = () => {
-  const { currentUser } = useAuth();
-  
-  const authorName = currentUser 
-    ? `${currentUser.firstName || ''} ${currentUser.lastName || ''}`.trim() || currentUser.username 
-    : 'Unknown User';
-  
-  const [orders, setOrders] = useState<ExtendedJobOrder[]>([]);
-  const [entranceList, setEntranceList] = useState<ItemEntranceRecord[]>([]); 
-  const [allJobProducts, setAllJobProducts] = useState<JobProduct[]>([]);
-  const [systemRoles, setSystemRoles] = useState<Role[]>([]); 
-  const [systemUsers, setSystemUsers] = useState<SystemUser[]>([]); 
-
+// 🔥 ESTA ES LA LÍNEA CRÍTICA QUE REACT NECESITA ENCONTRAR:
+export const CatalogsModule: React.FC = () => {
+  const [selectedCatalog, setSelectedCatalog] = useState<CatalogSchema | null>(null);
+  const [records, setRecords] = useState<any[]>([]);
   const [searchTerm, setSearchTerm] = useState(''); 
-  const [isJobModalOpen, setIsJobModalOpen] = useState<boolean>(false);
-  const [isProductModalOpen, setIsProductModalOpen] = useState<boolean>(false);
-  const [isJobConfigOpen, setIsJobConfigOpen] = useState<boolean>(false);
-  const [isProductConfigOpen, setIsProductConfigOpen] = useState<boolean>(false);
+  const [modalState, setModalState] = useState<'closed' | 'form' | 'detail'>('closed');
+  const [currentRecord, setCurrentRecord] = useState<any | null>(null);
+  const [formData, setFormData] = useState<any>({});
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
 
-  const [editingJob, setEditingJob] = useState<string | null>(null);
-  const [viewingJob, setViewingJob] = useState<ExtendedJobOrder | null>(null);
-  const [viewProducts, setViewProducts] = useState<JobProduct[]>([]);
-  const [showHistoric, setShowHistoric] = useState<boolean>(false); 
-  const [isQuickDestOpen, setIsQuickDestOpen] = useState<boolean>(false);
-  const [newDestData, setNewDestData] = useState({ property_name: '', description: '', contact: '' });
-
-  const jobFields = [
-    { name: 'createdAt', label: 'Registration Date' },
-    { name: 'destination', label: 'Address' },
-    { name: 'jobOrder', label: 'Ordered by' },
-    { name: 'madeBy', label: 'Made by' },
-    { name: 'workFinish', label: 'Work Finish' },
-    { name: 'description', label: 'Description' },
-    { name: 'pendingWork', label: 'Pending Work' },
-    { name: 'schedule', label: 'Schedule' }
-  ];
-
-  const productFields = [
-    { name: 'itemEntranceId', label: 'Select Item' },
-    { name: 'quantity', label: 'Quantity' }
-  ];
-
-  // =========================================================================
-  // 🔥 MOTOR DE CONFIGURACIÓN GLOBAL (FIREBASE)
-  // Reemplaza el useFormConfig y localStorage por guardado real en la nube
-  // =========================================================================
-  
-  const [jobRequiredFields, setJobRequiredFields] = useState<string[]>(['createdAt', 'destination', 'jobOrder', 'madeBy', 'workFinish']);
-  const [jobFieldRoles, setJobFieldRoles] = useState<Record<string, string>>({});
-  const [reqProd, setReqProd] = useState<string[]>(['itemEntranceId', 'quantity']);
-
-  const isJobReq = (name: string) => jobRequiredFields.includes(name);
-  const isProdReq = (name: string) => reqProd.includes(name);
-
-  // Funciones para guardar la configuración globalmente
-  const toggleJobReq = async (name: string) => {
-    const updated = jobRequiredFields.includes(name) ? jobRequiredFields.filter(f => f !== name) : [...jobRequiredFields, name];
-    setJobRequiredFields(updated); // UI Optimista
-    await setDoc(doc(db, 'system_settings', 'workActivity_config'), { jobRequiredFields: updated }, { merge: true });
-  };
-
-  const toggleProdReq = async (name: string) => {
-    const updated = reqProd.includes(name) ? reqProd.filter(f => f !== name) : [...reqProd, name];
-    setReqProd(updated); // UI Optimista
-    await setDoc(doc(db, 'system_settings', 'workActivity_config'), { prodRequiredFields: updated }, { merge: true });
-  };
-
-  const updateJobFieldRole = async (fieldName: string, roleId: string) => {
-    const updated = { ...jobFieldRoles };
-    if (roleId) {
-      updated[fieldName] = roleId;
-    } else {
-      delete updated[fieldName];
-    }
-    setJobFieldRoles(updated); // UI Optimista
-    await setDoc(doc(db, 'system_settings', 'workActivity_config'), { jobFieldRoles: updated }, { merge: true });
-  };
-
-  // =========================================================================
-
-  const initialFormState: ExtendedJobFormData = {
-    jobOrder: authorName, 
-    madeBy: authorName, 
-    destination: '', 
-    description: '', 
-    workFinish: 'NO', 
-    pendingWork: '', 
-    schedule: '', 
-    createdAt: getTodayString()
-  };
-  
-  const [formData, setFormData] = useState<ExtendedJobFormData>(initialFormState);
-  const [formProducts, setFormProducts] = useState<JobProduct[]>([]);
-  
-  const [currentProduct, setCurrentProduct] = useState<ProductFormData>({
-    itemEntranceId: '', modelPart: '', serial: '', po: '', quantity: 1, itemName: ''
-  });
-
-  const ordersCollectionRef = collection(db, "jobOrders");
-  const productsCollectionRef = collection(db, "jobProducts");
-  const entranceCollectionRef = collection(db, "itemEntrance"); 
-
-  const fetchData = async () => {
-    try {
-      const orderData = await getDocs(ordersCollectionRef);
-      const fetchedOrders = orderData.docs.map((doc) => ({ ...doc.data(), id: doc.id } as any));
+  useEffect(() => {
+    if (!selectedCatalog) return;
+    const unsubscribe = onSnapshot(collection(db, `catalog_${selectedCatalog.id}`), (snapshot) => {
+      const fetched = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as any));
       
-      fetchedOrders.sort((a: any, b: any) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+      fetched.sort((a: any, b: any) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
       
-      const totalOrders = fetchedOrders.length;
-      const mappedOrders = fetchedOrders.map((o: any, idx: number) => ({ 
-        ...o, 
-        visualSeq: o.seq || (totalOrders - idx) 
+      const totalRecords = fetched.length;
+      const mapped = fetched.map((item: any, idx: number) => ({ 
+        ...item, 
+        visualSeq: item.seq || (totalRecords - idx) 
       }));
       
-      setOrders(mappedOrders as ExtendedJobOrder[]);
-
-      const entranceData = await getDocs(entranceCollectionRef);
-      setEntranceList(entranceData.docs.map(doc => ({ ...doc.data(), id: doc.id })) as ItemEntranceRecord[]);
-
-      const productsData = await getDocs(productsCollectionRef);
-      setAllJobProducts(productsData.docs.map(doc => ({ ...doc.data(), id: doc.id })) as JobProduct[]);
-
-      const rolesSnap = await getDocs(collection(db, 'roles'));
-      setSystemRoles(rolesSnap.docs.map(d => ({id: d.id, ...d.data()} as Role)));
-
-      const usersSnap = await getDocs(collection(db, 'users'));
-      setSystemUsers(usersSnap.docs.map(d => ({id: d.id, ...d.data()} as SystemUser)));
-
-    } catch (error) { console.error("Error", error); }
-  };
-
-  useEffect(() => { 
-    fetchData(); 
-    
-    // 🔥 SUSCRIPCIÓN EN TIEMPO REAL: Los permisos y configuraciones se aplican en vivo
-    const unsubConfig = onSnapshot(doc(db, 'system_settings', 'workActivity_config'), (docSnap) => {
-      if (docSnap.exists()) {
-        const data = docSnap.data();
-        if (data.jobRequiredFields) setJobRequiredFields(data.jobRequiredFields);
-        if (data.jobFieldRoles) setJobFieldRoles(data.jobFieldRoles);
-        if (data.prodRequiredFields) setReqProd(data.prodRequiredFields);
-      }
+      setRecords(mapped);
     });
+    return () => unsubscribe();
+  }, [selectedCatalog]);
 
-    return () => unsubConfig();
-  }, []);
-
-  const isJobFieldEditable = (fieldName: string) => {
-    if (isProcessing) return false;
-    if (currentUser?.roleId === 'admin_role') return true; 
-
-    const requiredRole = jobFieldRoles[fieldName];
-    if (requiredRole && currentUser?.roleId !== requiredRole) {
-      return false;
-    }
-    return true; 
-  };
-
-  const getAvailableStock = (itemId: string) => {
-    const item = entranceList.find(i => i.id === itemId);
-    if (!item) return 0;
-    const usedInDB = allJobProducts.filter(p => p.itemEntranceId === itemId).reduce((acc, p) => acc + p.quantity, 0);
-    const usedInForm = formProducts.filter(p => p.itemEntranceId === itemId).reduce((acc, p) => acc + p.quantity, 0);
-    return item.itemsArrived - usedInDB - usedInForm;
-  };
-
-  const handleViewDetails = async (job: ExtendedJobOrder) => {
-    setViewingJob(job);
-    try {
-      const q = query(productsCollectionRef, where("jobOrderId", "==", job.id));
-      const querySnapshot = await getDocs(q);
-      setViewProducts(querySnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })) as JobProduct[]);
-    } catch (error) { console.error("Error", error); }
-  };
-
-  const handleOpenModal = async (job: ExtendedJobOrder | null = null) => {
-    setViewingJob(null); 
-    if (job) {
-      setEditingJob(job.id!);
-      setFormData({ 
-        jobOrder: job.jobOrder, 
-        madeBy: authorName, // 🔥 Auto-asignación al presionar "Editar"
-        destination: job.destination, 
-        description: job.description, 
-        workFinish: job.workFinish, 
-        pendingWork: job.pendingWork, 
-        schedule: job.schedule,
-        createdAt: job.createdAt || getTodayString()
-      });
-      const q = query(productsCollectionRef, where("jobOrderId", "==", job.id));
-      const querySnapshot = await getDocs(q);
-      setFormProducts(querySnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })) as JobProduct[]);
-    } else {
-      setEditingJob(null);
-      setFormData({ ...initialFormState, jobOrder: authorName, madeBy: authorName, createdAt: getTodayString() });
-      setFormProducts([]);
-    }
-    setIsJobModalOpen(true);
-  };
-
-  const handleDelete = async (id: string, e?: React.MouseEvent) => {
-    if (e) e.stopPropagation();
-    if (window.confirm("⚠️ Delete record?")) {
-      const orderToDelete = orders.find(o => o.id === id);
-      await deleteDoc(doc(db, "jobOrders", id));
-      AuditLogger.logDelete('WorkActivity', authorName, id, orderToDelete);
-      setViewingJob(null);
-      fetchData(); 
-    }
-  };
-
-  const handleSaveOrder = async (e: React.FormEvent<HTMLFormElement>) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!selectedCatalog) return;
     setIsProcessing(true);
+    
     try {
-      let savedJobId = editingJob;
+      const colName = `catalog_${selectedCatalog.id}`;
       
-      if (editingJob) {
-        await updateDoc(doc(db, "jobOrders", editingJob), { ...formData });
-        AuditLogger.logUpdate('WorkActivity', authorName, editingJob, formData);
+      if (currentRecord) {
+        await updateDoc(doc(db, colName, currentRecord.id), formData);
       } else {
-        const counterRef = doc(db, 'counters', 'jobOrdersSeq');
+        const counterRef = doc(db, 'counters', `seq_${colName}`);
+        
         const nextSeq = await runTransaction(db, async (transaction) => {
           const counterDoc = await transaction.get(counterRef);
           let newSeq = 1;
+          
           if (counterDoc.exists()) {
             newSeq = (counterDoc.data().value || 0) + 1;
             transaction.update(counterRef, { value: newSeq });
@@ -248,572 +60,177 @@ export const WorkActivity: React.FC = () => {
           return newSeq;
         });
 
-        const docRef = await addDoc(ordersCollectionRef, { 
+        await addDoc(collection(db, colName), { 
           ...formData, 
-          createdBy: authorName, 
-          seq: nextSeq 
+          seq: nextSeq, 
+          createdAt: new Date().toISOString() 
         });
-        savedJobId = docRef.id;
-        AuditLogger.logCreate('WorkActivity', authorName, docRef.id, formData);
       }
-      
-      for (const product of formProducts) {
-        if (!product.id && savedJobId) await addDoc(productsCollectionRef, { ...product, jobOrderId: savedJobId });
-      }
-      
-      await fetchData(); 
-      setIsJobModalOpen(false);
+      setModalState('closed');
     } catch (error) { 
-      console.error("Error", error); 
-      alert("Error al guardar el registro.");
+      console.error("Error Saving Record:", error); 
+      alert('Error saving record. Check console for details.'); 
     } finally {
       setIsProcessing(false);
     }
   };
 
-  const handleSaveQuickDestination = async (e: React.FormEvent) => {
-    e.preventDefault();
-    try {
-      const destSnap = await getDocs(collection(db, 'catalog_destinations'));
-      let maxSeq = 0;
-      destSnap.forEach(d => {
-        const data = d.data();
-        if (data.seq > maxSeq) maxSeq = data.seq;
-      });
-
-      const docRef = await addDoc(collection(db, 'catalog_destinations'), {
-        ...newDestData,
-        seq: maxSeq + 1,
-        createdAt: new Date().toISOString()
-      });
-      
-      AuditLogger.logCreate('Catalogs (Destinations)', authorName, docRef.id, newDestData);
-      
-      setFormData({ ...formData, destination: newDestData.property_name });
-      setIsQuickDestOpen(false);
-      setNewDestData({ property_name: '', description: '', contact: '' });
-    } catch (error) {
-      console.error("Error adding quick destination", error);
-      alert("Error adding destination");
-    }
-  };
-
-  const handleItemEntranceSelection = (selectedId: string) => {
-    if (selectedId) {
-      const item = entranceList.find(i => i.id === selectedId);
-      const stock = getAvailableStock(selectedId);
-      if (item) setCurrentProduct({ 
-        ...currentProduct, 
-        itemEntranceId: item.id, 
-        itemName: item.itemName, 
-        modelPart: item.modelPart, 
-        serial: item.serial, 
-        po: item.po,
-        quantity: stock > 0 ? 1 : 0
-      });
-    } else setCurrentProduct({ ...currentProduct, itemEntranceId: '', itemName: '', modelPart: '', serial: '', po: '', quantity: 1 });
-  };
-
-  const handleAddProductSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-
-    const availableStock = getAvailableStock(currentProduct.itemEntranceId);
-    if (availableStock <= 0 || currentProduct.quantity > availableStock) {
-      alert("There is no stock of this product. Please update the stock.");
-      return;
-    }
-
-    if (viewingJob) {
-      const docRef = await addDoc(productsCollectionRef, { ...currentProduct, jobOrderId: viewingJob.id });
-      setViewProducts([...viewProducts, { ...currentProduct, id: docRef.id, jobOrderId: viewingJob.id }]);
-      AuditLogger.logUpdate('WorkActivity Products', authorName, viewingJob.id, { addedProduct: currentProduct });
-      fetchData();
-    } else {
-      setFormProducts([...formProducts, { ...currentProduct, jobOrderId: 'pending' }]); 
-    }
-    setCurrentProduct({ itemEntranceId: '', modelPart: '', serial: '', po: '', quantity: 1, itemName: '' });
-    setIsProductModalOpen(false);
-  };
-
-  const handleRemoveProductFromDetails = async (productId: string, e?: React.MouseEvent) => {
+  const handleDelete = async (id: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
-    if(window.confirm("Delete product?")) {
-      const prodToDelete = viewProducts.find(p => p.id === productId);
-      await deleteDoc(doc(db, "jobProducts", productId));
-      
-      if (viewingJob) {
-        AuditLogger.logUpdate('WorkActivity Products', authorName, viewingJob.id, { removedProduct: prodToDelete });
-      }
-      
-      setViewProducts(viewProducts.filter(p => p.id !== productId));
-      fetchData(); 
+    if (window.confirm('Delete this record?')) {
+      await deleteDoc(doc(db, `catalog_${selectedCatalog!.id}`, id));
     }
   };
 
-  const handleRemoveProductFromForm = (index: number, e?: React.MouseEvent) => {
-    if (e) e.stopPropagation();
-    setFormProducts(formProducts.filter((_, i) => i !== index));
-  };
-
-  const displayedOrders = (showHistoric 
-    ? orders.filter(o => o.workFinish === 'YES') 
-    : orders.filter(o => o.workFinish === 'NO')
-  ).filter(order => {
-    // 🔥 Todos pueden ver todos los registros
+  const filteredRecords = records.filter(reg => {
     const searchLower = searchTerm.toLowerCase();
-    return (
-      String(order.jobOrder || '').toLowerCase().includes(searchLower) ||
-      String(order.madeBy || '').toLowerCase().includes(searchLower) ||
-      String(order.destination || '').toLowerCase().includes(searchLower) ||
-      String(order.description || '').toLowerCase().includes(searchLower) ||
-      String(order.pendingWork || '').toLowerCase().includes(searchLower) ||
-      formatDateDisplay(order.createdAt).includes(searchLower) ||
-      formatDateDisplay(order.schedule).includes(searchLower)
+    return selectedCatalog?.fields.some(f => 
+      String(reg[f.name] || '').toLowerCase().includes(searchLower)
     );
   });
 
-  return (
-    <div className="card">
-      <div className="card-header" style={{ flexWrap: 'wrap', gap: '15px' }}>
-        <div className="card-header-text" style={{ flex: 1, minWidth: '200px' }}>
-          <h2 style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Briefcase size={24}/> {showHistoric ? 'Historic Records' : 'Work Activity'}
-          </h2>
-          <p>{showHistoric ? 'Completed orders' : 'Active job orders'}</p>
+  if (!selectedCatalog) {
+    return (
+      <div className="card">
+        <div className="card-header">
+          <div className="card-header-text">
+            <h2 style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <BookOpen size={28}/> System Catalogs
+            </h2>
+            <p>Manage system lists and dynamic parameters.</p>
+          </div>
         </div>
-        <div style={{ flex: 2, display: 'flex', justifyContent: 'center', minWidth: '250px' }}>
-          <SearchBar value={searchTerm} onChange={setSearchTerm} />
-        </div>
-        <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flex: 1, justifyContent: 'flex-end', minWidth: '200px' }}>
-          <button className="action btn-primary" style={{ backgroundColor: showHistoric ? '#64748b' : 'var(--primary-color)', height: '42px', padding: '0 20px', whiteSpace: 'nowrap' }} onClick={() => setShowHistoric(!showHistoric)}>
-            {showHistoric ? 'View Active' : 'Record'}
-          </button>
-          
-          <RequirePermission permission="add_work_activity">
-            {!showHistoric && (
-              <button className="action btn-primary" style={{ height: '42px', padding: '0 20px', whiteSpace: 'nowrap' }} onClick={() => handleOpenModal(null)}>
-                <Plus size={18}/> New Order
-              </button>
-            )}
-          </RequirePermission>
+        <div className="catalog-grid">
+          {Object.values(catalogsConfig).map((cat: CatalogSchema) => (
+            <div key={cat.id} className="catalog-card" onClick={() => setSelectedCatalog(cat)}>
+              <div className="catalog-icon" style={{ color: 'var(--primary-color)' }}>{cat.icon}</div>
+              <h3>{cat.title}</h3>
+            </div>
+          ))}
         </div>
       </div>
+    );
+  }
+
+  return (
+    <div className="card catalog-manager-anim">
+      <div className="card-header" style={{ display: 'flex', flexWrap: 'wrap', gap: '15px', alignItems: 'center' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '15px', flex: '1 1 200px' }}>
+          <button className="icon-btn" onClick={() => setSelectedCatalog(null)} title="Back">
+            <ArrowLeft size={24} color="var(--text-main)"/>
+          </button>
+          <div className="card-header-text">
+            <h2 style={{ margin: 0 }}>{selectedCatalog.title}</h2>
+          </div>
+        </div>
+        <div style={{ flex: '2 1 250px', display: 'flex', justifyContent: 'center' }}>
+          <SearchBar value={searchTerm} onChange={setSearchTerm} />
+        </div>
+        <div style={{ display: 'flex', flex: '1 1 150px', justifyContent: 'flex-end' }}>
+          <button 
+            className="action btn-primary" 
+            style={{ height: '42px', padding: '0 20px', whiteSpace: 'nowrap' }} 
+            onClick={() => { setCurrentRecord(null); setFormData({}); setModalState('form'); }}
+          >
+            <Plus size={18}/> New Record
+          </button>
+        </div>
+      </div>
+
       <div className="table-container">
         <table className="responsive-table">
           <thead>
             <tr>
-              <th style={{ textAlign: 'center', width: '100px' }}>Actions</th>
+              <th style={{ textAlign: 'center', width: '90px' }}>Actions</th>
               <th>#</th>
-              <th>Registration Date</th>
-              <th>Schedule</th>
-              <th>Ordered by</th>
-              <th>Made by</th>
-              <th>Address</th>
-              <th>Description</th>
-              <th style={{ textAlign: 'center' }}>Work Finish</th>
-              <th>Pending Work</th>
+              {selectedCatalog.fields.map(f => (
+                <th key={f.name}>
+                  {/* 🔥 Reemplazo visual de Description a ADDRESS en la cabecera de la tabla */}
+                  {f.name === 'description' && selectedCatalog.id === 'destinations' ? 'ADDRESS' : f.label.toUpperCase()}
+                </th>
+              ))}
             </tr>
           </thead>
           <tbody>
-            {displayedOrders.length === 0 && <tr><td colSpan={10} className="empty-state">No records found.</td></tr>}
-            {displayedOrders.map(order => {
-              return (
-                <tr key={order.id} className="clickable-row" onClick={() => handleViewDetails(order)}>
-                  <td data-label="Actions" style={{ textAlign: 'center' }}>
-                    <div className="action-btns" style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
-                      <RequirePermission permission="edit_work_activity">
-                        <button 
-                          type="button" 
-                          className="icon-btn edit" 
-                          onClick={(e) => { e.stopPropagation(); handleOpenModal(order); }} 
-                          title="Edit Order"
-                        >
-                          <Edit2 size={16}/>
-                        </button>
-                      </RequirePermission>
-                      <RequirePermission permission="delete_work_activity">
-                        <button 
-                          type="button" 
-                          className="icon-btn delete" 
-                          onClick={(e) => { e.stopPropagation(); handleDelete(order.id!, e); }} 
-                          title="Delete Order"
-                        >
-                          <Trash2 size={16}/>
-                        </button>
-                      </RequirePermission>
-                    </div>
+            {filteredRecords.length === 0 && (
+              <tr>
+                <td colSpan={selectedCatalog.fields.length + 2} className="empty-state">
+                  No records found.
+                </td>
+              </tr>
+            )}
+            {filteredRecords.map((reg) => (
+              <tr key={reg.id}>
+                <td data-label="Actions" style={{ textAlign: 'center' }}>
+                  <div className="action-btns" style={{ display: 'flex', justifyContent: 'center', gap: '10px' }}>
+                    <button 
+                      className="icon-btn edit" 
+                      onClick={(e) => { e.stopPropagation(); setCurrentRecord(reg); setFormData(reg); setModalState('form'); }}
+                    >
+                      <Edit2 size={16}/>
+                    </button>
+                    <button 
+                      className="icon-btn delete" 
+                      onClick={(e) => handleDelete(reg.id, e)}
+                    >
+                      <Trash2 size={16}/>
+                    </button>
+                  </div>
+                </td>
+
+                <td data-label="#"><SeqBadge seq={reg.visualSeq} /></td>
+                
+                {selectedCatalog.fields.map(f => (
+                  <td key={f.name} data-label={f.label} style={{ fontWeight: f.name === 'description' ? 'bold' : 'normal' }}>
+                    {reg[f.name] || '-'}
                   </td>
-                  <td data-label="#"><SeqBadge seq={order.visualSeq} /></td>
-                  <td data-label="Registration Date">{formatDateDisplay(order.createdAt)}</td>
-                  <td data-label="Schedule" style={{ fontWeight: 'bold', color: 'var(--primary-color)' }}>{formatDateDisplay(order.schedule)}</td>
-                  <td data-label="Ordered by" style={{ fontWeight: 'bold' }}>{order.jobOrder}</td>
-                  <td data-label="Made by" style={{ fontWeight: 'bold', color: '#3b82f6' }}>{order.madeBy || 'Unassigned'}</td>
-                  <td data-label="Address">{order.destination}</td>
-                  <td data-label="Description">{order.description}</td>
-                  <td data-label="Status" style={{ textAlign: 'center' }}><span style={getStatusStyles(order.workFinish)}>{order.workFinish}</span></td>
-                  <td data-label="Pending Work">{order.pendingWork || '-'}</td>
-                </tr>
-              )
-            })}
+                ))}
+              </tr>
+            ))}
           </tbody>
         </table>
       </div>
 
-      <FieldConfigModal isOpen={isProductConfigOpen} onClose={() => setIsProductConfigOpen(false)} fields={productFields} requiredFields={reqProd} toggleRequired={toggleProdReq} />
-
-      {isJobConfigOpen && (
-        <div className="modal-overlay active" style={{ zIndex: 2000 }}>
-          <div className="modal-content modal-large" style={{ maxWidth: '650px' }}>
-            <div className="modal-header">
-              <h3 style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><Settings size={20}/> Form Security & Fields</h3>
-              <button type="button" className="close-modal" onClick={() => setIsJobConfigOpen(false)}><X size={24}/></button>
-            </div>
-            <div style={{ padding: '15px 0' }}>
-              <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '15px' }}>
-                Set which fields are mandatory and configure Field-Level Security (which Role is allowed to edit each field).
-              </p>
-              <div className="table-container">
-                <table className="responsive-table">
-                  <thead>
-                    <tr>
-                      <th>Field Name</th>
-                      <th style={{ textAlign: 'center' }}>Required</th>
-                      <th>Allowed Role (Edit Access)</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {jobFields.map(f => (
-                      <tr key={f.name}>
-                        <td style={{ fontWeight: 'bold', color: '#334155' }}>{f.label}</td>
-                        <td style={{ textAlign: 'center' }}>
-                          <input 
-                            type="checkbox" 
-                            checked={isJobReq(f.name)} 
-                            onChange={() => toggleJobReq(f.name)} 
-                            style={{ width: '18px', height: '18px', accentColor: 'var(--primary-color)', cursor: 'pointer' }}
-                          />
-                        </td>
-                        <td>
-                          <select 
-                            value={jobFieldRoles[f.name] || ''} 
-                            onChange={e => updateJobFieldRole(f.name, e.target.value)}
-                            style={{ width: '100%', padding: '6px', borderRadius: '6px', border: '1px solid #cbd5e1' }}
-                          >
-                            <option value="">All Roles (Unrestricted)</option>
-                            {systemRoles.map(r => (
-                              <option key={r.id} value={r.id}>{r.name}</option>
-                            ))}
-                          </select>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-            <div className="btn-container" style={{ marginTop: '20px' }}>
-              <button type="button" className="action btn-primary" onClick={() => setIsJobConfigOpen(false)} style={{ width: '100%' }}>Done</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {viewingJob && (
+      {modalState !== 'closed' && (
         <div className="modal-overlay active">
-          <div className="modal-content modal-large">
-            <div className="modal-header">
-              <h3 style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <SeqBadge seq={viewingJob.visualSeq} /> Order Details
-              </h3>
+          <div className="modal-content" style={{ maxWidth: '500px', width: '90%' }}>
+            <div className="modal-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h3 style={{ margin: 0 }}>{currentRecord ? 'Edit Record' : 'New Record'}</h3>
               <div style={{ display: 'flex', gap: '10px' }}>
-                <RequirePermission permission="edit_work_activity">
-                  <button className="action btn-primary" onClick={() => handleOpenModal(viewingJob)}><Edit2 size={16}/> Edit</button>
-                </RequirePermission>
-                <RequirePermission permission="delete_work_activity">
-                  <button className="action btn-danger" onClick={(e) => handleDelete(viewingJob.id!, e)}><Trash2 size={16}/> Delete</button>
-                </RequirePermission>
-                <button className="close-modal" onClick={() => setViewingJob(null)}><X size={24}/></button>
-              </div>
-            </div>
-            
-            <div className="details-grid">
-              <div className="detail-item"><span>Registration Date:</span> <p>{formatDateDisplay(viewingJob.createdAt)}</p></div>
-              <div className="detail-item"><span>Address:</span> <p>{viewingJob.destination}</p></div>
-              <div className="detail-item"><span>Ordered by:</span> <p>{viewingJob.jobOrder}</p></div>
-              <div className="detail-item"><span>Made by:</span> <p style={{ fontWeight: 'bold', color: '#3b82f6' }}>{viewingJob.madeBy || 'Unassigned'}</p></div>
-              <div className="detail-item"><span>Schedule:</span> <p>{formatDateDisplay(viewingJob.schedule)}</p></div>
-              <div className="detail-item"><span>Status:</span> <p><span style={getStatusStyles(viewingJob.workFinish)}>{viewingJob.workFinish}</span></p></div>
-              <div className="detail-item"><span>Pending Work:</span> <p>{viewingJob.pendingWork || '-'}</p></div>
-              <div className="detail-item full-width"><span>Description:</span> <p>{viewingJob.description}</p></div>
-            </div>
-            
-            <div className="products-section">
-              <div className="products-header">
-                <h4 style={{ margin: 0 }}>Associated Products / Materials</h4>
-                <RequirePermission permission="edit_work_activity">
-                  <button type="button" className="action btn-secondary btn-sm" onClick={() => setIsProductModalOpen(true)}><Plus size={16}/> Add Product</button>
-                </RequirePermission>
-              </div>
-              <div className="table-container large-table">
-                <table className="responsive-table">
-                  <thead>
-                    <tr>
-                      <th style={{ textAlign: 'center', width: '80px' }}>Action</th>
-                      <th>#</th>
-                      <th>Item Name</th>
-                      <th>Model</th>
-                      <th>Serial</th>
-                      <th>Qty</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {viewProducts.length === 0 && <tr><td colSpan={6} className="empty-state">No products attached.</td></tr>}
-                    {viewProducts.map((p, i) => (
-                      <tr key={p.id}>
-                        <td data-label="Action" style={{ textAlign: 'center' }}>
-                          <RequirePermission permission="edit_work_activity">
-                            <button type="button" className="btn-text-danger" onClick={(e) => handleRemoveProductFromDetails(p.id!, e)}>Remove</button>
-                          </RequirePermission>
-                        </td>
-                        <td data-label="#">{formatSeq(i + 1)}</td>
-                        <td data-label="Item">{p.itemName}</td>
-                        <td data-label="Model">{p.modelPart}</td>
-                        <td data-label="Serial">{p.serial || '-'}</td>
-                        <td data-label="Qty">{p.quantity}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-          </div>
-        </div>
-      )}
-
-      {isJobModalOpen && (
-        <div className="modal-overlay active">
-          <div className="modal-content modal-large">
-            <form onSubmit={handleSaveOrder}>
-              <div className="modal-header">
-                <h3>{editingJob ? "Edit Order" : "Create New Order"}</h3>
-                <div style={{ display: 'flex', gap: '10px' }}>
-                  <RequirePermission permission="manage_security">
-                    <button type="button" className="icon-btn" onClick={() => setIsJobConfigOpen(true)} title="Configure Field Security"><Settings size={20}/></button>
-                  </RequirePermission>
-                  <button type="submit" className="action btn-primary" disabled={isProcessing}>
-                    {isProcessing ? 'Saving...' : 'Save Order'}
+                {modalState === 'form' && (
+                  <button className="action btn-primary" onClick={handleSave} disabled={isProcessing}>
+                    {isProcessing ? 'Saving...' : 'Save'}
                   </button>
-                  <button type="button" className="close-modal" onClick={() => setIsJobModalOpen(false)}><X size={24}/></button>
-                </div>
+                )}
+                <button className="close-modal icon-btn" onClick={() => setModalState('closed')} disabled={isProcessing}>
+                  <X size={24}/>
+                </button>
               </div>
-              <div className="form-grid">
-                
-                <div className="form-group">
-                  <label>Registration Date {isJobReq('createdAt') && '*'} {!isJobFieldEditable('createdAt') && <span style={{fontSize:'0.75rem', color:'#ef4444'}}><Lock size={12}/> Locked</span>}</label>
-                  <input type="date" value={formData.createdAt} onChange={e => setFormData({...formData, createdAt: e.target.value})} required={isJobReq('createdAt')} disabled={!isJobFieldEditable('createdAt')} style={{ backgroundColor: !isJobFieldEditable('createdAt') ? '#f1f5f9' : 'white', cursor: !isJobFieldEditable('createdAt') ? 'not-allowed' : 'text' }}/>
-                </div>
-                
-                <div className="form-group">
-                  <label>Address {isJobReq('destination') && '*'} {!isJobFieldEditable('destination') && <span style={{fontSize:'0.75rem', color:'#ef4444'}}><Lock size={12}/> Locked</span>}</label>
-                  <div style={{ display: 'flex', gap: '8px', alignItems: 'stretch', pointerEvents: !isJobFieldEditable('destination') ? 'none' : 'auto', opacity: !isJobFieldEditable('destination') ? 0.6 : 1 }}>
-                    <div style={{ flex: 1 }}>
-                      <DestinationSearch 
-                        value={formData.destination}
-                        onSelect={(val) => setFormData({...formData, destination: val})}
-                        placeholder="Search address..."
-                        required={isJobReq('destination')}
+            </div>
+            
+            {modalState === 'form' && (
+              <form onSubmit={handleSave} style={{ paddingTop: '20px' }}>
+                <div className="form-grid" style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '1.2rem' }}>
+                  {selectedCatalog.fields.map(field => (
+                    <div key={field.name} className="form-group" style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      <label style={{ fontSize: '0.9rem', fontWeight: 600 }}>
+                        {/* 🔥 Reemplazo visual de Description a Address en el formulario modal */}
+                        {field.name === 'description' && selectedCatalog.id === 'destinations' ? 'Address' : field.label} {field.required && <span style={{color: 'red'}}>*</span>}
+                      </label>
+                      <input 
+                        type="text" 
+                        name={field.name} 
+                        value={formData[field.name] || ''} 
+                        onChange={(e) => setFormData({...formData, [field.name]: e.target.value})} 
+                        required={field.required}
+                        disabled={isProcessing}
+                        style={{ padding: '10px', borderRadius: '6px', border: '1px solid var(--border-color)', width: '100%' }}
                       />
                     </div>
-                    <button 
-                      type="button" 
-                      className="action btn-secondary" 
-                      style={{ padding: '0 14px', height: '46px' }}
-                      onClick={() => setIsQuickDestOpen(true)}
-                      title="Add New Destination"
-                      disabled={!isJobFieldEditable('destination')}
-                    >
-                      <Plus size={20} />
-                    </button>
-                  </div>
+                  ))}
                 </div>
-
-                <div className="form-group">
-                  <label>Ordered by {isJobReq('jobOrder') && '*'} {!isJobFieldEditable('jobOrder') && <span style={{fontSize:'0.75rem', color:'#ef4444'}}><Lock size={12}/> Locked</span>}</label>
-                  <input 
-                    type="text" 
-                    value={formData.jobOrder} 
-                    readOnly 
-                    title="This field is auto-populated and cannot be changed for auditing purposes."
-                    style={{ backgroundColor: '#f1f5f9', color: '#64748b', cursor: 'not-allowed', fontWeight: '600', border: '1px solid #cbd5e1' }}
-                  />
-                </div>
-
-                <div className="form-group">
-                  <label>Made by {isJobReq('madeBy') && '*'} {!isJobFieldEditable('madeBy') && <span style={{fontSize:'0.75rem', color:'#ef4444'}}><Lock size={12}/> Locked</span>}</label>
-                  <select 
-                    value={formData.madeBy || ''} 
-                    onChange={e => setFormData({...formData, madeBy: e.target.value})} 
-                    required={isJobReq('madeBy')} 
-                    disabled={!isJobFieldEditable('madeBy')} 
-                    style={{ backgroundColor: !isJobFieldEditable('madeBy') ? '#f1f5f9' : 'white', cursor: !isJobFieldEditable('madeBy') ? 'not-allowed' : 'pointer' }}
-                  >
-                    <option value="">-- Unassigned --</option>
-                    {systemUsers.map(u => {
-                      const name = `${u.firstName || ''} ${u.lastName || ''}`.trim() || u.email;
-                      return <option key={u.id} value={name}>{name}</option>;
-                    })}
-                  </select>
-                </div>
-
-                <div className="form-group"><label>Work Finish {isJobReq('workFinish') && '*'} {!isJobFieldEditable('workFinish') && <span style={{fontSize:'0.75rem', color:'#ef4444'}}><Lock size={12}/> Locked</span>}</label><select value={formData.workFinish} onChange={e => setFormData({...formData, workFinish: e.target.value as 'YES' | 'NO'})} required={isJobReq('workFinish')} disabled={!isJobFieldEditable('workFinish')} style={{ backgroundColor: !isJobFieldEditable('workFinish') ? '#f1f5f9' : 'white', cursor: !isJobFieldEditable('workFinish') ? 'not-allowed' : 'pointer' }}><option value="YES">YES</option><option value="NO">NO</option></select></div>
-                <div className="form-group" style={{ gridColumn: 'span 2' }}><label>Description {isJobReq('description') && '*'} {!isJobFieldEditable('description') && <span style={{fontSize:'0.75rem', color:'#ef4444'}}><Lock size={12}/> Locked</span>}</label><input type="text" value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} required={isJobReq('description')} disabled={!isJobFieldEditable('description')} style={{ backgroundColor: !isJobFieldEditable('description') ? '#f1f5f9' : 'white', cursor: !isJobFieldEditable('description') ? 'not-allowed' : 'text' }}/></div>
-                <div className="form-group"><label>Schedule {isJobReq('schedule') && '*'} {!isJobFieldEditable('schedule') && <span style={{fontSize:'0.75rem', color:'#ef4444'}}><Lock size={12}/> Locked</span>}</label><input type="date" value={formData.schedule} onChange={e => setFormData({...formData, schedule: e.target.value})} required={isJobReq('schedule')} disabled={!isJobFieldEditable('schedule')} style={{ backgroundColor: !isJobFieldEditable('schedule') ? '#f1f5f9' : 'white', cursor: !isJobFieldEditable('schedule') ? 'not-allowed' : 'text' }}/></div>
-                <div className="form-group"><label>Pending Work {isJobReq('pendingWork') && '*'} {!isJobFieldEditable('pendingWork') && <span style={{fontSize:'0.75rem', color:'#ef4444'}}><Lock size={12}/> Locked</span>}</label><input type="text" value={formData.pendingWork} onChange={e => setFormData({...formData, pendingWork: e.target.value})} required={isJobReq('pendingWork')} disabled={!isJobFieldEditable('pendingWork')} style={{ backgroundColor: !isJobFieldEditable('pendingWork') ? '#f1f5f9' : 'white', cursor: !isJobFieldEditable('pendingWork') ? 'not-allowed' : 'text' }}/></div>
-              </div>
-              
-              <div className="products-section">
-                <div className="products-header">
-                  <h4 style={{ margin: 0 }}>Products List</h4>
-                  <button type="button" className="action btn-secondary btn-sm" onClick={() => setIsProductModalOpen(true)} disabled={isProcessing}><Plus size={16}/> Add Product</button>
-                </div>
-                <div className="table-container large-table">
-                  <table className="responsive-table">
-                    <thead>
-                      <tr>
-                        <th style={{ textAlign: 'center', width: '80px' }}>Action</th>
-                        <th>#</th>
-                        <th>Item</th>
-                        <th>Model</th>
-                        <th>Qty</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {formProducts.length === 0 && <tr><td colSpan={5} className="empty-state">No products added. Click "+ Add Product".</td></tr>}
-                      {formProducts.map((p, index) => (
-                        <tr key={index}>
-                          <td data-label="Action" style={{ textAlign: 'center' }}>
-                            <button type="button" className="btn-text-danger" onClick={(e) => handleRemoveProductFromForm(index, e)} disabled={isProcessing}>Remove</button>
-                          </td>
-                          <td data-label="#">{formatSeq(index + 1)}</td>
-                          <td data-label="Item">{p.itemName}</td>
-                          <td data-label="Model">{p.modelPart}</td>
-                          <td data-label="Qty">{p.quantity}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {isQuickDestOpen && (
-        <div className="modal-overlay active" style={{ zIndex: 1300 }}>
-          <div className="modal-content" style={{ maxWidth: '500px' }}>
-            <form onSubmit={handleSaveQuickDestination}>
-              <div className="modal-header">
-                <h3>Quick Add Destination</h3>
-                <button type="button" className="close-modal" onClick={() => setIsQuickDestOpen(false)}><X size={24}/></button>
-              </div>
-              <div className="form-grid">
-                <div className="form-group full-width">
-                  <label>Property Name * (Ej. 260)</label>
-                  <input 
-                    type="text" 
-                    required 
-                    value={newDestData.property_name} 
-                    onChange={e => setNewDestData({...newDestData, property_name: e.target.value})} 
-                  />
-                </div>
-                <div className="form-group full-width">
-                  <label>Description * (Visible Name)</label>
-                  <input 
-                    type="text" 
-                    required 
-                    value={newDestData.description} 
-                    onChange={e => setNewDestData({...newDestData, description: e.target.value})} 
-                  />
-                </div>
-                <div className="form-group full-width">
-                  <label>Contact (Optional)</label>
-                  <input 
-                    type="text" 
-                    value={newDestData.contact} 
-                    onChange={e => setNewDestData({...newDestData, contact: e.target.value})} 
-                  />
-                </div>
-              </div>
-              <div className="modal-footer-actions" style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '20px' }}>
-                <button type="submit" className="action btn-primary">Save Destination</button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {isProductModalOpen && (
-        <div className="modal-overlay active" style={{ zIndex: 1100 }}>
-          <div className="modal-content modal-large" style={{ maxWidth: '950px', width: '95%' }}>
-            <form onSubmit={handleAddProductSubmit}>
-              <div className="modal-header">
-                <h3>Add Product</h3>
-                <div style={{ display: 'flex', gap: '10px' }}>
-                  <button type="button" className="icon-btn" onClick={() => setIsProductConfigOpen(true)} title="Configure Required Fields"><Settings size={20}/></button>
-                  <button type="submit" className="action btn-primary">Add to List</button>
-                  <button type="button" className="close-modal" onClick={() => setIsProductModalOpen(false)}><X size={24}/></button>
-                </div>
-              </div>
-              
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '20px', marginTop: '15px' }}>
-                <div className="form-group" style={{ flex: '3 1 250px' }}>
-                  <label>Select Item {isProdReq('itemEntranceId') && '*'}</label>
-                  <SearchableSelect 
-                    options={entranceList.map(item => {
-                      const stock = getAvailableStock(item.id);
-                      return {
-                        id: String(item.id), 
-                        label: `${item.itemName} | Model: ${item.modelPart || '-'} | Serial: ${item.serial || '-'} | PO: ${item.po || '-'} | Stock: ${stock}`
-                      };
-                    })}
-                    value={currentProduct.itemEntranceId} 
-                    onChange={(id) => handleItemEntranceSelection(id)} 
-                    placeholder="-- Type name, model, serial, PO... --"
-                    required={isProdReq('itemEntranceId')}
-                  />
-                </div>
-                
-                <div className="form-group" style={{ flex: '1 1 100px' }}>
-                  <label>Quantity {isProdReq('quantity') && '*'}</label>
-                  <input 
-                    type="number" 
-                    min="1" 
-                    max={currentProduct.itemEntranceId ? getAvailableStock(currentProduct.itemEntranceId) : ''}
-                    disabled={!currentProduct.itemEntranceId || getAvailableStock(currentProduct.itemEntranceId) <= 0}
-                    value={currentProduct.quantity} 
-                    onChange={e => {
-                      let val = Number(e.target.value);
-                      const maxStock = getAvailableStock(currentProduct.itemEntranceId);
-                      if (val > maxStock) val = maxStock;
-                      setCurrentProduct({...currentProduct, quantity: val});
-                    }} 
-                    required={isProdReq('quantity')} 
-                    style={{
-                      backgroundColor: (!currentProduct.itemEntranceId || getAvailableStock(currentProduct.itemEntranceId) <= 0) ? '#f1f5f9' : 'white',
-                      cursor: (!currentProduct.itemEntranceId || getAvailableStock(currentProduct.itemEntranceId) <= 0) ? 'not-allowed' : 'text'
-                    }}
-                  />
-                  {currentProduct.itemEntranceId && getAvailableStock(currentProduct.itemEntranceId) <= 0 && (
-                    <span style={{color: '#ef4444', fontSize: '0.75rem', marginTop: '4px', display: 'block', fontWeight: 'bold'}}>Out of stock</span>
-                  )}
-                  {currentProduct.itemEntranceId && getAvailableStock(currentProduct.itemEntranceId) > 0 && (
-                    <span style={{color: '#64748b', fontSize: '0.75rem', marginTop: '4px', display: 'block'}}>Max available: {getAvailableStock(currentProduct.itemEntranceId)}</span>
-                  )}
-                </div>
-              </div>
-            </form>
+              </form>
+            )}
           </div>
         </div>
       )}

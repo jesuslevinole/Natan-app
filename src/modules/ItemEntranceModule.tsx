@@ -32,7 +32,7 @@ export const ItemEntrance: React.FC = () => {
   const [editingId, setEditingId] = useState<string | null>(null);
   
   const supplyCompanies = useCatalogOptions('supply_companies', 'company');
-  const catalogItemNames = useCatalogOptions('catalog_item_names', 'item_name', 'item_name');
+  const catalogItemNames = useCatalogOptions('item_names', 'item_name', 'item_name');
 
   const entranceFields = [
     { name: 'date', label: 'Date (Registration)' },
@@ -45,11 +45,11 @@ export const ItemEntrance: React.FC = () => {
     { name: 'itemsArrived', label: 'Items Arrived (Initial Total)' }
   ];
   
-  const { toggleRequired, isRequired } = useFormConfig('itemEntrance', ['date', 'itemName', 'supplyCompany', 'itemsArrived']);
+  // 🔥 SOLUCIÓN TS: Nombres únicos para el hook de Item Entrance
+  const { toggleRequired: toggleItemReq, isRequired: isItemReq } = useFormConfig('itemEntrance', ['date', 'itemName', 'supplyCompany', 'itemsArrived']);
 
   const [fieldRoles, setFieldRoles] = useState<Record<string, string>>({});
 
-  // 🔥 SOLUCIÓN TS: quantityOrdered en 0 "por debajo de la mesa" para que Typescript no llore
   const initialForm: ItemEntranceFormData = {
     date: getTodayString(), modelPart: '', serial: '', po: '', orderDate: '', 
     quantityOrdered: 0, itemsArrived: 0, supplyCompany: '', itemName: ''
@@ -130,7 +130,6 @@ export const ItemEntrance: React.FC = () => {
   const handleOpenModal = (item: ItemEntranceRecord | null = null) => {
     if (item) { 
       setEditingId(item.id); 
-      // 🔥 SOLUCIÓN TS: Mantenemos el quantityOrdered oculto
       setFormData({
         date: item.date || '',
         itemName: item.itemName || '',
@@ -261,7 +260,7 @@ export const ItemEntrance: React.FC = () => {
               <th>Serial #</th>
               <th>PO #</th>
               <th>Company</th>
-              <th>Stock</th>
+              <th>Stock (Arrived)</th>
             </tr>
           </thead>
           <tbody>
@@ -342,8 +341,8 @@ export const ItemEntrance: React.FC = () => {
                         <td style={{ textAlign: 'center' }}>
                           <input 
                             type="checkbox" 
-                            checked={isRequired(f.name)} 
-                            onChange={() => toggleRequired(f.name)} 
+                            checked={isItemReq(f.name)} // 🔥 Uso del hook con nombre seguro
+                            onChange={() => toggleItemReq(f.name)} 
                             style={{ width: '18px', height: '18px', accentColor: 'var(--primary-color)', cursor: 'pointer' }}
                           />
                         </td>
@@ -395,56 +394,56 @@ export const ItemEntrance: React.FC = () => {
               </div>
               <div className="form-grid">
                 <div className="form-group">
-                  <label>Date (Registration) {isRequired('date') && '*'} {!isFieldEditable('date') && <span style={{fontSize:'0.75rem', color:'#ef4444'}}><Lock size={12}/> Locked</span>}</label>
-                  <input type="date" value={formData.date} onChange={e => setFormData({...formData, date: e.target.value})} required={isRequired('date')} disabled={!isFieldEditable('date')} style={{ backgroundColor: !isFieldEditable('date') ? '#f1f5f9' : 'white', cursor: !isFieldEditable('date') ? 'not-allowed' : 'text' }}/>
+                  <label>Date (Registration) {isItemReq('date') && '*'} {!isFieldEditable('date') && <span style={{fontSize:'0.75rem', color:'#ef4444'}}><Lock size={12}/> Locked</span>}</label>
+                  <input type="date" value={formData.date} onChange={e => setFormData({...formData, date: e.target.value})} required={isItemReq('date')} disabled={!isFieldEditable('date')} style={{ backgroundColor: !isFieldEditable('date') ? '#f1f5f9' : 'white', cursor: !isFieldEditable('date') ? 'not-allowed' : 'text' }}/>
                 </div>
                 
                 <div className="form-group">
-                  <label>Item Name {isRequired('itemName') && '*'} {!isFieldEditable('itemName') && <span style={{fontSize:'0.75rem', color:'#ef4444'}}><Lock size={12}/> Locked</span>}</label>
+                  <label>Item Name {isItemReq('itemName') && '*'} {!isFieldEditable('itemName') && <span style={{fontSize:'0.75rem', color:'#ef4444'}}><Lock size={12}/> Locked</span>}</label>
                   <div style={{ pointerEvents: !isFieldEditable('itemName') ? 'none' : 'auto', opacity: !isFieldEditable('itemName') ? 0.6 : 1 }}>
                     <SearchableSelect 
-                      options={catalogItemNames.map(c => ({ id: String(c.label), label: String(c.label) }))}
+                      options={catalogItemNames.map(c => ({ id: String(c.label || c.value || ''), label: String(c.label || c.value || '') })).filter(o => o.label !== '')}
                       value={formData.itemName} 
                       onChange={(val) => setFormData({...formData, itemName: val})} 
                       placeholder="-- Search from Catalog --"
-                      required={isRequired('itemName')}
+                      required={isItemReq('itemName')}
                     />
                   </div>
                 </div>
 
                 <div className="form-group">
-                  <label>Model / Part # {isRequired('modelPart') && '*'} {!isFieldEditable('modelPart') && <span style={{fontSize:'0.75rem', color:'#ef4444'}}><Lock size={12}/> Locked</span>}</label>
-                  <input type="text" value={formData.modelPart} onChange={e => setFormData({...formData, modelPart: e.target.value})} required={isRequired('modelPart')} disabled={!isFieldEditable('modelPart')} style={{ backgroundColor: !isFieldEditable('modelPart') ? '#f1f5f9' : 'white', cursor: !isFieldEditable('modelPart') ? 'not-allowed' : 'text' }}/>
+                  <label>Model / Part # {isItemReq('modelPart') && '*'} {!isFieldEditable('modelPart') && <span style={{fontSize:'0.75rem', color:'#ef4444'}}><Lock size={12}/> Locked</span>}</label>
+                  <input type="text" value={formData.modelPart} onChange={e => setFormData({...formData, modelPart: e.target.value})} required={isItemReq('modelPart')} disabled={!isFieldEditable('modelPart')} style={{ backgroundColor: !isFieldEditable('modelPart') ? '#f1f5f9' : 'white', cursor: !isFieldEditable('modelPart') ? 'not-allowed' : 'text' }}/>
                 </div>
                 <div className="form-group">
-                  <label style={{ color: 'var(--primary-color)', fontWeight: 'bold' }}>Serial # {isRequired('serial') && '*'} {!isFieldEditable('serial') && <span style={{fontSize:'0.75rem', color:'#ef4444'}}><Lock size={12}/> Locked</span>}</label>
-                  <input type="text" value={formData.serial} onChange={e => setFormData({...formData, serial: e.target.value})} required={isRequired('serial')} disabled={!isFieldEditable('serial')} style={{ backgroundColor: !isFieldEditable('serial') ? '#f1f5f9' : 'white', cursor: !isFieldEditable('serial') ? 'not-allowed' : 'text' }}/>
+                  <label style={{ color: 'var(--primary-color)', fontWeight: 'bold' }}>Serial # {isItemReq('serial') && '*'} {!isFieldEditable('serial') && <span style={{fontSize:'0.75rem', color:'#ef4444'}}><Lock size={12}/> Locked</span>}</label>
+                  <input type="text" value={formData.serial} onChange={e => setFormData({...formData, serial: e.target.value})} required={isItemReq('serial')} disabled={!isFieldEditable('serial')} style={{ backgroundColor: !isFieldEditable('serial') ? '#f1f5f9' : 'white', cursor: !isFieldEditable('serial') ? 'not-allowed' : 'text' }}/>
                 </div>
                 <div className="form-group">
-                  <label style={{ color: 'var(--primary-color)', fontWeight: 'bold' }}>PO # {isRequired('po') && '*'} {!isFieldEditable('po') && <span style={{fontSize:'0.75rem', color:'#ef4444'}}><Lock size={12}/> Locked</span>}</label>
-                  <input type="text" value={formData.po} onChange={e => setFormData({...formData, po: e.target.value})} required={isRequired('po')} disabled={!isFieldEditable('po')} style={{ backgroundColor: !isFieldEditable('po') ? '#f1f5f9' : 'white', cursor: !isFieldEditable('po') ? 'not-allowed' : 'text' }}/>
+                  <label style={{ color: 'var(--primary-color)', fontWeight: 'bold' }}>PO # {isItemReq('po') && '*'} {!isFieldEditable('po') && <span style={{fontSize:'0.75rem', color:'#ef4444'}}><Lock size={12}/> Locked</span>}</label>
+                  <input type="text" value={formData.po} onChange={e => setFormData({...formData, po: e.target.value})} required={isItemReq('po')} disabled={!isFieldEditable('po')} style={{ backgroundColor: !isFieldEditable('po') ? '#f1f5f9' : 'white', cursor: !isFieldEditable('po') ? 'not-allowed' : 'text' }}/>
                 </div>
                 <div className="form-group">
-                  <label>Supply Company {isRequired('supplyCompany') && '*'} {!isFieldEditable('supplyCompany') && <span style={{fontSize:'0.75rem', color:'#ef4444'}}><Lock size={12}/> Locked</span>}</label>
+                  <label>Supply Company {isItemReq('supplyCompany') && '*'} {!isFieldEditable('supplyCompany') && <span style={{fontSize:'0.75rem', color:'#ef4444'}}><Lock size={12}/> Locked</span>}</label>
                   <div style={{ pointerEvents: !isFieldEditable('supplyCompany') ? 'none' : 'auto', opacity: !isFieldEditable('supplyCompany') ? 0.6 : 1 }}>
                     <SearchableSelect 
-                      options={supplyCompanies.map(c => ({ id: String(c.label), label: String(c.label) }))}
+                      options={supplyCompanies.map(c => ({ id: String(c.label || c.value || ''), label: String(c.label || c.value || '') })).filter(o => o.label !== '')}
                       value={formData.supplyCompany} 
                       onChange={(id) => setFormData({...formData, supplyCompany: id})} 
                       placeholder="-- Select Company --"
-                      required={isRequired('supplyCompany')}
+                      required={isItemReq('supplyCompany')}
                     />
                   </div>
                 </div>
 
                 <div className="form-group">
-                  <label>Arrived Date {isRequired('orderDate') && '*'} {!isFieldEditable('orderDate') && <span style={{fontSize:'0.75rem', color:'#ef4444'}}><Lock size={12}/> Locked</span>}</label>
-                  <input type="date" value={formData.orderDate} onChange={e => setFormData({...formData, orderDate: e.target.value})} required={isRequired('orderDate')} disabled={!isFieldEditable('orderDate')} style={{ backgroundColor: !isFieldEditable('orderDate') ? '#f1f5f9' : 'white', cursor: !isFieldEditable('orderDate') ? 'not-allowed' : 'text' }}/>
+                  <label>Arrived Date {isItemReq('orderDate') && '*'} {!isFieldEditable('orderDate') && <span style={{fontSize:'0.75rem', color:'#ef4444'}}><Lock size={12}/> Locked</span>}</label>
+                  <input type="date" value={formData.orderDate} onChange={e => setFormData({...formData, orderDate: e.target.value})} required={isItemReq('orderDate')} disabled={!isFieldEditable('orderDate')} style={{ backgroundColor: !isFieldEditable('orderDate') ? '#f1f5f9' : 'white', cursor: !isFieldEditable('orderDate') ? 'not-allowed' : 'text' }}/>
                 </div>
 
                 <div className="form-group">
-                  <label>Items Arrived (Initial Total) {isRequired('itemsArrived') && '*'} {!isFieldEditable('itemsArrived') && <span style={{fontSize:'0.75rem', color:'#ef4444'}}><Lock size={12}/> Locked</span>}</label>
-                  <input type="number" value={formData.itemsArrived} onChange={e => setFormData({...formData, itemsArrived: Number(e.target.value)})} required={isRequired('itemsArrived')} disabled={!isFieldEditable('itemsArrived')} style={{ backgroundColor: !isFieldEditable('itemsArrived') ? '#f1f5f9' : 'white', cursor: !isFieldEditable('itemsArrived') ? 'not-allowed' : 'text' }}/>
+                  <label>Items Arrived (Initial Total) {isItemReq('itemsArrived') && '*'} {!isFieldEditable('itemsArrived') && <span style={{fontSize:'0.75rem', color:'#ef4444'}}><Lock size={12}/> Locked</span>}</label>
+                  <input type="number" value={formData.itemsArrived} onChange={e => setFormData({...formData, itemsArrived: Number(e.target.value)})} required={isItemReq('itemsArrived')} disabled={!isFieldEditable('itemsArrived')} style={{ backgroundColor: !isFieldEditable('itemsArrived') ? '#f1f5f9' : 'white', cursor: !isFieldEditable('itemsArrived') ? 'not-allowed' : 'text' }}/>
                 </div>
               </div>
             </form>
