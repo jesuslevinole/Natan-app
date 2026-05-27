@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { collection, getDocs } from 'firebase/firestore';
 import { db } from '../firebase'; 
 import { BarChart2, Filter, Award, Activity, Wrench, MapPin, FileBarChart } from 'lucide-react';
@@ -78,10 +78,11 @@ export const ReportsModule: React.FC = () => {
     fetchReportsData();
   }, []);
 
-  // 🔥 Construimos lookups de itemEntrance una sola vez por render para resolver:
-  //   - JobProduct -> PO header (entrance) -> supplyCompany
-  //   - PO -> array de detalles para la sección de agregado por PO
-  const entranceLookup: EntranceLookup = (() => {
+  // 🔥 OPTIMIZACIÓN: Lookups de itemEntrance memoizados.
+  // Antes se reconstruían los Maps en CADA render (incluyendo cada keystroke en los filtros),
+  // lo cual congelaba la UI hasta que el usuario soltaba el teclado.
+  // Ahora solo se recomputa cuando cambia entranceList.
+  const entranceLookup: EntranceLookup = useMemo(() => {
     const headerById = new Map<string, { po: string; supplyCompany: string; date: string }>();
     const entranceIdByDetailId = new Map<string, string>();
     const detailsByEntranceId = new Map<string, EntranceDetail[]>();
@@ -98,11 +99,10 @@ export const ReportsModule: React.FC = () => {
     });
 
     return { headerById, entranceIdByDetailId, detailsByEntranceId };
-  })();
+  }, [entranceList]);
 
-  // 🔥 Resuelve la Supply Company de un JobProduct usando sus referencias al PO.
-  // Estrategia: prefiere entranceDetailId (nuevo); fallback a itemEntranceId (legacy).
-  const getSupplyCompanyForProduct = (p: JobProduct): string => {
+  // 🔥 useCallback: estabiliza la referencia para que los useMemo abajo no recalculen sin necesidad.
+  const getSupplyCompanyForProduct = useCallback((p: JobProduct): string => {
     // Camino 1: tenemos entranceDetailId, resolvemos al entrance y de ahí al header
     if (p.entranceDetailId) {
       const eid = entranceLookup.entranceIdByDetailId.get(p.entranceDetailId);
@@ -113,150 +113,196 @@ export const ReportsModule: React.FC = () => {
       return entranceLookup.headerById.get(p.itemEntranceId)?.supplyCompany || '';
     }
     return '';
-  };
+  }, [entranceLookup]);
 
   // 🔥 Lista de supply companies únicos presentes (para el dropdown del filtro)
-  const supplyCompanyOptions = (() => {
+  // 🔥 Memoizado: solo se recomputa cuando entranceList cambia, no en cada keystroke.
+  const supplyCompanyOptions = useMemo(() => {
     const set = new Set<string>();
     entranceList.forEach(e => {
       if (e.supplyCompany) set.add(e.supplyCompany);
     });
     return Array.from(set).sort();
-  })();
+  }, [entranceList]);
 
-  const filteredOrders = orders.filter(o => {
-    let match = true;
-    const orderDateStr = (o.createdAt || '').split('T')[0]; 
-    if (startDate && orderDateStr < startDate) match = false;
-    if (endDate && orderDateStr > endDate) match = false;
-    if (selectedDest && o.destination !== selectedDest) match = false;
-    
-    if (selectedWorker && o.jobOrder !== selectedWorker) match = false;
+  // 🔥 Helper memoizado para comparar destination de manera flexible.
+  // El filtro guarda el `property_name` (value), pero algunas órdenes pueden tener guardado
+  // el `description` (label visible) en el campo destination. Aceptamos ambos.
+  const destinationMatches = useCallback((orderDestination: string, selected: string): boolean => {
+    if (!selected) return true;
+    if (!orderDestination) return false;
+    if (orderDestination === selected) return true;
+    // Match contra el label correspondiente al selected (por si el order guarda el label)
+    const selectedOption = destinations.find(d => String(d.value) === selected);
+    if (selectedOption && orderDestination === String(selectedOption.label)) return true;
+    return false;
+  }, [destinations]);
 
-    if (match && (filterItemName || filterPO || filterSerial || filterSupplyCompany)) {
-      const orderProducts = allProducts.filter(p => p.jobOrderId === o.id);
-      const hasMatchingProduct = orderProducts.some(p => {
-        let pMatch = true;
-        if (filterItemName && !(p.itemName || '').toLowerCase().includes(filterItemName.toLowerCase())) pMatch = false;
-        if (filterPO && !(p.po || '').toLowerCase().includes(filterPO.toLowerCase())) pMatch = false;
-        if (filterSerial && !(p.serial || '').toLowerCase().includes(filterSerial.toLowerCase())) pMatch = false;
-        // 🔥 NUEVO: filtro por supply company (resuelto vía lookup, no almacenado en JobProduct)
-        if (filterSupplyCompany) {
-          const sc = getSupplyCompanyForProduct(p);
-          if (sc !== filterSupplyCompany) pMatch = false;
-        }
-        return pMatch;
-      });
-      if (!hasMatchingProduct) match = false;
-    }
-    return match;
-  });
+  // 🔥 OPTIMIZACIÓN CRÍTICA: filteredOrders memoizado.
+  // Solo se recomputa cuando cambia algún filtro o los datos base, no en cada render.
+  // Sin esto, escribir en cualquier input causaba que se filtraran todas las órdenes
+  // y productos en cada tecla, bloqueando la UI hasta que el usuario soltara el teclado.
+  const filteredOrders = useMemo(() => {
+    return orders.filter(o => {
+      let match = true;
+      const orderDateStr = (o.createdAt || '').split('T')[0]; 
+      if (startDate && orderDateStr < startDate) match = false;
+      if (endDate && orderDateStr > endDate) match = false;
+      if (selectedDest && !destinationMatches(o.destination, selectedDest)) match = false;
+      
+      if (selectedWorker && o.jobOrder !== selectedWorker) match = false;
 
-  const filteredProductsDetailed = allProducts.filter(p => {
-    const order = filteredOrders.find(o => o.id === p.jobOrderId);
-    if (!order) return false;
-    let pMatch = true;
-    if (filterItemName && !(p.itemName || '').toLowerCase().includes(filterItemName.toLowerCase())) pMatch = false;
-    if (filterPO && !(p.po || '').toLowerCase().includes(filterPO.toLowerCase())) pMatch = false;
-    if (filterSerial && !(p.serial || '').toLowerCase().includes(filterSerial.toLowerCase())) pMatch = false;
-    if (filterSupplyCompany) {
-      const sc = getSupplyCompanyForProduct(p);
-      if (sc !== filterSupplyCompany) pMatch = false;
-    }
-    return pMatch;
-  }).map(p => {
-    const order = filteredOrders.find(o => o.id === p.jobOrderId);
-    return {
-      ...p,
-      orderDate: order?.createdAt || '',
-      orderDestination: order?.destination || '',
-      orderWorker: order?.jobOrder || '',
-      supplyCompany: getSupplyCompanyForProduct(p), // 🔥 NUEVO: enriquecemos con company
-    };
-  }).sort((a, b) => new Date(b.orderDate).getTime() - new Date(a.orderDate).getTime());
+      if (match && (filterItemName || filterPO || filterSerial || filterSupplyCompany)) {
+        const orderProducts = allProducts.filter(p => p.jobOrderId === o.id);
+        const hasMatchingProduct = orderProducts.some(p => {
+          let pMatch = true;
+          if (filterItemName && !(p.itemName || '').toLowerCase().includes(filterItemName.toLowerCase())) pMatch = false;
+          if (filterPO && !(p.po || '').toLowerCase().includes(filterPO.toLowerCase())) pMatch = false;
+          if (filterSerial && !(p.serial || '').toLowerCase().includes(filterSerial.toLowerCase())) pMatch = false;
+          if (filterSupplyCompany) {
+            const sc = getSupplyCompanyForProduct(p);
+            if (sc !== filterSupplyCompany) pMatch = false;
+          }
+          return pMatch;
+        });
+        if (!hasMatchingProduct) match = false;
+      }
+      return match;
+    });
+  }, [
+    orders, allProducts,
+    startDate, endDate, selectedDest, selectedWorker,
+    filterItemName, filterPO, filterSerial, filterSupplyCompany,
+    destinationMatches, getSupplyCompanyForProduct
+  ]);
+
+  const filteredProductsDetailed = useMemo(() => {
+    // Optimización: Map de orders por id para lookup O(1) en vez de O(n) por cada producto
+    const orderById = new Map(filteredOrders.map(o => [o.id, o]));
+
+    return allProducts.filter(p => {
+      const order = orderById.get(p.jobOrderId);
+      if (!order) return false;
+      let pMatch = true;
+      if (filterItemName && !(p.itemName || '').toLowerCase().includes(filterItemName.toLowerCase())) pMatch = false;
+      if (filterPO && !(p.po || '').toLowerCase().includes(filterPO.toLowerCase())) pMatch = false;
+      if (filterSerial && !(p.serial || '').toLowerCase().includes(filterSerial.toLowerCase())) pMatch = false;
+      if (filterSupplyCompany) {
+        const sc = getSupplyCompanyForProduct(p);
+        if (sc !== filterSupplyCompany) pMatch = false;
+      }
+      return pMatch;
+    }).map(p => {
+      const order = orderById.get(p.jobOrderId);
+      return {
+        ...p,
+        orderDate: order?.createdAt || '',
+        orderDestination: order?.destination || '',
+        orderWorker: order?.jobOrder || '',
+        supplyCompany: getSupplyCompanyForProduct(p),
+      };
+    }).sort((a, b) => new Date(b.orderDate).getTime() - new Date(a.orderDate).getTime());
+  }, [
+    allProducts, filteredOrders,
+    filterItemName, filterPO, filterSerial, filterSupplyCompany,
+    getSupplyCompanyForProduct
+  ]);
 
   const totalWorks = filteredOrders.length;
-  const totalItemsInstalled = filteredProductsDetailed.reduce((sum, p) => sum + p.quantity, 0);
-  
-  const aptCounts: Record<string, number> = {};
-  filteredOrders.forEach(o => { aptCounts[o.destination] = (aptCounts[o.destination] || 0) + 1; });
-  const aptList = Object.entries(aptCounts).map(([dest, count]) => ({ dest, count })).sort((a, b) => b.count - a.count);
-  const mostWorkedApt = aptList.length > 0 ? aptList[0] : null;
+  // 🔥 KPIs y agregados memoizados: solo recomputan cuando cambian filteredOrders/filteredProductsDetailed.
+  const { totalItemsInstalled, aptList, mostWorkedApt, repeatedList, topWorkerEntry } = useMemo(() => {
+    const totalItemsInstalledLocal = filteredProductsDetailed.reduce((sum, p) => sum + p.quantity, 0);
 
-  const repeatedWorksCounts: Record<string, number> = {};
-  filteredOrders.forEach(o => {
-    const key = `${o.destination} ||| ${o.description}`;
-    repeatedWorksCounts[key] = (repeatedWorksCounts[key] || 0) + 1;
-  });
-  const repeatedList = Object.entries(repeatedWorksCounts).map(([key, count]) => {
-    const [dest, desc] = key.split(' ||| ');
-    return { dest, desc, count };
-  }).sort((a, b) => b.count - a.count);
+    const aptCounts: Record<string, number> = {};
+    filteredOrders.forEach(o => { aptCounts[o.destination] = (aptCounts[o.destination] || 0) + 1; });
+    const aptListLocal = Object.entries(aptCounts).map(([dest, count]) => ({ dest, count })).sort((a, b) => b.count - a.count);
+    const mostWorkedAptLocal = aptListLocal.length > 0 ? aptListLocal[0] : null;
 
-  const workerCounts: Record<string, number> = {};
-  filteredOrders.forEach(o => { workerCounts[o.jobOrder] = (workerCounts[o.jobOrder] || 0) + 1; });
-  const topWorkerEntry = Object.entries(workerCounts).sort((a, b) => b[1] - a[1])[0];
+    const repeatedWorksCounts: Record<string, number> = {};
+    filteredOrders.forEach(o => {
+      const key = `${o.destination} ||| ${o.description}`;
+      repeatedWorksCounts[key] = (repeatedWorksCounts[key] || 0) + 1;
+    });
+    const repeatedListLocal = Object.entries(repeatedWorksCounts).map(([key, count]) => {
+      const [dest, desc] = key.split(' ||| ');
+      return { dest, desc, count };
+    }).sort((a, b) => b.count - a.count);
 
-  // 🔥 NUEVO: Agregado por PO — Items registrados vs Items instalados vs Stock restante.
-  // Solo considera POs que tengan al menos un producto matching los filtros (o todos si no hay filtros de producto).
+    const workerCounts: Record<string, number> = {};
+    filteredOrders.forEach(o => { workerCounts[o.jobOrder] = (workerCounts[o.jobOrder] || 0) + 1; });
+    const topWorkerEntryLocal = Object.entries(workerCounts).sort((a, b) => b[1] - a[1])[0];
+
+    return {
+      totalItemsInstalled: totalItemsInstalledLocal,
+      aptList: aptListLocal,
+      mostWorkedApt: mostWorkedAptLocal,
+      repeatedList: repeatedListLocal,
+      topWorkerEntry: topWorkerEntryLocal,
+    };
+  }, [filteredOrders, filteredProductsDetailed]);
+
   const productFiltersActive = !!(filterItemName || filterPO || filterSerial || filterSupplyCompany);
 
-  const poAggregate = entranceList
-    .map(entrance => {
-      const details = entrance.details || [];
-      const headerInfo = entranceLookup.headerById.get(entrance.id);
+  // 🔥 poAggregate memoizado: solo recomputa cuando cambian sus dependencias.
+  const poAggregate = useMemo(() => {
+    return entranceList
+      .map(entrance => {
+        const details = entrance.details || [];
+        const headerInfo = entranceLookup.headerById.get(entrance.id);
 
-      // Filtro por supply company directo sobre el header
-      if (filterSupplyCompany && headerInfo?.supplyCompany !== filterSupplyCompany) return null;
+        // Filtro por supply company directo sobre el header
+        if (filterSupplyCompany && headerInfo?.supplyCompany !== filterSupplyCompany) return null;
 
-      // Filtro por PO# directo sobre el header
-      if (filterPO && !(entrance.po || '').toLowerCase().includes(filterPO.toLowerCase())) return null;
+        // Filtro por PO# directo sobre el header
+        if (filterPO && !(entrance.po || '').toLowerCase().includes(filterPO.toLowerCase())) return null;
 
-      // Total inicial recibido (suma de todos los detalles)
-      const totalArrived = details.reduce((sum, d) => sum + (d.itemsArrived || 0), 0);
+        // Total inicial recibido (suma de todos los detalles)
+        const totalArrived = details.reduce((sum, d) => sum + (d.itemsArrived || 0), 0);
 
-      // Items instalados desde este PO: cuenta JobProducts vinculados al entrance o a cualquiera de sus detailIds
-      const detailIdSet = new Set(details.map(d => d.detailId));
-      const linkedProducts = allProducts.filter(p => {
-        if (p.entranceDetailId && detailIdSet.has(p.entranceDetailId)) return true;
-        // Legacy: JobProduct sin entranceDetailId pero con itemEntranceId apuntando a este PO
-        if (!p.entranceDetailId && p.itemEntranceId === entrance.id) return true;
-        return false;
-      });
+        // Items instalados desde este PO: cuenta JobProducts vinculados al entrance o a cualquiera de sus detailIds
+        const detailIdSet = new Set(details.map(d => d.detailId));
+        const linkedProducts = allProducts.filter(p => {
+          if (p.entranceDetailId && detailIdSet.has(p.entranceDetailId)) return true;
+          // Legacy: JobProduct sin entranceDetailId pero con itemEntranceId apuntando a este PO
+          if (!p.entranceDetailId && p.itemEntranceId === entrance.id) return true;
+          return false;
+        });
 
-      // Si hay filtros de producto (itemName / serial), aplicarlos al consumo
-      const matchingProducts = linkedProducts.filter(p => {
-        if (filterItemName && !(p.itemName || '').toLowerCase().includes(filterItemName.toLowerCase())) return false;
-        if (filterSerial && !(p.serial || '').toLowerCase().includes(filterSerial.toLowerCase())) return false;
-        return true;
-      });
+        // Si hay filtros de producto (itemName / serial), aplicarlos al consumo
+        const matchingProducts = linkedProducts.filter(p => {
+          if (filterItemName && !(p.itemName || '').toLowerCase().includes(filterItemName.toLowerCase())) return false;
+          if (filterSerial && !(p.serial || '').toLowerCase().includes(filterSerial.toLowerCase())) return false;
+          return true;
+        });
 
-      // Si hay filtros activos de producto y no hay match, excluir el PO del reporte
-      if (productFiltersActive && matchingProducts.length === 0) {
-        // Excepción: si solo el filtro de supply company / PO estaba activo, igual lo mostramos (header matchea).
-        const onlyHeaderFilters = !filterItemName && !filterSerial;
-        if (!onlyHeaderFilters) return null;
-      }
+        // Si hay filtros activos de producto y no hay match, excluir el PO del reporte
+        if (productFiltersActive && matchingProducts.length === 0) {
+          // Excepción: si solo el filtro de supply company / PO estaba activo, igual lo mostramos (header matchea).
+          const onlyHeaderFilters = !filterItemName && !filterSerial;
+          if (!onlyHeaderFilters) return null;
+        }
 
-      const installed = matchingProducts.reduce((sum, p) => sum + p.quantity, 0);
-      const remaining = totalArrived - linkedProducts.reduce((sum, p) => sum + p.quantity, 0);
+        const installed = matchingProducts.reduce((sum, p) => sum + p.quantity, 0);
+        const remaining = totalArrived - linkedProducts.reduce((sum, p) => sum + p.quantity, 0);
 
-      return {
-        entranceId: entrance.id,
-        po: entrance.po || '-',
-        supplyCompany: entrance.supplyCompany || '-',
-        date: entrance.date || '',
-        productsCount: details.length,
-        totalArrived,
-        installed,
-        remaining,
-      };
-    })
-    .filter((x): x is NonNullable<typeof x> => x !== null)
-    .sort((a, b) => {
-      // Ordenar por PO descendente (PO005 antes que PO001)
-      return (b.po || '').localeCompare(a.po || '');
-    });
+        return {
+          entranceId: entrance.id,
+          po: entrance.po || '-',
+          supplyCompany: entrance.supplyCompany || '-',
+          date: entrance.date || '',
+          productsCount: details.length,
+          totalArrived,
+          installed,
+          remaining,
+        };
+      })
+      .filter((x): x is NonNullable<typeof x> => x !== null)
+      .sort((a, b) => (b.po || '').localeCompare(a.po || ''));
+  }, [
+    entranceList, allProducts, entranceLookup,
+    filterItemName, filterPO, filterSerial, filterSupplyCompany,
+    productFiltersActive
+  ]);
 
   const getDestLabel = (val: string) => {
     const d = destinations.find(x => x.value === val);
@@ -297,13 +343,22 @@ export const ReportsModule: React.FC = () => {
           <div className="form-group"><label>End Date</label><input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} style={{ padding: '8px' }}/></div>
           <div className="form-group">
             <label>Address</label>
+            {/* 🔥 FIX: incluimos opción explícita "All Addresses" en lugar de una vacía sin label.
+                 También filtramos destinations vacíos para evitar opciones rotas. */}
             <SearchableSelect 
               theme="dark"
-              options={[{id: '', label: ''}, ...destinations.map(d => ({
-                id: String(d.value), 
-                label: String(d.label)
-              }))]}
-              value={selectedDest} onChange={setSelectedDest} placeholder="-- Select Address --"
+              options={[
+                { id: '', label: 'All Addresses' },
+                ...destinations
+                  .filter(d => d.value && d.label)
+                  .map(d => ({
+                    id: String(d.value), 
+                    label: String(d.label)
+                  }))
+              ]}
+              value={selectedDest} 
+              onChange={setSelectedDest} 
+              placeholder="-- Search Address --"
             />
           </div>
           <div className="form-group">

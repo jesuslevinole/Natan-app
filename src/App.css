@@ -144,6 +144,15 @@ tr:hover { background-color: #f8fafc; }
 .clickable-row { cursor: pointer; transition: background-color 0.2s; }
 .action-btns { display: flex; gap: 8px; justify-content: center; flex-wrap: nowrap; }
 
+/* 🔥 NUEVO: Columna de secuencia (#). Garantiza que el badge no se rompa en líneas
+   en desktop. En móvil se neutraliza dentro de la regla card-style. */
+.col-seq {
+  white-space: nowrap;
+  text-align: center;
+  min-width: 70px;
+  width: 70px;
+}
+
 /* =========================================
    MODALS Y SEPARACIONES ELEGANTES
    ========================================= */
@@ -254,4 +263,13 @@ tr:hover { background-color: #f8fafc; }
   }
   
   .action-btns { width: 100%; justify-content: flex-end; }
+
+  /* 🔥 NUEVO: En móvil, la columna # forma parte del card vertical.
+     Reseteamos su width/alineación para que se vea como cualquier otra fila label/valor. */
+  .table-container td.col-seq {
+      width: auto;
+      min-width: 0;
+      text-align: right;
+      justify-content: space-between;
+  }
 }

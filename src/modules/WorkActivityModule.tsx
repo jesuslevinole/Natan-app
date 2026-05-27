@@ -111,13 +111,19 @@ export const WorkActivity: React.FC = () => {
       const orderData = await getDocs(ordersCollectionRef);
       const fetchedOrders = orderData.docs.map((doc) => ({ ...doc.data(), id: doc.id } as any));
       
-      fetchedOrders.sort((a: any, b: any) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
-      
-      const totalOrders = fetchedOrders.length;
-      const mappedOrders = fetchedOrders.map((o: any, idx: number) => ({ 
-        ...o, 
-        visualSeq: o.seq || (totalOrders - idx) 
+      // 🔥 Ordenamos ASCENDENTE primero (más viejo → más nuevo) para asignar visualSeq contiguo.
+      // El más viejo recibe visualSeq = 1, el siguiente = 2, etc.
+      // Esto garantiza que el display SIEMPRE sea contiguo (sin saltos ni duplicados),
+      // independientemente de si los registros antiguos tienen o no campo `seq` persistido.
+      fetchedOrders.sort((a: any, b: any) => new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime());
+
+      const mappedAsc = fetchedOrders.map((o: any, idx: number) => ({
+        ...o,
+        visualSeq: idx + 1
       }));
+
+      // Luego invertimos para mostrar el más reciente arriba (DESC).
+      const mappedOrders = mappedAsc.slice().reverse();
       
       setOrders(mappedOrders as ExtendedJobOrder[]);
 
@@ -473,7 +479,7 @@ export const WorkActivity: React.FC = () => {
           <thead>
             <tr>
               <th style={{ textAlign: 'center', width: '100px' }}>Actions</th>
-              <th>#</th>
+              <th className="col-seq">#</th>
               <th>Registration Date</th>
               <th>Schedule</th>
               <th>Ordered by</th>
@@ -513,7 +519,7 @@ export const WorkActivity: React.FC = () => {
                       </RequirePermission>
                     </div>
                   </td>
-                  <td data-label="#"><SeqBadge seq={order.visualSeq} /></td>
+                  <td data-label="#" className="col-seq"><SeqBadge seq={order.visualSeq} /></td>
                   <td data-label="Registration Date">{formatDateDisplay(order.createdAt)}</td>
                   <td data-label="Schedule" style={{ fontWeight: 'bold', color: 'var(--primary-color)' }}>{formatDateDisplay(order.schedule)}</td>
                   <td data-label="Ordered by" style={{ fontWeight: 'bold' }}>{order.jobOrder}</td>
