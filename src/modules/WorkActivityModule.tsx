@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, query, where, runTransaction } from 'firebase/firestore';
 import { db } from '../firebase'; 
 import { Briefcase, Plus, X, Settings, Edit2, Trash2, Lock } from 'lucide-react';
-import { JobOrder, JobProduct, ItemEntranceRecord, JobFormData, ProductFormData, Role, SystemUser } from '../types';
+import { JobOrder, JobProduct, ItemEntranceRecord, EntranceDetail, JobFormData, ProductFormData, Role, SystemUser } from '../types';
 import { SearchBar, FieldConfigModal, SeqBadge, SearchableSelect, DestinationSearch } from '../components/SharedUI';
 import { useFormConfig } from '../hooks/useAppHooks';
 import { getTodayString, formatDateDisplay, getStatusStyles, formatSeq } from '../utils/helpers';
@@ -11,6 +11,19 @@ import { useAuth, RequirePermission } from '../hooks/useAuth';
 
 type ExtendedJobFormData = JobFormData & { madeBy?: string };
 type ExtendedJobOrder = JobOrder & { madeBy?: string };
+
+// 🔥 Tipo helper: representa un detalle "aplanado" combinado con su PO padre
+// Necesario porque el dropdown ya no muestra POs, sino productos (details) de POs.
+interface FlatDetailOption {
+  entranceId: string;       // id del doc itemEntrance (header/PO)
+  detailId: string;         // detailId del detalle dentro del PO
+  composedId: string;       // `${entranceId}::${detailId}` — id usado en SearchableSelect
+  itemName: string;
+  modelPart: string;
+  serial: string;
+  po: string;               // PO# del header (PO000, PO001, ...)
+  itemsArrived: number;     // cantidad inicial del detalle
+}
 
 export const WorkActivity: React.FC = () => {
   const { currentUser } = useAuth();
@@ -62,7 +75,7 @@ export const WorkActivity: React.FC = () => {
 
   const initialFormState: ExtendedJobFormData = {
     jobOrder: authorName, 
-    madeBy: authorName, // 🔥 Por defecto al crear, se pone al usuario actual
+    madeBy: authorName, 
     destination: '', 
     description: '', 
     workFinish: 'NO', 
@@ -74,9 +87,20 @@ export const WorkActivity: React.FC = () => {
   const [formData, setFormData] = useState<ExtendedJobFormData>(initialFormState);
   const [formProducts, setFormProducts] = useState<JobProduct[]>([]);
   
+  // 🔥 currentProduct ahora incluye entranceDetailId (campo nuevo en JobProduct)
   const [currentProduct, setCurrentProduct] = useState<ProductFormData>({
-    itemEntranceId: '', modelPart: '', serial: '', po: '', quantity: 1, itemName: ''
+    itemEntranceId: '', 
+    entranceDetailId: '',
+    modelPart: '', 
+    serial: '', 
+    po: '', 
+    quantity: 1, 
+    itemName: ''
   });
+
+  // 🔥 Estado adicional: el ID compuesto usado por el SearchableSelect
+  // (no se persiste en DB; solo controla la selección visual en el dropdown).
+  const [selectedComposedId, setSelectedComposedId] = useState<string>('');
 
   const ordersCollectionRef = collection(db, "jobOrders");
   const productsCollectionRef = collection(db, "jobProducts");
@@ -97,8 +121,25 @@ export const WorkActivity: React.FC = () => {
       
       setOrders(mappedOrders as ExtendedJobOrder[]);
 
+      // 🔥 Al leer itemEntrance, normalizamos: si no tiene `details`, construimos uno
+      // a partir de los campos legacy (registros pre-migración).
       const entranceData = await getDocs(entranceCollectionRef);
-      setEntranceList(entranceData.docs.map(doc => ({ ...doc.data(), id: doc.id })) as ItemEntranceRecord[]);
+      const normalizedEntrances = entranceData.docs.map(d => {
+        const raw = { ...d.data(), id: d.id } as any;
+        if (!Array.isArray(raw.details) || raw.details.length === 0) {
+          // Legacy: armar un detalle único usando el doc id como detailId
+          raw.details = [{
+            detailId: raw.id,
+            itemName: raw.itemName || '',
+            modelPart: raw.modelPart || '',
+            serial: raw.serial || '',
+            orderDate: raw.orderDate || '',
+            itemsArrived: raw.itemsArrived || 0,
+          } as EntranceDetail];
+        }
+        return raw as ItemEntranceRecord;
+      });
+      setEntranceList(normalizedEntrances);
 
       const productsData = await getDocs(productsCollectionRef);
       setAllJobProducts(productsData.docs.map(doc => ({ ...doc.data(), id: doc.id })) as JobProduct[]);
@@ -129,12 +170,46 @@ export const WorkActivity: React.FC = () => {
     return true; 
   };
 
-  const getAvailableStock = (itemId: string) => {
-    const item = entranceList.find(i => i.id === itemId);
-    if (!item) return 0;
-    const usedInDB = allJobProducts.filter(p => p.itemEntranceId === itemId).reduce((acc, p) => acc + p.quantity, 0);
-    const usedInForm = formProducts.filter(p => p.itemEntranceId === itemId).reduce((acc, p) => acc + p.quantity, 0);
-    return item.itemsArrived - usedInDB - usedInForm;
+  // 🔥 Aplanamos todos los entrance → details a una lista de opciones para el dropdown.
+  // Cada producto del PO se vuelve una entrada seleccionable.
+  const flatDetailOptions: FlatDetailOption[] = entranceList.flatMap(entrance => {
+    const details = entrance.details || [];
+    return details.map(d => ({
+      entranceId: entrance.id,
+      detailId: d.detailId,
+      composedId: `${entrance.id}::${d.detailId}`,
+      itemName: d.itemName,
+      modelPart: d.modelPart,
+      serial: d.serial,
+      po: entrance.po || '',
+      itemsArrived: d.itemsArrived || 0,
+    }));
+  });
+
+  // 🔥 Stock disponible POR DETALLE (no por PO completo).
+  // Considera consumo histórico (DB) + consumo pendiente en el form actual.
+  const getDetailStock = (entranceId: string, detailId: string) => {
+    const option = flatDetailOptions.find(o => o.entranceId === entranceId && o.detailId === detailId);
+    if (!option) return 0;
+
+    // Consumo en DB: prefiere match exacto por entranceDetailId; fallback legacy a itemEntranceId.
+    const usedInDB = allJobProducts
+      .filter(p => {
+        if (p.entranceDetailId) return p.entranceDetailId === detailId;
+        // Legacy: si el JobProduct no tiene entranceDetailId, solo lo contamos
+        // contra el detalle si ese detalle es también legacy (detailId === entranceId).
+        return p.itemEntranceId === entranceId && detailId === entranceId;
+      })
+      .reduce((acc, p) => acc + p.quantity, 0);
+
+    const usedInForm = formProducts
+      .filter(p => {
+        if (p.entranceDetailId) return p.entranceDetailId === detailId;
+        return p.itemEntranceId === entranceId && detailId === entranceId;
+      })
+      .reduce((acc, p) => acc + p.quantity, 0);
+
+    return option.itemsArrived - usedInDB - usedInForm;
   };
 
   const handleViewDetails = async (job: ExtendedJobOrder) => {
@@ -152,7 +227,7 @@ export const WorkActivity: React.FC = () => {
       setEditingJob(job.id!);
       setFormData({ 
         jobOrder: job.jobOrder, 
-        madeBy: authorName, // 🔥 REQUERIMIENTO: Al editar, auto-asigna al usuario que hizo clic en editar
+        madeBy: authorName, 
         destination: job.destination, 
         description: job.description, 
         workFinish: job.workFinish, 
@@ -215,7 +290,10 @@ export const WorkActivity: React.FC = () => {
       }
       
       for (const product of formProducts) {
-        if (!product.id && savedJobId) await addDoc(productsCollectionRef, { ...product, jobOrderId: savedJobId });
+        if (!product.id && savedJobId) {
+          // 🔥 Persistimos entranceDetailId para que el stock se descuente del detalle correcto.
+          await addDoc(productsCollectionRef, { ...product, jobOrderId: savedJobId });
+        }
       }
       
       await fetchData(); 
@@ -255,26 +333,48 @@ export const WorkActivity: React.FC = () => {
     }
   };
 
-  const handleItemEntranceSelection = (selectedId: string) => {
-    if (selectedId) {
-      const item = entranceList.find(i => i.id === selectedId);
-      const stock = getAvailableStock(selectedId);
-      if (item) setCurrentProduct({ 
-        ...currentProduct, 
-        itemEntranceId: item.id, 
-        itemName: item.itemName, 
-        modelPart: item.modelPart, 
-        serial: item.serial, 
-        po: item.po,
-        quantity: stock > 0 ? 1 : 0
+  // 🔥 Al seleccionar una opción del dropdown, parseamos el composedId y poblamos
+  // currentProduct con todos los campos derivados (header + detalle).
+  const handleItemEntranceSelection = (composedId: string) => {
+    setSelectedComposedId(composedId);
+
+    if (!composedId) {
+      setCurrentProduct({ 
+        itemEntranceId: '', 
+        entranceDetailId: '',
+        itemName: '', 
+        modelPart: '', 
+        serial: '', 
+        po: '', 
+        quantity: 1 
       });
-    } else setCurrentProduct({ ...currentProduct, itemEntranceId: '', itemName: '', modelPart: '', serial: '', po: '', quantity: 1 });
+      return;
+    }
+
+    const option = flatDetailOptions.find(o => o.composedId === composedId);
+    if (!option) return;
+
+    const stock = getDetailStock(option.entranceId, option.detailId);
+    setCurrentProduct({ 
+      itemEntranceId: option.entranceId,
+      entranceDetailId: option.detailId,
+      itemName: option.itemName, 
+      modelPart: option.modelPart, 
+      serial: option.serial, 
+      po: option.po,
+      quantity: stock > 0 ? 1 : 0
+    });
   };
 
   const handleAddProductSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
 
-    const availableStock = getAvailableStock(currentProduct.itemEntranceId);
+    if (!currentProduct.itemEntranceId || !currentProduct.entranceDetailId) {
+      alert("Please select a product first.");
+      return;
+    }
+
+    const availableStock = getDetailStock(currentProduct.itemEntranceId, currentProduct.entranceDetailId);
     if (availableStock <= 0 || currentProduct.quantity > availableStock) {
       alert("There is no stock of this product. Please update the stock.");
       return;
@@ -288,7 +388,16 @@ export const WorkActivity: React.FC = () => {
     } else {
       setFormProducts([...formProducts, { ...currentProduct, jobOrderId: 'pending' }]); 
     }
-    setCurrentProduct({ itemEntranceId: '', modelPart: '', serial: '', po: '', quantity: 1, itemName: '' });
+    setCurrentProduct({ 
+      itemEntranceId: '', 
+      entranceDetailId: '',
+      modelPart: '', 
+      serial: '', 
+      po: '', 
+      quantity: 1, 
+      itemName: '' 
+    });
+    setSelectedComposedId('');
     setIsProductModalOpen(false);
   };
 
@@ -312,7 +421,6 @@ export const WorkActivity: React.FC = () => {
     setFormProducts(formProducts.filter((_, i) => i !== index));
   };
 
-  // 🔥 REQUERIMIENTO: Todos pueden ver todo (Sin filtro restrictivo por rol)
   const displayedOrders = (showHistoric 
     ? orders.filter(o => o.workFinish === 'YES') 
     : orders.filter(o => o.workFinish === 'NO')
@@ -328,6 +436,11 @@ export const WorkActivity: React.FC = () => {
       formatDateDisplay(order.schedule).includes(searchLower)
     );
   });
+
+  // 🔥 Stock disponible actualmente seleccionado (helper para el JSX del modal de producto).
+  const currentSelectionStock = (currentProduct.itemEntranceId && currentProduct.entranceDetailId)
+    ? getDetailStock(currentProduct.itemEntranceId, currentProduct.entranceDetailId)
+    : 0;
 
   return (
     <div className="card">
@@ -525,11 +638,12 @@ export const WorkActivity: React.FC = () => {
                       <th>Item Name</th>
                       <th>Model</th>
                       <th>Serial</th>
+                      <th>PO #</th>
                       <th>Qty</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {viewProducts.length === 0 && <tr><td colSpan={6} className="empty-state">No products attached.</td></tr>}
+                    {viewProducts.length === 0 && <tr><td colSpan={7} className="empty-state">No products attached.</td></tr>}
                     {viewProducts.map((p, i) => (
                       <tr key={p.id}>
                         <td data-label="Action" style={{ textAlign: 'center' }}>
@@ -541,6 +655,7 @@ export const WorkActivity: React.FC = () => {
                         <td data-label="Item">{p.itemName}</td>
                         <td data-label="Model">{p.modelPart}</td>
                         <td data-label="Serial">{p.serial || '-'}</td>
+                        <td data-label="PO" style={{ fontWeight: 'bold', color: 'var(--primary-color)' }}>{p.po || '-'}</td>
                         <td data-label="Qty">{p.quantity}</td>
                       </tr>
                     ))}
@@ -647,11 +762,12 @@ export const WorkActivity: React.FC = () => {
                         <th>#</th>
                         <th>Item</th>
                         <th>Model</th>
+                        <th>PO #</th>
                         <th>Qty</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {formProducts.length === 0 && <tr><td colSpan={5} className="empty-state">No products added. Click "+ Add Product".</td></tr>}
+                      {formProducts.length === 0 && <tr><td colSpan={6} className="empty-state">No products added. Click "+ Add Product".</td></tr>}
                       {formProducts.map((p, index) => (
                         <tr key={index}>
                           <td data-label="Action" style={{ textAlign: 'center' }}>
@@ -660,6 +776,7 @@ export const WorkActivity: React.FC = () => {
                           <td data-label="#">{formatSeq(index + 1)}</td>
                           <td data-label="Item">{p.itemName}</td>
                           <td data-label="Model">{p.modelPart}</td>
+                          <td data-label="PO" style={{ fontWeight: 'bold', color: 'var(--primary-color)' }}>{p.po || '-'}</td>
                           <td data-label="Qty">{p.quantity}</td>
                         </tr>
                       ))}
@@ -732,16 +849,18 @@ export const WorkActivity: React.FC = () => {
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '20px', marginTop: '15px' }}>
                 <div className="form-group" style={{ flex: '3 1 250px' }}>
                   <label>Select Item {isProdReq('itemEntranceId') && '*'}</label>
+                  {/* 🔥 Dropdown ahora muestra una opción por DETALLE (no por PO).
+                       Cada PO con N productos genera N entradas seleccionables. */}
                   <SearchableSelect 
-                    options={entranceList.map(item => {
-                      const stock = getAvailableStock(item.id);
+                    options={flatDetailOptions.map(opt => {
+                      const stock = getDetailStock(opt.entranceId, opt.detailId);
                       return {
-                        id: String(item.id), 
-                        label: `${item.itemName} | Model: ${item.modelPart || '-'} | Serial: ${item.serial || '-'} | PO: ${item.po || '-'} | Stock: ${stock}`
+                        id: opt.composedId, 
+                        label: `${opt.itemName} | Model: ${opt.modelPart || '-'} | Serial: ${opt.serial || '-'} | PO: ${opt.po || '-'} | Stock: ${stock}`
                       };
                     })}
-                    value={currentProduct.itemEntranceId} 
-                    onChange={(id) => handleItemEntranceSelection(id)} 
+                    value={selectedComposedId} 
+                    onChange={(composedId) => handleItemEntranceSelection(composedId)} 
                     placeholder="-- Type name, model, serial, PO... --"
                     required={isProdReq('itemEntranceId')}
                   />
@@ -752,26 +871,25 @@ export const WorkActivity: React.FC = () => {
                   <input 
                     type="number" 
                     min="1" 
-                    max={currentProduct.itemEntranceId ? getAvailableStock(currentProduct.itemEntranceId) : ''}
-                    disabled={!currentProduct.itemEntranceId || getAvailableStock(currentProduct.itemEntranceId) <= 0}
+                    max={currentSelectionStock || ''}
+                    disabled={!currentProduct.entranceDetailId || currentSelectionStock <= 0}
                     value={currentProduct.quantity} 
                     onChange={e => {
                       let val = Number(e.target.value);
-                      const maxStock = getAvailableStock(currentProduct.itemEntranceId);
-                      if (val > maxStock) val = maxStock;
+                      if (val > currentSelectionStock) val = currentSelectionStock;
                       setCurrentProduct({...currentProduct, quantity: val});
                     }} 
                     required={isProdReq('quantity')} 
                     style={{
-                      backgroundColor: (!currentProduct.itemEntranceId || getAvailableStock(currentProduct.itemEntranceId) <= 0) ? '#f1f5f9' : 'white',
-                      cursor: (!currentProduct.itemEntranceId || getAvailableStock(currentProduct.itemEntranceId) <= 0) ? 'not-allowed' : 'text'
+                      backgroundColor: (!currentProduct.entranceDetailId || currentSelectionStock <= 0) ? '#f1f5f9' : 'white',
+                      cursor: (!currentProduct.entranceDetailId || currentSelectionStock <= 0) ? 'not-allowed' : 'text'
                     }}
                   />
-                  {currentProduct.itemEntranceId && getAvailableStock(currentProduct.itemEntranceId) <= 0 && (
+                  {currentProduct.entranceDetailId && currentSelectionStock <= 0 && (
                     <span style={{color: '#ef4444', fontSize: '0.75rem', marginTop: '4px', display: 'block', fontWeight: 'bold'}}>Out of stock</span>
                   )}
-                  {currentProduct.itemEntranceId && getAvailableStock(currentProduct.itemEntranceId) > 0 && (
-                    <span style={{color: '#64748b', fontSize: '0.75rem', marginTop: '4px', display: 'block'}}>Max available: {getAvailableStock(currentProduct.itemEntranceId)}</span>
+                  {currentProduct.entranceDetailId && currentSelectionStock > 0 && (
+                    <span style={{color: '#64748b', fontSize: '0.75rem', marginTop: '4px', display: 'block'}}>Max available: {currentSelectionStock}</span>
                   )}
                 </div>
               </div>

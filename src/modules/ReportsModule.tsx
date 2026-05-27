@@ -1,15 +1,26 @@
 import React, { useState, useEffect } from 'react';
 import { collection, getDocs } from 'firebase/firestore';
 import { db } from '../firebase'; 
-import { BarChart2, Filter, Award, Activity, Wrench, MapPin } from 'lucide-react';
-import { JobOrder, JobProduct, SystemUser } from '../types';
+import { BarChart2, Filter, Award, Activity, Wrench, MapPin, FileBarChart } from 'lucide-react';
+import { JobOrder, JobProduct, SystemUser, ItemEntranceRecord, EntranceDetail } from '../types';
 import { SearchableSelect } from '../components/SharedUI';
 import { useCatalogOptions } from '../hooks/useAppHooks';
 import { formatDateDisplay } from '../utils/helpers';
 
+// 🔥 Tipo auxiliar para resolver datos del PO (header) a partir del JobProduct
+interface EntranceLookup {
+  // Mapa entranceId -> info del header del PO
+  headerById: Map<string, { po: string; supplyCompany: string; date: string }>;
+  // Mapa detailId -> entranceId (para poder llegar al header desde un JobProduct legacy o nuevo)
+  entranceIdByDetailId: Map<string, string>;
+  // Mapa entranceId -> array de detalles normalizados
+  detailsByEntranceId: Map<string, EntranceDetail[]>;
+}
+
 export const ReportsModule: React.FC = () => {
   const [orders, setOrders] = useState<JobOrder[]>([]);
   const [allProducts, setAllProducts] = useState<JobProduct[]>([]);
+  const [entranceList, setEntranceList] = useState<ItemEntranceRecord[]>([]); // 🔥 NUEVO
   const destinations = useCatalogOptions('catalog_destinations', 'description', 'property_name');
   
   const [accountUsers, setAccountUsers] = useState<{name: string, email: string}[]>([]);
@@ -22,6 +33,7 @@ export const ReportsModule: React.FC = () => {
   const [filterItemName, setFilterItemName] = useState<string>('');
   const [filterPO, setFilterPO] = useState<string>('');
   const [filterSerial, setFilterSerial] = useState<string>('');
+  const [filterSupplyCompany, setFilterSupplyCompany] = useState<string>(''); // 🔥 NUEVO
 
   useEffect(() => {
     const fetchReportsData = async () => {
@@ -32,6 +44,25 @@ export const ReportsModule: React.FC = () => {
       const prodData = await getDocs(collection(db, "jobProducts"));
       const fetchedProducts = prodData.docs.map(doc => ({ ...doc.data(), id: doc.id } as JobProduct));
       setAllProducts(fetchedProducts);
+
+      // 🔥 NUEVO: traemos itemEntrance para poder enriquecer reportes con info del header (supply company, etc.)
+      const entranceData = await getDocs(collection(db, "itemEntrance"));
+      const normalizedEntrances = entranceData.docs.map(d => {
+        const raw = { ...d.data(), id: d.id } as any;
+        // Normalización legacy: si no tiene details[], construimos uno a partir de campos planos
+        if (!Array.isArray(raw.details) || raw.details.length === 0) {
+          raw.details = [{
+            detailId: raw.id,
+            itemName: raw.itemName || '',
+            modelPart: raw.modelPart || '',
+            serial: raw.serial || '',
+            orderDate: raw.orderDate || '',
+            itemsArrived: raw.itemsArrived || 0,
+          }];
+        }
+        return raw as ItemEntranceRecord;
+      });
+      setEntranceList(normalizedEntrances);
 
       const usersData = await getDocs(collection(db, "users"));
       const fetchedUsers = usersData.docs.map(doc => {
@@ -47,22 +78,73 @@ export const ReportsModule: React.FC = () => {
     fetchReportsData();
   }, []);
 
+  // 🔥 Construimos lookups de itemEntrance una sola vez por render para resolver:
+  //   - JobProduct -> PO header (entrance) -> supplyCompany
+  //   - PO -> array de detalles para la sección de agregado por PO
+  const entranceLookup: EntranceLookup = (() => {
+    const headerById = new Map<string, { po: string; supplyCompany: string; date: string }>();
+    const entranceIdByDetailId = new Map<string, string>();
+    const detailsByEntranceId = new Map<string, EntranceDetail[]>();
+
+    entranceList.forEach(e => {
+      headerById.set(e.id, {
+        po: e.po || '',
+        supplyCompany: e.supplyCompany || '',
+        date: e.date || ''
+      });
+      const details = e.details || [];
+      detailsByEntranceId.set(e.id, details);
+      details.forEach(d => entranceIdByDetailId.set(d.detailId, e.id));
+    });
+
+    return { headerById, entranceIdByDetailId, detailsByEntranceId };
+  })();
+
+  // 🔥 Resuelve la Supply Company de un JobProduct usando sus referencias al PO.
+  // Estrategia: prefiere entranceDetailId (nuevo); fallback a itemEntranceId (legacy).
+  const getSupplyCompanyForProduct = (p: JobProduct): string => {
+    // Camino 1: tenemos entranceDetailId, resolvemos al entrance y de ahí al header
+    if (p.entranceDetailId) {
+      const eid = entranceLookup.entranceIdByDetailId.get(p.entranceDetailId);
+      if (eid) return entranceLookup.headerById.get(eid)?.supplyCompany || '';
+    }
+    // Camino 2 (legacy): itemEntranceId apunta directo al doc del PO
+    if (p.itemEntranceId) {
+      return entranceLookup.headerById.get(p.itemEntranceId)?.supplyCompany || '';
+    }
+    return '';
+  };
+
+  // 🔥 Lista de supply companies únicos presentes (para el dropdown del filtro)
+  const supplyCompanyOptions = (() => {
+    const set = new Set<string>();
+    entranceList.forEach(e => {
+      if (e.supplyCompany) set.add(e.supplyCompany);
+    });
+    return Array.from(set).sort();
+  })();
+
   const filteredOrders = orders.filter(o => {
     let match = true;
-    const orderDateStr = o.createdAt.split('T')[0]; 
+    const orderDateStr = (o.createdAt || '').split('T')[0]; 
     if (startDate && orderDateStr < startDate) match = false;
     if (endDate && orderDateStr > endDate) match = false;
     if (selectedDest && o.destination !== selectedDest) match = false;
     
     if (selectedWorker && o.jobOrder !== selectedWorker) match = false;
 
-    if (match && (filterItemName || filterPO || filterSerial)) {
+    if (match && (filterItemName || filterPO || filterSerial || filterSupplyCompany)) {
       const orderProducts = allProducts.filter(p => p.jobOrderId === o.id);
       const hasMatchingProduct = orderProducts.some(p => {
         let pMatch = true;
         if (filterItemName && !(p.itemName || '').toLowerCase().includes(filterItemName.toLowerCase())) pMatch = false;
         if (filterPO && !(p.po || '').toLowerCase().includes(filterPO.toLowerCase())) pMatch = false;
         if (filterSerial && !(p.serial || '').toLowerCase().includes(filterSerial.toLowerCase())) pMatch = false;
+        // 🔥 NUEVO: filtro por supply company (resuelto vía lookup, no almacenado en JobProduct)
+        if (filterSupplyCompany) {
+          const sc = getSupplyCompanyForProduct(p);
+          if (sc !== filterSupplyCompany) pMatch = false;
+        }
         return pMatch;
       });
       if (!hasMatchingProduct) match = false;
@@ -77,6 +159,10 @@ export const ReportsModule: React.FC = () => {
     if (filterItemName && !(p.itemName || '').toLowerCase().includes(filterItemName.toLowerCase())) pMatch = false;
     if (filterPO && !(p.po || '').toLowerCase().includes(filterPO.toLowerCase())) pMatch = false;
     if (filterSerial && !(p.serial || '').toLowerCase().includes(filterSerial.toLowerCase())) pMatch = false;
+    if (filterSupplyCompany) {
+      const sc = getSupplyCompanyForProduct(p);
+      if (sc !== filterSupplyCompany) pMatch = false;
+    }
     return pMatch;
   }).map(p => {
     const order = filteredOrders.find(o => o.id === p.jobOrderId);
@@ -84,7 +170,8 @@ export const ReportsModule: React.FC = () => {
       ...p,
       orderDate: order?.createdAt || '',
       orderDestination: order?.destination || '',
-      orderWorker: order?.jobOrder || ''
+      orderWorker: order?.jobOrder || '',
+      supplyCompany: getSupplyCompanyForProduct(p), // 🔥 NUEVO: enriquecemos con company
     };
   }).sort((a, b) => new Date(b.orderDate).getTime() - new Date(a.orderDate).getTime());
 
@@ -109,6 +196,67 @@ export const ReportsModule: React.FC = () => {
   const workerCounts: Record<string, number> = {};
   filteredOrders.forEach(o => { workerCounts[o.jobOrder] = (workerCounts[o.jobOrder] || 0) + 1; });
   const topWorkerEntry = Object.entries(workerCounts).sort((a, b) => b[1] - a[1])[0];
+
+  // 🔥 NUEVO: Agregado por PO — Items registrados vs Items instalados vs Stock restante.
+  // Solo considera POs que tengan al menos un producto matching los filtros (o todos si no hay filtros de producto).
+  const productFiltersActive = !!(filterItemName || filterPO || filterSerial || filterSupplyCompany);
+
+  const poAggregate = entranceList
+    .map(entrance => {
+      const details = entrance.details || [];
+      const headerInfo = entranceLookup.headerById.get(entrance.id);
+
+      // Filtro por supply company directo sobre el header
+      if (filterSupplyCompany && headerInfo?.supplyCompany !== filterSupplyCompany) return null;
+
+      // Filtro por PO# directo sobre el header
+      if (filterPO && !(entrance.po || '').toLowerCase().includes(filterPO.toLowerCase())) return null;
+
+      // Total inicial recibido (suma de todos los detalles)
+      const totalArrived = details.reduce((sum, d) => sum + (d.itemsArrived || 0), 0);
+
+      // Items instalados desde este PO: cuenta JobProducts vinculados al entrance o a cualquiera de sus detailIds
+      const detailIdSet = new Set(details.map(d => d.detailId));
+      const linkedProducts = allProducts.filter(p => {
+        if (p.entranceDetailId && detailIdSet.has(p.entranceDetailId)) return true;
+        // Legacy: JobProduct sin entranceDetailId pero con itemEntranceId apuntando a este PO
+        if (!p.entranceDetailId && p.itemEntranceId === entrance.id) return true;
+        return false;
+      });
+
+      // Si hay filtros de producto (itemName / serial), aplicarlos al consumo
+      const matchingProducts = linkedProducts.filter(p => {
+        if (filterItemName && !(p.itemName || '').toLowerCase().includes(filterItemName.toLowerCase())) return false;
+        if (filterSerial && !(p.serial || '').toLowerCase().includes(filterSerial.toLowerCase())) return false;
+        return true;
+      });
+
+      // Si hay filtros activos de producto y no hay match, excluir el PO del reporte
+      if (productFiltersActive && matchingProducts.length === 0) {
+        // Excepción: si solo el filtro de supply company / PO estaba activo, igual lo mostramos (header matchea).
+        const onlyHeaderFilters = !filterItemName && !filterSerial;
+        if (!onlyHeaderFilters) return null;
+      }
+
+      const installed = matchingProducts.reduce((sum, p) => sum + p.quantity, 0);
+      const remaining = totalArrived - linkedProducts.reduce((sum, p) => sum + p.quantity, 0);
+
+      return {
+        entranceId: entrance.id,
+        po: entrance.po || '-',
+        supplyCompany: entrance.supplyCompany || '-',
+        date: entrance.date || '',
+        productsCount: details.length,
+        totalArrived,
+        installed,
+        remaining,
+      };
+    })
+    .filter((x): x is NonNullable<typeof x> => x !== null)
+    .sort((a, b) => {
+      // Ordenar por PO descendente (PO005 antes que PO001)
+      return (b.po || '').localeCompare(a.po || '');
+    });
 
   const getDestLabel = (val: string) => {
     const d = destinations.find(x => x.value === val);
@@ -148,7 +296,6 @@ export const ReportsModule: React.FC = () => {
           <div className="form-group"><label>Start Date</label><input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} style={{ padding: '8px' }}/></div>
           <div className="form-group"><label>End Date</label><input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} style={{ padding: '8px' }}/></div>
           <div className="form-group">
-            {/* 🔥 CAMBIO VISUAL: Destination -> Address */}
             <label>Address</label>
             <SearchableSelect 
               theme="dark"
@@ -171,6 +318,16 @@ export const ReportsModule: React.FC = () => {
           <div className="form-group"><label>Item Name</label><input type="text" placeholder="Search by name..." value={filterItemName} onChange={e => setFilterItemName(e.target.value)} style={{ padding: '8px' }}/></div>
           <div className="form-group"><label>PO #</label><input type="text" placeholder="Search PO..." value={filterPO} onChange={e => setFilterPO(e.target.value)} style={{ padding: '8px' }}/></div>
           <div className="form-group"><label>Serial #</label><input type="text" placeholder="Search serial..." value={filterSerial} onChange={e => setFilterSerial(e.target.value)} style={{ padding: '8px' }}/></div>
+          {/* 🔥 NUEVO: Filtro por Supply Company */}
+          <div className="form-group">
+            <label>Supply Company</label>
+            <select value={filterSupplyCompany} onChange={e => setFilterSupplyCompany(e.target.value)} style={{ padding: '8px' }}>
+              <option value="" style={{color: 'black'}}>All Companies</option>
+              {supplyCompanyOptions.map((sc, idx) => (
+                <option key={idx} value={sc} style={{color: 'black'}}>{sc}</option>
+              ))}
+            </select>
+          </div>
         </div>
       </div>
 
@@ -192,7 +349,6 @@ export const ReportsModule: React.FC = () => {
         <div style={{ backgroundColor: '#f0fdf4', padding: '20px', borderRadius: '16px', border: '1px solid #bbf7d0', display: 'flex', alignItems: 'center', gap: '15px' }}>
           <div style={{ backgroundColor: '#22c55e', color: 'white', padding: '12px', borderRadius: '12px' }}><MapPin size={24}/></div>
           <div>
-            {/* 🔥 CAMBIO VISUAL: Top Apt. -> Top Address */}
             <p style={{ margin: 0, fontSize: '0.85rem', color: '#64748b', fontWeight: 'bold', textTransform: 'uppercase' }}>Top Address</p>
             <h3 style={{ margin: 0, fontSize: '1.1rem', color: '#1e293b', lineHeight: '1.2' }}>{mostWorkedApt ? getDestLabel(mostWorkedApt.dest) : '-'}</h3>
           </div>
@@ -213,7 +369,6 @@ export const ReportsModule: React.FC = () => {
           </div>
           <div className="table-container" style={{ border: 'none', borderRadius: 0, maxHeight: '350px', overflowY: 'auto' }}>
             <table className="responsive-table">
-              {/* 🔥 CAMBIO VISUAL: Destination (Apt) -> Address */}
               <thead><tr><th>Address</th><th style={{ textAlign: 'center' }}>Total Interventions</th></tr></thead>
               <tbody>
                 {aptList.length === 0 && <tr><td colSpan={2} className="empty-state">No data available.</td></tr>}
@@ -233,7 +388,6 @@ export const ReportsModule: React.FC = () => {
           </div>
           <div className="table-container" style={{ border: 'none', borderRadius: 0, maxHeight: '350px', overflowY: 'auto' }}>
             <table className="responsive-table">
-              {/* 🔥 CAMBIO VISUAL: Destination -> Address */}
               <thead><tr><th>Address</th><th>Description (Task)</th><th style={{ textAlign: 'center' }}>Times Done</th></tr></thead>
               <tbody>
                 {repeatedList.length === 0 && <tr><td colSpan={3} className="empty-state">No data available.</td></tr>}
@@ -250,6 +404,81 @@ export const ReportsModule: React.FC = () => {
         </div>
       </div>
 
+      {/* 🔥 NUEVA SECCIÓN: Items por PO (Purchase Order) */}
+      <div style={{ border: '1px solid #e2e8f0', borderRadius: '12px', overflow: 'hidden', marginBottom: '30px' }}>
+        <div style={{ backgroundColor: '#f8fafc', padding: '15px 20px', borderBottom: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <FileBarChart size={20} style={{ color: 'var(--primary-color)' }} />
+          <div style={{ flex: 1 }}>
+            <h4 style={{ margin: 0, color: '#334155' }}>Items by Purchase Order</h4>
+            <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+              Inventory consumption tracked per PO. Shows how many items were received vs installed vs remaining in stock.
+            </p>
+          </div>
+          <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+            <strong>{poAggregate.length}</strong> POs
+          </span>
+        </div>
+        <div className="table-container" style={{ border: 'none', borderRadius: 0, maxHeight: '400px', overflowY: 'auto' }}>
+          <table className="responsive-table">
+            <thead>
+              <tr>
+                <th>PO #</th>
+                <th>Date</th>
+                <th>Supply Company</th>
+                <th style={{ textAlign: 'center' }}># Products</th>
+                <th style={{ textAlign: 'center' }}>Items Received</th>
+                <th style={{ textAlign: 'center' }}>Items Installed</th>
+                <th style={{ textAlign: 'center' }}>Remaining Stock</th>
+                <th style={{ textAlign: 'center' }}>Usage</th>
+              </tr>
+            </thead>
+            <tbody>
+              {poAggregate.length === 0 && <tr><td colSpan={8} className="empty-state">No POs found for current filters.</td></tr>}
+              {poAggregate.map((row, i) => {
+                const usagePercent = row.totalArrived > 0 ? Math.round((row.installed / row.totalArrived) * 100) : 0;
+                const isDepleted = row.remaining <= 0;
+                return (
+                  <tr key={row.entranceId || i}>
+                    <td data-label="PO" style={{ fontWeight: 'bold', color: 'var(--primary-color)' }}>{row.po}</td>
+                    <td data-label="Date">{formatDateDisplay(row.date)}</td>
+                    <td data-label="Company" style={{ color: '#475569' }}>{row.supplyCompany}</td>
+                    <td data-label="Products" style={{ textAlign: 'center' }}>{row.productsCount}</td>
+                    <td data-label="Received" style={{ textAlign: 'center', fontWeight: 'bold' }}>{row.totalArrived}</td>
+                    <td data-label="Installed" style={{ textAlign: 'center' }}>
+                      <span style={{ backgroundColor: '#fef2f2', color: '#ef4444', padding: '4px 10px', borderRadius: '12px', fontWeight: 'bold' }}>
+                        -{row.installed}
+                      </span>
+                    </td>
+                    <td data-label="Remaining" style={{ textAlign: 'center' }}>
+                      <span style={{ 
+                        backgroundColor: isDepleted ? '#fef2f2' : '#f0fdf4', 
+                        color: isDepleted ? '#ef4444' : '#22c55e', 
+                        padding: '4px 10px', borderRadius: '12px', fontWeight: 'bold' 
+                      }}>
+                        {row.remaining}
+                      </span>
+                    </td>
+                    <td data-label="Usage" style={{ textAlign: 'center', minWidth: '120px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <div style={{ flex: 1, backgroundColor: '#e2e8f0', borderRadius: '999px', height: '8px', overflow: 'hidden' }}>
+                          <div style={{ 
+                            width: `${Math.min(usagePercent, 100)}%`, 
+                            height: '100%', 
+                            backgroundColor: usagePercent >= 100 ? '#ef4444' : usagePercent >= 70 ? '#f97316' : '#3b82f6',
+                            transition: 'width 0.3s'
+                          }} />
+                        </div>
+                        <span style={{ fontSize: '0.8rem', fontWeight: 'bold', color: '#475569', minWidth: '36px', textAlign: 'right' }}>{usagePercent}%</span>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
       <div style={{ border: '1px solid #e2e8f0', borderRadius: '12px', overflow: 'hidden' }}>
         <div style={{ backgroundColor: '#f8fafc', padding: '15px 20px', borderBottom: '1px solid #e2e8f0' }}>
           <h4 style={{ margin: 0, color: '#334155' }}>Products Installed Log</h4>
@@ -258,11 +487,20 @@ export const ReportsModule: React.FC = () => {
         <div className="table-container" style={{ border: 'none', borderRadius: 0, maxHeight: '450px', overflowY: 'auto' }}>
           <table className="responsive-table">
             <thead>
-              {/* 🔥 CAMBIO VISUAL: Apt / Dest -> Address */}
-              <tr><th>Date</th><th>Address</th><th>Account User</th><th>Item Name</th><th>Model #</th><th>Serial #</th><th>PO #</th><th style={{ textAlign: 'center' }}>Qty Installed</th></tr>
+              <tr>
+                <th>Date</th>
+                <th>Address</th>
+                <th>Account User</th>
+                <th>Item Name</th>
+                <th>Model #</th>
+                <th>Serial #</th>
+                <th>PO #</th>
+                <th>Supply Company</th>{/* 🔥 NUEVO */}
+                <th style={{ textAlign: 'center' }}>Qty Installed</th>
+              </tr>
             </thead>
             <tbody>
-              {filteredProductsDetailed.length === 0 && <tr><td colSpan={8} className="empty-state">No products found for current filters.</td></tr>}
+              {filteredProductsDetailed.length === 0 && <tr><td colSpan={9} className="empty-state">No products found for current filters.</td></tr>}
               {filteredProductsDetailed.map((p, i) => (
                 <tr key={i}>
                   <td data-label="Date">{formatDateDisplay(p.orderDate)}</td>
@@ -271,7 +509,8 @@ export const ReportsModule: React.FC = () => {
                   <td data-label="Item" style={{ fontWeight: 'bold' }}>{p.itemName}</td>
                   <td data-label="Model" style={{ color: '#475569' }}>{p.modelPart || '-'}</td>
                   <td data-label="Serial" style={{ color: '#475569' }}>{p.serial || '-'}</td>
-                  <td data-label="PO" style={{ color: '#475569' }}>{p.po || '-'}</td>
+                  <td data-label="PO" style={{ color: 'var(--primary-color)', fontWeight: '600' }}>{p.po || '-'}</td>
+                  <td data-label="Company" style={{ color: '#475569' }}>{p.supplyCompany || '-'}</td>
                   <td data-label="Qty" style={{ textAlign: 'center' }}><span style={{ backgroundColor: '#fef2f2', color: '#ef4444', padding: '4px 12px', borderRadius: '12px', fontWeight: 'bold' }}>-{p.quantity}</span></td>
                 </tr>
               ))}
