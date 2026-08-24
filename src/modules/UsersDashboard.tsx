@@ -6,6 +6,7 @@ import { db } from '../firebase';
 import { Users, Plus, Trash2, User as UserIcon, Edit2, ShieldAlert } from 'lucide-react';
 import type { SystemUser, UserStatus } from '../types';
 import Modal from '../components/Modal';
+import DataTable, { type DataColumn } from '../components/DataTable';
 import ModuleHeader from '../components/ModuleHeader';
 import LoadingScreen from '../components/LoadingScreen';
 import { UserStatusBadge } from '../components/StatusBadge';
@@ -35,6 +36,21 @@ export default function UsersDashboard() {
 
   const roleName = useCallback((id: string) => roles.find(r => r.id === id)?.name || 'Unknown Role', [roles]);
   const selectedUser = useMemo(() => users.find(u => u.id === selectedUserId) ?? null, [users, selectedUserId]);
+
+  const userColumns = useMemo<DataColumn<SystemUser>[]>(() => [
+    { id: 'name', header: 'Account User', value: u => `${displayName(u, '')} ${u.email}`.trim(), hideable: false,
+      render: u => (
+        <div className="user-cell">
+          <div className="user-avatar"><UserIcon size={18} /></div>
+          <div className="flex-col">
+            <span className="user-name">{u.firstName || u.lastName ? displayName(u, '') : 'No Name Set'}</span>
+            <span className="user-email">{u.email}</span>
+          </div>
+        </div>
+      ) },
+    { id: 'role', header: 'Assigned Role', value: u => roleName(u.roleId), render: u => <span className="badge info">{roleName(u.roleId)}</span> },
+    { id: 'status', header: 'Status', value: u => u.status, align: 'center', render: u => <UserStatusBadge status={u.status} /> },
+  ], [roleName]);
 
   const sortedUsers = useMemo(
     () => [...users]
@@ -126,44 +142,20 @@ export default function UsersDashboard() {
         }
       />
 
-      <div className="table-container">
-        <table className="responsive-table">
-          <thead>
-            <tr>
-              <th className="col-actions narrow">Action</th>
-              <th>Account User</th>
-              <th>Assigned Role</th>
-              <th className="text-center">Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {sortedUsers.length === 0 && <tr><td colSpan={4} className="empty-state">No users found.</td></tr>}
-            {sortedUsers.map(user => (
-              <tr key={user.id} className="clickable-row" onClick={() => { setSelectedUserId(user.id ?? null); setModalState('detail'); }}>
-                <td data-label="Action" className="cell-actions">
-                  <div className="action-btns">
-                    <RequirePermission permission="manage_security">
-                      <button type="button" className="icon-btn edit" onClick={(e) => { e.stopPropagation(); handleOpenEdit(user); }} title="Edit User"><Edit2 size={16} /></button>
-                      <button type="button" className="icon-btn delete" onClick={(e) => { e.stopPropagation(); handleDeleteUser(user); }} title="Revoke Access"><Trash2 size={16} /></button>
-                    </RequirePermission>
-                  </div>
-                </td>
-                <td data-label="User">
-                  <div className="user-cell">
-                    <div className="user-avatar"><UserIcon size={18} /></div>
-                    <div className="flex-col">
-                      <span className="user-name">{user.firstName || user.lastName ? displayName(user, '') : 'No Name Set'}</span>
-                      <span className="user-email">{user.email}</span>
-                    </div>
-                  </div>
-                </td>
-                <td data-label="Role" className="text-body">{roleName(user.roleId)}</td>
-                <td data-label="Status" className="text-center"><UserStatusBadge status={user.status} /></td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <DataTable<SystemUser>
+        columns={userColumns}
+        rows={sortedUsers}
+        rowKey={u => u.id ?? u.email}
+        storageKey="users"
+        onRowClick={u => { setSelectedUserId(u.id ?? null); setModalState('detail'); }}
+        emptyMessage="No users found."
+        actions={user => (
+          <RequirePermission permission="manage_security">
+            <button type="button" className="icon-btn edit" onClick={(e) => { e.stopPropagation(); handleOpenEdit(user); }} title="Edit User"><Edit2 size={16} /></button>
+            <button type="button" className="icon-btn delete" onClick={(e) => { e.stopPropagation(); handleDeleteUser(user); }} title="Revoke Access"><Trash2 size={16} /></button>
+          </RequirePermission>
+        )}
+      />
 
       {modalState === 'detail' && selectedUser && (
         <Modal

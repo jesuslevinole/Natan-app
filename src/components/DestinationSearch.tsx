@@ -8,7 +8,6 @@ interface Props {
   onSelect: (description: string) => void;
   placeholder?: string;
   required?: boolean;
-  theme?: 'light' | 'dark';
   /** Si es true, agrega la opción "All Addresses" con id vacío (filtros de reportes). */
   includeAll?: boolean;
   /** Si es true, permite escribir una dirección que no está en el catálogo. */
@@ -21,7 +20,7 @@ interface Props {
  * la `description` (dirección), que es lo que muestran Work Activity y Reports.
  */
 export default function DestinationSearch({
-  value = '', onSelect, placeholder = 'Search address...', required = false, theme, includeAll = false, allowCustom = true,
+  value = '', onSelect, placeholder = 'Search address...', required = false, includeAll = false, allowCustom = true,
 }: Props) {
   const { destinations } = useAppData();
 
@@ -39,7 +38,6 @@ export default function DestinationSearch({
       onChange={(id) => onSelect(id)}
       placeholder={placeholder}
       required={required}
-      theme={theme}
       allowCustom={allowCustom}
       optionIcon={<MapPin size={16} />}
       emptyMessage="No addresses found."

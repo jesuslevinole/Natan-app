@@ -16,7 +16,6 @@ interface Props {
   onChange: (id: string, label: string) => void;
   placeholder?: string;
   required?: boolean;
-  theme?: 'light' | 'dark';
   /**
    * Si es true, el texto escrito se acepta como valor aunque no exista en las opciones
    * (usado para direcciones nuevas). Si es false, solo se puede elegir una opción.
@@ -35,7 +34,7 @@ interface Props {
  * click cuando el input pierde el foco). Ver code-notes.md.
  */
 export default function SearchableSelect({
-  options, value, onChange, placeholder = 'Search...', required = false, theme = 'light',
+  options, value, onChange, placeholder = 'Search...', required = false,
   allowCustom = false, optionIcon, emptyMessage = 'No matches found.', disabled = false,
 }: Props) {
   const [isOpen, setIsOpen] = useState(false);
@@ -80,7 +79,7 @@ export default function SearchableSelect({
     else if (e.key === 'Escape') setIsOpen(false);
   };
 
-  const wrapperCls = `searchable-select${theme === 'dark' ? ' dark' : ''}${isOpen ? ' open' : ''}`;
+  const wrapperCls = `searchable-select${isOpen ? ' open' : ''}`;
 
   return (
     <div ref={wrapperRef} className={wrapperCls}>

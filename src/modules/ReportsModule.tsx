@@ -1,25 +1,44 @@
 import { useState, useMemo, useCallback, type CSSProperties } from 'react';
-import { BarChart2, Filter, Award, Activity, Wrench, MapPin, FileBarChart, Download, RotateCcw } from 'lucide-react';
-import type { JobProduct } from '../types';
+import { BarChart2, Filter, Award, Activity, Wrench, MapPin, FileBarChart, Download, RotateCcw, X, CheckCircle2, AlertTriangle, Briefcase, PackageSearch, Repeat, TrendingUp, PieChart as PieIcon, Building2 } from 'lucide-react';
+import type { JobProduct, JobOrder } from '../types';
 import KpiCard from '../components/KpiCard';
 import DestinationSearch from '../components/DestinationSearch';
 import ModuleHeader from '../components/ModuleHeader';
 import LoadingScreen from '../components/LoadingScreen';
 import { useAppData } from '../hooks/useAppData';
-import { formatDateDisplay, displayName } from '../utils/helpers';
+import { formatDateDisplay, displayName, formatSeq, getTodayString } from '../utils/helpers';
 import { downloadWorkbook } from '../utils/excel';
+import DataTable, { type DataColumn } from '../components/DataTable';
+import NotesCell from '../components/NotesCell';
+import SeqBadge from '../components/SeqBadge';
+import Tabs, { type TabItem } from '../components/Tabs';
+import { WorkFinishBadge, ScheduleCell } from '../components/StatusBadge';
+import ChartCard from '../components/charts/ChartCard';
+import MonthlyBars, { type MonthlyPoint } from '../components/charts/MonthlyBars';
+import DonutChart from '../components/charts/DonutChart';
+import RankBars from '../components/charts/RankBars';
+import { countBy, lastMonths, monthKey, COLOR_SUCCESS, COLOR_PRIMARY, COLOR_DANGER, COLOR_WARNING, truncate } from '../components/charts/chartUtils';
 import './ReportsModule.css';
+
+type ReportTab = 'activities' | 'products' | 'po' | 'addresses' | 'repeated';
 
 const includes = (haystack: string | undefined, needle: string) => !needle || (haystack || '').toLowerCase().includes(needle.toLowerCase());
 
 const EMPTY_FILTERS = {
   startDate: '', endDate: '', dest: '', worker: '', itemName: '', po: '', serial: '', supplyCompany: '',
 };
+type FilterKey = keyof typeof EMPTY_FILTERS;
+const FILTER_LABELS: Record<FilterKey, string> = {
+  startDate: 'From', endDate: 'To', dest: 'Address', worker: 'User', itemName: 'Item', po: 'PO', serial: 'Serial', supplyCompany: 'Supplier',
+};
 
 export default function ReportsModule() {
-  const { jobOrders, jobProducts, entrances, users, isLoading } = useAppData();
+  const { jobOrders, jobProducts, entrances, users, destinations, isLoading } = useAppData();
   const [filters, setFilters] = useState(EMPTY_FILTERS);
-  const set = (key: keyof typeof EMPTY_FILTERS) => (value: string) => setFilters(prev => ({ ...prev, [key]: value }));
+  const [tab, setTab] = useState<ReportTab>('activities');
+  const set = (key: FilterKey) => (value: string) => setFilters(prev => ({ ...prev, [key]: value }));
+  const today = getTodayString();
+  const activeFilters = (Object.keys(filters) as FilterKey[]).filter(k => filters[k] !== '');
 
   const accountUsers = useMemo(() => users.map(u => displayName(u, u.email)).sort(), [users]);
 
@@ -150,14 +169,121 @@ export default function ReportsModule() {
     ]);
   };
 
+
+  // ---- Datos para gráficos ----
+  const { monthly, statusSlices, completed, overdue, byProperty, byTechnician, itemsByName } = useMemo(() => {
+    const finished = filteredOrders.filter(o => o.workFinish === 'YES');
+    const open = filteredOrders.filter(o => o.workFinish === 'NO');
+    const late = open.filter(o => o.schedule && o.schedule < today);
+
+    // Meses: rango de los filtros si existe; si no, últimos 6 meses (o todo el histórico si es más corto).
+    let monthKeys: string[];
+    if (filters.startDate || filters.endDate) {
+      const keys = new Set(filteredOrders.map(o => monthKey(o.createdAt)).filter(Boolean));
+      monthKeys = [...keys].sort();
+    } else {
+      monthKeys = lastMonths(today, 6);
+    }
+    const perMonth = new Map<string, MonthlyPoint>(monthKeys.map(k => [k, { month: k, finished: 0, open: 0 }]));
+    for (const o of filteredOrders) {
+      const point = perMonth.get(monthKey(o.createdAt));
+      if (!point) continue;
+      if (o.workFinish === 'YES') point.finished = Number(point.finished) + 1;
+      else point.open = Number(point.open) + 1;
+    }
+
+    const propertyOf = new Map(destinations.map(d => [d.description, d.property || '']));
+    const propCounts = countBy(filteredOrders, o => propertyOf.get(o.destination) || 'Other / unknown');
+
+    return {
+      monthly: [...perMonth.values()],
+      statusSlices: [
+        { name: 'Finished', value: finished.length, color: COLOR_SUCCESS },
+        { name: 'In progress', value: open.length - late.length, color: COLOR_PRIMARY },
+        { name: 'Overdue', value: late.length, color: COLOR_DANGER },
+      ],
+      completed: finished.length,
+      overdue: late.length,
+      byProperty: propCounts.map(([name, value]) => ({ name, value })),
+      byTechnician: countBy(filteredOrders, o => o.madeBy || 'Unassigned').map(([name, value]) => ({ name, value })),
+      itemsByName: countBy(filteredProductsDetailed, p => p.itemName || '(no name)', p => p.quantity).map(([name, value]) => ({ name, value })),
+    };
+  }, [filteredOrders, filteredProductsDetailed, destinations, filters.startDate, filters.endDate, today]);
+
+  const poChart = useMemo(() => poAggregate.slice(0, 8).map(r => ({ month: r.po, received: r.totalArrived, installed: r.installed })), [poAggregate]);
+
+  // ---- Columnas de las tablas ----
+  const activityColumns = useMemo<DataColumn<JobOrder>[]>(() => [
+    { id: 'seq', header: '#', value: o => o.visualSeq ?? null, type: 'number', align: 'center', width: '64px', hideable: false, render: o => <SeqBadge seq={o.visualSeq} /> },
+    { id: 'createdAt', header: 'Registration', value: o => o.createdAt, type: 'date', nowrap: true, render: o => formatDateDisplay(o.createdAt) },
+    { id: 'schedule', header: 'Schedule', value: o => o.schedule, type: 'date', nowrap: true, render: o => <ScheduleCell date={o.schedule} finished={o.workFinish === 'YES'} /> },
+    { id: 'destination', header: 'Address', value: o => o.destination, nowrap: true, render: o => <span className="cell-strong">{o.destination}</span> },
+    { id: 'description', header: 'Description', value: o => o.description, render: o => <span className="cell-clamp" title={o.description}>{o.description}</span> },
+    { id: 'jobOrder', header: 'Ordered by', value: o => o.jobOrder },
+    { id: 'madeBy', header: 'Made by', value: o => o.madeBy || '', render: o => o.madeBy || <span className="badge neutral">Unassigned</span> },
+    { id: 'workFinish', header: 'Status', value: o => o.workFinish, align: 'center', render: o => <WorkFinishBadge value={o.workFinish} /> },
+    { id: 'pendingWork', header: 'Notes', value: o => o.pendingWork || '', align: 'center', render: o => <NotesCell text={o.pendingWork} title={`Pending work — Order ${formatSeq(o.visualSeq)}`} subtitle={`${o.destination} · ${o.description}`} /> },
+  ], []);
+
+  type ProductRow = (typeof filteredProductsDetailed)[number];
+  const productColumns = useMemo<DataColumn<ProductRow>[]>(() => [
+    { id: 'orderDate', header: 'Date', value: p => p.orderDate, type: 'date', nowrap: true, render: p => formatDateDisplay(p.orderDate) },
+    { id: 'orderDestination', header: 'Address', value: p => p.orderDestination, render: p => <span className="cell-strong">{p.orderDestination}</span> },
+    { id: 'orderWorker', header: 'Ordered by', value: p => p.orderWorker },
+    { id: 'orderMadeBy', header: 'Made by', value: p => p.orderMadeBy, defaultHidden: true },
+    { id: 'itemName', header: 'Item', value: p => p.itemName, render: p => <span className="cell-strong">{p.itemName}</span> },
+    { id: 'modelPart', header: 'Model #', value: p => p.modelPart },
+    { id: 'serial', header: 'Serial #', value: p => p.serial, render: p => p.serial ? <span className="cell-mono">{p.serial}</span> : <span className="dt-dash">—</span> },
+    { id: 'po', header: 'PO #', value: p => p.po, nowrap: true, render: p => <span className="cell-strong text-primary cell-mono">{p.po || '—'}</span> },
+    { id: 'supplyCompany', header: 'Supplier', value: p => p.supplyCompany },
+    { id: 'quantity', header: 'Qty', value: p => p.quantity, type: 'number', align: 'center', render: p => <span className="badge negative">-{p.quantity}</span> },
+  ], []);
+
+  type PoRow = (typeof poAggregate)[number];
+  const poColumns = useMemo<DataColumn<PoRow>[]>(() => [
+    { id: 'po', header: 'PO #', value: r => r.po, nowrap: true, hideable: false, render: r => <span className="cell-strong text-primary cell-mono">{r.po}</span> },
+    { id: 'date', header: 'Date', value: r => r.date, type: 'date', nowrap: true, render: r => formatDateDisplay(r.date) },
+    { id: 'supplyCompany', header: 'Supplier', value: r => r.supplyCompany },
+    { id: 'productsCount', header: 'Products', value: r => r.productsCount, type: 'number', align: 'center' },
+    { id: 'totalArrived', header: 'Received', value: r => r.totalArrived, type: 'number', align: 'center', render: r => <span className="fw-bold">{r.totalArrived}</span> },
+    { id: 'installed', header: 'Installed', value: r => r.installed, type: 'number', align: 'center', render: r => <span className="badge negative">-{r.installed}</span> },
+    { id: 'remaining', header: 'Remaining', value: r => r.remaining, type: 'number', align: 'center', render: r => <span className={`badge ${r.remaining <= 0 ? 'danger' : 'success'}`}>{r.remaining}</span> },
+    { id: 'usage', header: 'Usage', value: r => (r.totalArrived > 0 ? Math.round((r.installed / r.totalArrived) * 100) : 0), type: 'number', align: 'center', width: '150px',
+      render: r => { const pct = r.totalArrived > 0 ? Math.round((r.installed / r.totalArrived) * 100) : 0; return <UsageBar percent={pct} />; } },
+  ], []);
+
+  type AptRow = (typeof aptList)[number];
+  const aptColumns = useMemo<DataColumn<AptRow>[]>(() => [
+    { id: 'dest', header: 'Address', value: a => a.dest, hideable: false, render: a => <span className="cell-strong">{a.dest}</span> },
+    { id: 'count', header: 'Interventions', value: a => a.count, type: 'number', align: 'center', render: a => <span className="badge info">{a.count}</span> },
+  ], []);
+
+  type RepRow = (typeof repeatedList)[number];
+  const repeatedColumns = useMemo<DataColumn<RepRow>[]>(() => [
+    { id: 'dest', header: 'Address', value: r => r.dest, hideable: false, render: r => <span className="cell-strong">{r.dest}</span> },
+    { id: 'desc', header: 'Task', value: r => r.desc, render: r => <span className="cell-clamp" title={r.desc}>{r.desc}</span> },
+    { id: 'count', header: 'Times done', value: r => r.count, type: 'number', align: 'center', render: r => <span className={`badge ${r.count > 1 ? 'danger' : 'success'}`}>{r.count}</span> },
+  ], []);
+
+  const tabs: TabItem<ReportTab>[] = [
+    { id: 'activities', label: 'Work Activities', icon: <Briefcase size={15} />, count: filteredOrders.length },
+    { id: 'products', label: 'Products Installed', icon: <Wrench size={15} />, count: filteredProductsDetailed.length },
+    { id: 'po', label: 'Items by PO', icon: <PackageSearch size={15} />, count: poAggregate.length },
+    { id: 'addresses', label: 'Works per Address', icon: <MapPin size={15} />, count: aptList.length },
+    { id: 'repeated', label: 'Repeated Tasks', icon: <Repeat size={15} />, count: repeatedList.filter(r => r.count > 1).length },
+  ];
+
   if (isLoading) return <LoadingScreen message="Loading reports..." />;
+
+  const completionRate = filteredOrders.length ? Math.round((completed / filteredOrders.length) * 100) : 0;
+  const filterLabel = (k: FilterKey) => (k === 'startDate' || k === 'endDate' ? formatDateDisplay(filters[k]) : truncate(filters[k], 28));
 
   return (
     <div className="card max-1400 catalog-manager-anim">
       <ModuleHeader
         icon={<BarChart2 size={28} />}
         title="Analytics & Reports"
-        subtitle="Analyze work activities, locations, and products installed."
+        subtitle="Work activity, locations and inventory consumption. Every table and chart follows the filters below."
         actions={
           <button type="button" className="action btn-secondary btn-header" onClick={handleExport} title="Download the filtered data as an Excel workbook">
             <Download size={18} /> Export to Excel
@@ -165,12 +291,11 @@ export default function ReportsModule() {
         }
       />
 
-      <div className="dark-filter-panel">
-        <div className="dark-filter-title">
-          <div className="dark-filter-icon"><Filter size={20} /></div>
-          <h3>Command Center Filters</h3>
-          {JSON.stringify(filters) !== JSON.stringify(EMPTY_FILTERS) && (
-            <button type="button" className="chip dark-reset" onClick={() => setFilters(EMPTY_FILTERS)}><RotateCcw size={14} /> Reset</button>
+      <section className="filter-panel">
+        <div className="filter-panel-head">
+          <h3><Filter size={16} /> Filters</h3>
+          {activeFilters.length > 0 && (
+            <button type="button" className="dt-tool" onClick={() => setFilters(EMPTY_FILTERS)}><RotateCcw size={14} /> Reset all</button>
           )}
         </div>
         <div className="form-grid compact">
@@ -178,13 +303,13 @@ export default function ReportsModule() {
           <div className="form-group"><label>End Date</label><input type="date" value={filters.endDate} onChange={e => set('endDate')(e.target.value)} /></div>
           <div className="form-group">
             <label>Address</label>
-            <DestinationSearch theme="dark" includeAll allowCustom={false} value={filters.dest} onSelect={set('dest')} placeholder="-- Search Address --" />
+            <DestinationSearch includeAll allowCustom={false} value={filters.dest} onSelect={set('dest')} placeholder="All addresses" />
           </div>
           <div className="form-group">
             <label>Account User</label>
             <select value={filters.worker} onChange={e => set('worker')(e.target.value)}>
-              <option value="" className="dark-option">All Account Users</option>
-              {accountUsers.map(name => <option key={name} value={name} className="dark-option">{name}</option>)}
+              <option value="">All Account Users</option>
+              {accountUsers.map(name => <option key={name} value={name}>{name}</option>)}
             </select>
           </div>
           <div className="form-group"><label>Item Name</label><input type="text" placeholder="Search by name..." value={filters.itemName} onChange={e => set('itemName')(e.target.value)} /></div>
@@ -193,142 +318,93 @@ export default function ReportsModule() {
           <div className="form-group">
             <label>Supply Company</label>
             <select value={filters.supplyCompany} onChange={e => set('supplyCompany')(e.target.value)}>
-              <option value="" className="dark-option">All Companies</option>
-              {supplyCompanyOptions.map(sc => <option key={sc} value={sc} className="dark-option">{sc}</option>)}
+              <option value="">All Companies</option>
+              {supplyCompanyOptions.map(sc => <option key={sc} value={sc}>{sc}</option>)}
             </select>
           </div>
         </div>
-      </div>
+        {activeFilters.length > 0 && (
+          <div className="filter-chips" aria-label="Active filters">
+            {activeFilters.map(k => (
+              <span key={k} className="filter-chip">
+                {FILTER_LABELS[k]}: {filterLabel(k)}
+                <button type="button" onClick={() => set(k)('')} title={`Remove ${FILTER_LABELS[k]} filter`} aria-label={`Remove ${FILTER_LABELS[k]} filter`}><X size={10} /></button>
+              </span>
+            ))}
+          </div>
+        )}
+      </section>
 
       <div className="kpi-grid">
-        <KpiCard icon={<Activity size={24} />} label="Total Activities" value={filteredOrders.length} tone="blue" />
-        <KpiCard icon={<Wrench size={24} />} label="Items Installed" value={totalItemsInstalled} tone="purple" />
-        <KpiCard icon={<MapPin size={24} />} label="Top Address" value={<span className="kpi-value small">{mostWorkedApt}</span>} tone="green" />
-        <KpiCard icon={<Award size={24} />} label="Top Account User" value={<span className="kpi-value small">{topWorker}</span>} tone="orange" />
+        <KpiCard icon={<Activity size={20} />} label="Activities" value={filteredOrders.length} tone="blue" note={`${filteredOrders.length - completed} still open`} />
+        <KpiCard icon={<CheckCircle2 size={20} />} label="Completed" value={<>{completed} <small className="kpi-sub">({completionRate}%)</small></>} tone="green" note="Work finish = YES" />
+        <KpiCard icon={<AlertTriangle size={20} />} label="Overdue" value={overdue} tone={overdue > 0 ? 'red' : 'slate'} note="Scheduled before today, not finished" />
+        <KpiCard icon={<Wrench size={20} />} label="Items Installed" value={totalItemsInstalled} tone="purple" note={`${filteredProductsDetailed.length} product lines`} />
+        <KpiCard icon={<MapPin size={20} />} label="Top Address" value={<span className="kpi-value small">{mostWorkedApt}</span>} tone="cyan" note={aptList[0] ? `${aptList[0].count} interventions` : undefined} />
+        <KpiCard icon={<Award size={20} />} label="Top Account User" value={<span className="kpi-value small">{topWorker}</span>} tone="orange" />
       </div>
 
-      <div className="panel-grid">
-        <div className="panel h-350">
-          <div className="panel-header"><h4>Works per Address</h4></div>
-          <div className="table-container">
-            <table className="responsive-table">
-              <thead><tr><th>Address</th><th className="text-center">Total Interventions</th></tr></thead>
-              <tbody>
-                {aptList.length === 0 && <tr><td colSpan={2} className="empty-state">No data available.</td></tr>}
-                {aptList.map(item => (
-                  <tr key={item.dest}>
-                    <td data-label="Address" className="fw-bold">{item.dest}</td>
-                    <td data-label="Total" className="text-center"><span className="badge info">{item.count}</span></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-        <div className="panel h-350">
-          <div className="panel-header"><h4>Repeated Tasks per Address</h4></div>
-          <div className="table-container">
-            <table className="responsive-table">
-              <thead><tr><th>Address</th><th>Description (Task)</th><th className="text-center">Times Done</th></tr></thead>
-              <tbody>
-                {repeatedList.length === 0 && <tr><td colSpan={3} className="empty-state">No data available.</td></tr>}
-                {repeatedList.map(item => (
-                  <tr key={`${item.dest}|${item.desc}`}>
-                    <td data-label="Address">{item.dest}</td>
-                    <td data-label="Desc" className="text-body">{item.desc}</td>
-                    <td data-label="Times" className="text-center"><span className={`badge ${item.count > 1 ? 'danger' : 'success'}`}>{item.count}</span></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
+      <div className="chart-grid">
+        <ChartCard title="Activity over time" subtitle="Orders registered per month, by status" icon={<TrendingUp size={16} />} wide empty={filteredOrders.length === 0}>
+          <MonthlyBars data={monthly} series={[{ key: 'finished', name: 'Finished', color: COLOR_SUCCESS }, { key: 'open', name: 'Open', color: COLOR_PRIMARY }]} />
+        </ChartCard>
+        <ChartCard title="Completion status" subtitle="Finished vs in progress vs overdue" icon={<PieIcon size={16} />} empty={filteredOrders.length === 0}>
+          <DonutChart data={statusSlices} centerLabel="Orders" />
+        </ChartCard>
+        <ChartCard title="Top addresses" subtitle="Most interventions" icon={<MapPin size={16} />} empty={aptList.length === 0}>
+          <RankBars data={aptList.map(a => ({ name: a.dest, value: a.count }))} valueName="Interventions" />
+        </ChartCard>
+        <ChartCard title="Items installed by product" subtitle="Units consumed per item name" icon={<Wrench size={16} />} empty={itemsByName.length === 0}>
+          <DonutChart data={itemsByName} centerLabel="Units" />
+        </ChartCard>
+        <ChartCard title="Work by property" subtitle="Orders per apartment complex" icon={<Building2 size={16} />} empty={byProperty.length === 0}>
+          <DonutChart data={byProperty} centerLabel="Orders" />
+        </ChartCard>
+        <ChartCard title="Received vs installed by PO" subtitle="Latest purchase orders" icon={<FileBarChart size={16} />} wide empty={poChart.length === 0}>
+          <MonthlyBars data={poChart} stacked={false} xFormatter={v => v} series={[{ key: 'received', name: 'Received', color: COLOR_PRIMARY }, { key: 'installed', name: 'Installed', color: COLOR_WARNING }]} />
+        </ChartCard>
+        <ChartCard title="Work by technician" subtitle="Orders per 'Made by'" icon={<Award size={16} />} empty={byTechnician.length === 0}>
+          <RankBars data={byTechnician} valueName="Orders" multicolor />
+        </ChartCard>
       </div>
 
-      <div className="panel h-400 mb-5">
-        <div className="panel-header">
-          <span className="panel-icon"><FileBarChart size={20} /></span>
-          <div className="flex-1">
-            <h4>Items by Purchase Order</h4>
-            <p>Inventory consumption tracked per PO. Shows how many items were received vs installed vs remaining in stock.</p>
-          </div>
-          <span className="text-sm text-muted"><strong>{poAggregate.length}</strong> POs</span>
-        </div>
-        <div className="table-container">
-          <table className="responsive-table">
-            <thead>
-              <tr>
-                <th>PO #</th><th>Date</th><th>Supply Company</th>
-                <th className="text-center"># Products</th><th className="text-center">Items Received</th>
-                <th className="text-center">Items Installed</th><th className="text-center">Remaining Stock</th><th className="text-center">Usage</th>
-              </tr>
-            </thead>
-            <tbody>
-              {poAggregate.length === 0 && <tr><td colSpan={8} className="empty-state">No POs found for current filters.</td></tr>}
-              {poAggregate.map(row => {
-                const usagePercent = row.totalArrived > 0 ? Math.round((row.installed / row.totalArrived) * 100) : 0;
-                const barCls = usagePercent >= 100 ? 'full' : usagePercent >= 70 ? 'high' : '';
-                return (
-                  <tr key={row.entranceId}>
-                    <td data-label="PO" className="fw-bold text-primary">{row.po}</td>
-                    <td data-label="Date">{formatDateDisplay(row.date)}</td>
-                    <td data-label="Company" className="text-body">{row.supplyCompany}</td>
-                    <td data-label="Products" className="text-center">{row.productsCount}</td>
-                    <td data-label="Received" className="text-center fw-bold">{row.totalArrived}</td>
-                    <td data-label="Installed" className="text-center"><span className="badge negative">-{row.installed}</span></td>
-                    <td data-label="Remaining" className="text-center"><span className={`badge ${row.remaining <= 0 ? 'danger' : 'success'}`}>{row.remaining}</span></td>
-                    <td data-label="Usage" className="text-center">
-                      <div className="progress-wrap">
-                        <div className="progress-track">
-                          {/* El ancho es un valor de runtime → variable CSS */}
-                          <div className={`progress-bar ${barCls}`} style={{ '--progress': `${Math.min(usagePercent, 100)}%` } as CSSProperties} />
-                        </div>
-                        <span className="progress-label">{usagePercent}%</span>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+      <div className="section-head">
+        <span className="section-icon"><FileBarChart size={18} /></span>
+        <div>
+          <h3>Detailed data</h3>
+          <p>Sort by any column, filter per column or hide columns. The Excel export includes every tab.</p>
         </div>
       </div>
+      <Tabs tabs={tabs} value={tab} onChange={setTab} />
 
-      <div className="panel h-450">
-        <div className="panel-header">
-          <div className="flex-1">
-            <h4>Products Installed Log</h4>
-            <p>Detailed list of materials used in the filtered activities.</p>
-          </div>
-          <span className="text-sm text-muted"><strong>{filteredProductsDetailed.length}</strong> rows</span>
-        </div>
-        <div className="table-container">
-          <table className="responsive-table">
-            <thead>
-              <tr>
-                <th>Date</th><th>Address</th><th>Account User</th><th>Item Name</th><th>Model #</th><th>Serial #</th>
-                <th>PO #</th><th>Supply Company</th><th className="text-center">Qty Installed</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredProductsDetailed.length === 0 && <tr><td colSpan={9} className="empty-state">No products found for current filters.</td></tr>}
-              {filteredProductsDetailed.map(p => (
-                <tr key={p.id}>
-                  <td data-label="Date">{formatDateDisplay(p.orderDate)}</td>
-                  <td data-label="Address">{p.orderDestination}</td>
-                  <td data-label="Account User" className="fw-bold">{p.orderWorker}</td>
-                  <td data-label="Item" className="fw-bold">{p.itemName}</td>
-                  <td data-label="Model" className="text-body">{p.modelPart || '-'}</td>
-                  <td data-label="Serial" className="text-body">{p.serial || '-'}</td>
-                  <td data-label="PO" className="fw-600 text-primary">{p.po || '-'}</td>
-                  <td data-label="Company" className="text-body">{p.supplyCompany || '-'}</td>
-                  <td data-label="Qty" className="text-center"><span className="badge negative">-{p.quantity}</span></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+      {tab === 'activities' && (
+        <DataTable<JobOrder> columns={activityColumns} rows={filteredOrders} rowKey={o => o.id} storageKey="report_activities" initialSort={{ id: 'createdAt', dir: 'desc' }} compact emptyMessage="No activities match the current filters." />
+      )}
+      {tab === 'products' && (
+        <DataTable<ProductRow> columns={productColumns} rows={filteredProductsDetailed} rowKey={p => p.id ?? `${p.jobOrderId}-${p.entranceDetailId}-${p.itemName}`} storageKey="report_products" initialSort={{ id: 'orderDate', dir: 'desc' }} compact emptyMessage="No products installed for the current filters." />
+      )}
+      {tab === 'po' && (
+        <DataTable<PoRow> columns={poColumns} rows={poAggregate} rowKey={r => r.entranceId} storageKey="report_po" initialSort={{ id: 'po', dir: 'desc' }} compact emptyMessage="No POs found for the current filters." />
+      )}
+      {tab === 'addresses' && (
+        <DataTable<AptRow> columns={aptColumns} rows={aptList} rowKey={a => a.dest} storageKey="report_addresses" initialSort={{ id: 'count', dir: 'desc' }} compact emptyMessage="No data available." />
+      )}
+      {tab === 'repeated' && (
+        <DataTable<RepRow> columns={repeatedColumns} rows={repeatedList} rowKey={r => `${r.dest}|${r.desc}`} storageKey="report_repeated" initialSort={{ id: 'count', dir: 'desc' }} compact emptyMessage="No data available." />
+      )}
+    </div>
+  );
+}
+
+/** Barra de consumo de un PO (0–100 %). */
+function UsageBar({ percent }: { percent: number }) {
+  const cls = percent >= 100 ? 'full' : percent >= 70 ? 'high' : '';
+  return (
+    <div className="progress-wrap">
+      <div className="progress-track">
+        <div className={`progress-bar ${cls}`} style={{ '--progress': `${Math.min(percent, 100)}%` } as CSSProperties} />
       </div>
+      <span className="progress-label">{percent}%</span>
     </div>
   );
 }

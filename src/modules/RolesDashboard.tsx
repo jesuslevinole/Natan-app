@@ -4,6 +4,7 @@ import { db } from '../firebase';
 import { ShieldCheck, Plus, Edit2, Trash2, Save } from 'lucide-react';
 import type { Role } from '../types';
 import Modal from '../components/Modal';
+import DataTable, { type DataColumn } from '../components/DataTable';
 import ModuleHeader from '../components/ModuleHeader';
 import LoadingScreen from '../components/LoadingScreen';
 import { AuditLogger } from '../utils/logger';
@@ -52,6 +53,13 @@ export default function RolesDashboard() {
     users.forEach(u => m.set(u.roleId, (m.get(u.roleId) || 0) + 1));
     return m;
   }, [users]);
+
+  const roleColumns = useMemo<DataColumn<Role>[]>(() => [
+    { id: 'name', header: 'Role Name', value: r => r.name, hideable: false, render: r => <span className="cell-strong">{r.name}</span> },
+    { id: 'permissions', header: 'Permissions', value: r => (r.name === SUPER_ADMIN ? 999 : r.permissions.length), type: 'number',
+      render: r => <span className={`badge ${r.name === SUPER_ADMIN ? 'info' : 'neutral'}`}>{r.name === SUPER_ADMIN ? 'Full access' : `${r.permissions.length} rules assigned`}</span> },
+    { id: 'users', header: 'Users', value: r => usersPerRole.get(r.id) || 0, type: 'number', align: 'center', render: r => <span className="fw-bold">{usersPerRole.get(r.id) || 0}</span> },
+  ], [usersPerRole]);
 
   const filteredRoles = useMemo(() => roles.filter(r => matchesSearch(searchTerm, r.name)), [roles, searchTerm]);
   const isSuperAdmin = roleName === SUPER_ADMIN;
@@ -108,33 +116,22 @@ export default function RolesDashboard() {
         actions={<button type="button" className="action btn-primary btn-header" onClick={() => handleOpenModal(null)}><Plus size={18} /> New Role</button>}
       />
 
-      <div className="table-container">
-        <table className="responsive-table">
-          <thead>
-            <tr><th>Role Name</th><th>Permissions</th><th className="text-center">Users</th><th className="text-center">Actions</th></tr>
-          </thead>
-          <tbody>
-            {filteredRoles.length === 0 && <tr><td colSpan={4} className="empty-state">No roles found.</td></tr>}
-            {filteredRoles.map(role => (
-              <tr key={role.id}>
-                <td data-label="Role Name" className="fw-bold text-dark">{role.name}</td>
-                <td data-label="Permissions">
-                  <span className="badge neutral">{role.name === SUPER_ADMIN ? 'Full access' : `${role.permissions.length} rules assigned`}</span>
-                </td>
-                <td data-label="Users" className="text-center">{usersPerRole.get(role.id) || 0}</td>
-                <td data-label="Actions" className="cell-actions">
-                  <div className="action-btns">
-                    <button type="button" className="icon-btn edit" onClick={() => handleOpenModal(role)} title="Edit role"><Edit2 size={16} /></button>
-                    {role.name !== SUPER_ADMIN && (
-                      <button type="button" className="icon-btn delete" onClick={() => handleDelete(role)} title="Delete role"><Trash2 size={16} /></button>
-                    )}
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <DataTable<Role>
+        columns={roleColumns}
+        rows={filteredRoles}
+        rowKey={r => r.id}
+        storageKey="roles"
+        onRowClick={role => handleOpenModal(role)}
+        emptyMessage="No roles found."
+        actions={role => (
+          <>
+            <button type="button" className="icon-btn edit" onClick={(e) => { e.stopPropagation(); handleOpenModal(role); }} title="Edit role"><Edit2 size={16} /></button>
+            {role.name !== SUPER_ADMIN && (
+              <button type="button" className="icon-btn delete" onClick={(e) => { e.stopPropagation(); handleDelete(role); }} title="Delete role"><Trash2 size={16} /></button>
+            )}
+          </>
+        )}
+      />
 
       {isModalOpen && (
         <Modal

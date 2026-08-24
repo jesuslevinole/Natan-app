@@ -6,6 +6,7 @@ import type { CatalogSchema, CatalogRecord } from '../types';
 import Modal from '../components/Modal';
 import ModuleHeader from '../components/ModuleHeader';
 import SeqBadge from '../components/SeqBadge';
+import DataTable, { type DataColumn } from '../components/DataTable';
 import ImportDestinationsModal from '../components/ImportDestinationsModal';
 import { catalogsConfig, matchesSearch } from '../utils/helpers';
 import { nextSequence } from '../utils/firestore';
@@ -49,6 +50,17 @@ export default function CatalogsModule() {
   );
 
   const visibleFields = useMemo(() => selectedCatalog?.fields.filter(f => !f.hiddenInTable) ?? [], [selectedCatalog]);
+
+  const catalogColumns = useMemo<DataColumn<CatalogRecord>[]>(() => [
+    { id: 'seq', header: '#', value: r => r.visualSeq ?? r.seq ?? null, type: 'number', align: 'center', width: '70px', hideable: false, render: r => <SeqBadge seq={r.visualSeq} /> },
+    ...visibleFields.map((f, idx): DataColumn<CatalogRecord> => ({
+      id: f.name,
+      header: f.label,
+      value: r => (r[f.name] as string | number | undefined) ?? '',
+      type: f.type === 'number' ? 'number' : 'text',
+      render: idx === 0 ? (r => <span className="cell-strong">{String(r[f.name] ?? '—')}</span>) : undefined,
+    })),
+  ], [visibleFields]);
 
   const filteredRecords = useMemo(() => records.filter(reg => {
     if (selectedCatalog?.id === 'destinations' && propertyFilter && reg.property !== propertyFilter) return false;
@@ -172,38 +184,20 @@ export default function CatalogsModule() {
         }
       />
 
-      <div className="table-container">
-        <table className="responsive-table">
-          <thead>
-            <tr>
-              <th className="col-actions narrow">Actions</th>
-              <th className="col-seq">#</th>
-              {visibleFields.map(f => <th key={f.name}>{f.label.toUpperCase()}</th>)}
-            </tr>
-          </thead>
-          <tbody>
-            {filteredRecords.length === 0 && (
-              <tr><td colSpan={visibleFields.length + 2} className="empty-state">No records found.</td></tr>
-            )}
-            {filteredRecords.map(reg => (
-              <tr key={reg.id}>
-                <td data-label="Actions" className="cell-actions">
-                  <div className="action-btns">
-                    <RequirePermission permission="manage_catalogs">
-                      <button type="button" className="icon-btn edit" onClick={() => openForm(reg)} title="Edit"><Edit2 size={16} /></button>
-                      <button type="button" className="icon-btn delete" onClick={() => handleDelete(reg)} title="Delete"><Trash2 size={16} /></button>
-                    </RequirePermission>
-                  </div>
-                </td>
-                <td data-label="#" className="col-seq"><SeqBadge seq={reg.visualSeq} /></td>
-                {visibleFields.map((f, idx) => (
-                  <td key={f.name} data-label={f.label} className={idx === 0 ? 'fw-bold' : undefined}>{reg[f.name] ?? '-'}</td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <DataTable<CatalogRecord>
+        columns={catalogColumns}
+        rows={filteredRecords}
+        rowKey={r => r.id}
+        storageKey={`catalog_${selectedCatalog.id}`}
+        initialSort={{ id: 'seq', dir: 'asc' }}
+        emptyMessage="No records in this catalog yet."
+        actions={reg => (
+          <RequirePermission permission="manage_catalogs">
+            <button type="button" className="icon-btn edit" onClick={() => openForm(reg)} title="Edit"><Edit2 size={16} /></button>
+            <button type="button" className="icon-btn delete" onClick={() => handleDelete(reg)} title="Delete"><Trash2 size={16} /></button>
+          </RequirePermission>
+        )}
+      />
 
       {modalState === 'form' && (
         <Modal

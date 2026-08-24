@@ -10,7 +10,9 @@ import SearchableSelect from '../components/SearchableSelect';
 import DestinationSearch from '../components/DestinationSearch';
 import FieldSecurityModal from '../components/FieldSecurityModal';
 import LoadingScreen from '../components/LoadingScreen';
-import { WorkFinishBadge } from '../components/StatusBadge';
+import { WorkFinishBadge, ScheduleCell } from '../components/StatusBadge';
+import DataTable, { type DataColumn } from '../components/DataTable';
+import NotesCell from '../components/NotesCell';
 import { useFormConfig, useFieldRoles } from '../hooks/useAppHooks';
 import { useAppData } from '../hooks/useAppData';
 import { getTodayString, formatDateDisplay, formatSeq, displayName, matchesSearch } from '../utils/helpers';
@@ -254,6 +256,42 @@ export default function WorkActivityModule() {
       ));
   }, [jobOrders, showHistoric, searchTerm]);
 
+  const today = getTodayString();
+
+  const productColumns = useMemo<DataColumn<JobProduct>[]>(() => [
+    { id: 'itemName', header: 'Item', value: p => p.itemName, render: p => <span className="cell-strong">{p.itemName}</span> },
+    { id: 'modelPart', header: 'Model', value: p => p.modelPart },
+    { id: 'serial', header: 'Serial', value: p => p.serial, render: p => p.serial ? <span className="cell-mono">{p.serial}</span> : <span className="dt-dash">—</span> },
+    { id: 'po', header: 'PO #', value: p => p.po, nowrap: true, render: p => <span className="cell-strong text-primary cell-mono">{p.po || '—'}</span> },
+    { id: 'quantity', header: 'Qty', value: p => p.quantity, type: 'number', align: 'center', render: p => <span className="fw-bold">{p.quantity}</span> },
+  ], []);
+
+  type IndexedProduct = ProductFormData & { id?: string; index: number; rowId: string };
+  const indexedFormProducts = useMemo<IndexedProduct[]>(
+    () => formProducts.map((p, index) => ({ ...p, index, rowId: p.id ?? `pending-${index}` })),
+    [formProducts],
+  );
+  const formProductColumns = useMemo<DataColumn<IndexedProduct>[]>(() => [
+    { id: 'n', header: '#', value: p => p.index + 1, type: 'number', align: 'center', width: '60px', render: p => formatSeq(p.index + 1) },
+    { id: 'itemName', header: 'Item', value: p => p.itemName, render: p => <span className="cell-strong">{p.itemName}</span> },
+    { id: 'modelPart', header: 'Model', value: p => p.modelPart },
+    { id: 'po', header: 'PO #', value: p => p.po, nowrap: true, render: p => <span className="cell-strong text-primary cell-mono">{p.po || '—'}</span> },
+    { id: 'quantity', header: 'Qty', value: p => p.quantity, type: 'number', align: 'center', render: p => <span className="fw-bold">{p.quantity}</span> },
+  ], []);
+
+  const orderColumns = useMemo<DataColumn<JobOrder>[]>(() => [
+    { id: 'seq', header: '#', value: o => o.visualSeq ?? o.seq ?? null, type: 'number', align: 'center', width: '70px', hideable: false, render: o => <SeqBadge seq={o.visualSeq} /> },
+    { id: 'createdAt', header: 'Registration', value: o => o.createdAt, type: 'date', nowrap: true, render: o => formatDateDisplay(o.createdAt) },
+    { id: 'schedule', header: 'Schedule', value: o => o.schedule, type: 'date', nowrap: true, render: o => <ScheduleCell date={o.schedule} finished={o.workFinish === 'YES'} /> },
+    { id: 'jobOrder', header: 'Ordered by', value: o => o.jobOrder, nowrap: true, render: o => <span className="cell-strong">{o.jobOrder}</span> },
+    { id: 'madeBy', header: 'Made by', value: o => o.madeBy || '', nowrap: true, render: o => o.madeBy ? <span className="cell-strong text-accent">{o.madeBy}</span> : <span className="badge neutral">Unassigned</span> },
+    { id: 'destination', header: 'Address', value: o => o.destination, nowrap: true, render: o => <span className="cell-strong">{o.destination}</span> },
+    { id: 'description', header: 'Description', value: o => o.description, render: o => <span className="cell-clamp" title={o.description}>{o.description}</span> },
+    { id: 'workFinish', header: 'Status', value: o => o.workFinish, align: 'center', render: o => <WorkFinishBadge value={o.workFinish} /> },
+    { id: 'pendingWork', header: 'Notes', value: o => o.pendingWork || '', align: 'center', filterable: true,
+      render: o => <NotesCell text={o.pendingWork} title={`Pending work — Order ${formatSeq(o.visualSeq)}`} subtitle={`${o.destination} · ${o.description}`} /> },
+  ], []);
+
   const lockHint = (field: string) => !isJobFieldEditable(field) && <span className="lock-hint"><Lock size={12} /> Locked</span>;
   const inputCls = (field: string) => (isJobFieldEditable(field) ? undefined : 'locked');
 
@@ -283,54 +321,30 @@ export default function WorkActivityModule() {
         }
       />
 
-      <div className="table-container">
-        <table className="responsive-table">
-          <thead>
-            <tr>
-              <th className="col-actions">Actions</th>
-              <th className="col-seq">#</th>
-              <th>Registration Date</th>
-              <th>Schedule</th>
-              <th>Ordered by</th>
-              <th>Made by</th>
-              <th>Address</th>
-              <th>Description</th>
-              <th className="text-center">Work Finish</th>
-              <th>Pending Work</th>
-            </tr>
-          </thead>
-          <tbody>
-            {displayedOrders.length === 0 && <tr><td colSpan={10} className="empty-state">No records found.</td></tr>}
-            {displayedOrders.map(order => (
-              <tr key={order.id} className="clickable-row" onClick={() => setViewingJobId(order.id)}>
-                <td data-label="Actions" className="cell-actions">
-                  <div className="action-btns">
-                    <RequirePermission permission="edit_work_activity">
-                      <button type="button" className="icon-btn edit" onClick={(e) => { e.stopPropagation(); handleOpenModal(order); }} title="Edit Order">
-                        <Edit2 size={16} />
-                      </button>
-                    </RequirePermission>
-                    <RequirePermission permission="delete_work_activity">
-                      <button type="button" className="icon-btn delete" onClick={(e) => handleDelete(order, e)} title="Delete Order">
-                        <Trash2 size={16} />
-                      </button>
-                    </RequirePermission>
-                  </div>
-                </td>
-                <td data-label="#" className="col-seq"><SeqBadge seq={order.visualSeq} /></td>
-                <td data-label="Registration Date">{formatDateDisplay(order.createdAt)}</td>
-                <td data-label="Schedule" className="fw-bold text-primary">{formatDateDisplay(order.schedule)}</td>
-                <td data-label="Ordered by" className="fw-bold">{order.jobOrder}</td>
-                <td data-label="Made by" className="fw-bold text-accent">{order.madeBy || 'Unassigned'}</td>
-                <td data-label="Address">{order.destination}</td>
-                <td data-label="Description">{order.description}</td>
-                <td data-label="Status" className="text-center"><WorkFinishBadge value={order.workFinish} /></td>
-                <td data-label="Pending Work">{order.pendingWork || '-'}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <DataTable<JobOrder>
+        columns={orderColumns}
+        rows={displayedOrders}
+        rowKey={o => o.id}
+        storageKey={showHistoric ? 'work_activity_history' : 'work_activity'}
+        onRowClick={o => setViewingJobId(o.id)}
+        initialSort={{ id: 'seq', dir: 'desc' }}
+        rowClassName={o => (!showHistoric && o.schedule && o.schedule < today ? 'overdue' : undefined)}
+        emptyMessage={showHistoric ? 'No completed orders yet.' : 'No active orders. Create one with "New Order".'}
+        actions={order => (
+          <>
+            <RequirePermission permission="edit_work_activity">
+              <button type="button" className="icon-btn edit" onClick={(e) => { e.stopPropagation(); handleOpenModal(order); }} title="Edit Order">
+                <Edit2 size={16} />
+              </button>
+            </RequirePermission>
+            <RequirePermission permission="delete_work_activity">
+              <button type="button" className="icon-btn delete" onClick={(e) => handleDelete(order, e)} title="Delete Order">
+                <Trash2 size={16} />
+              </button>
+            </RequirePermission>
+          </>
+        )}
+      />
 
       <FieldSecurityModal
         isOpen={isProductConfigOpen}
@@ -379,34 +393,20 @@ export default function WorkActivityModule() {
                 <button type="button" className="action btn-secondary btn-sm" onClick={() => setIsProductModalOpen(true)}><Plus size={16} /> Add Product</button>
               </RequirePermission>
             </div>
-            <div className="table-container">
-              <table className="responsive-table">
-                <thead>
-                  <tr>
-                    <th className="col-actions narrow">Action</th>
-                    <th>#</th><th>Item Name</th><th>Model</th><th>Serial</th><th>PO #</th><th>Qty</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {viewProducts.length === 0 && <tr><td colSpan={7} className="empty-state">No products attached.</td></tr>}
-                  {viewProducts.map((p, i) => (
-                    <tr key={p.id}>
-                      <td data-label="Action" className="cell-actions">
-                        <RequirePermission permission="edit_work_activity">
-                          <button type="button" className="btn-text-danger" onClick={() => handleRemoveProductFromDetails(p)}>Remove</button>
-                        </RequirePermission>
-                      </td>
-                      <td data-label="#">{formatSeq(i + 1)}</td>
-                      <td data-label="Item">{p.itemName}</td>
-                      <td data-label="Model">{p.modelPart}</td>
-                      <td data-label="Serial">{p.serial || '-'}</td>
-                      <td data-label="PO" className="fw-bold text-primary">{p.po || '-'}</td>
-                      <td data-label="Qty">{p.quantity}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <DataTable<JobProduct>
+              columns={productColumns}
+              rows={viewProducts}
+              rowKey={p => p.id ?? `${p.itemEntranceId}-${p.entranceDetailId}`}
+              pageSize={0}
+              hideToolbar
+              compact
+              emptyMessage="No products attached."
+              actions={p => (
+                <RequirePermission permission="edit_work_activity">
+                  <button type="button" className="icon-btn delete" onClick={() => handleRemoveProductFromDetails(p)} title="Remove product"><Trash2 size={15} /></button>
+                </RequirePermission>
+              )}
+            />
           </div>
         </Modal>
       )}
@@ -483,28 +483,18 @@ export default function WorkActivityModule() {
                   <h4>Products List</h4>
                   <button type="button" className="action btn-secondary btn-sm" onClick={() => setIsProductModalOpen(true)} disabled={isProcessing}><Plus size={16} /> Add Product</button>
                 </div>
-                <div className="table-container">
-                  <table className="responsive-table">
-                    <thead>
-                      <tr><th className="col-actions narrow">Action</th><th>#</th><th>Item</th><th>Model</th><th>PO #</th><th>Qty</th></tr>
-                    </thead>
-                    <tbody>
-                      {formProducts.length === 0 && <tr><td colSpan={6} className="empty-state">No products added. Click &quot;+ Add Product&quot;.</td></tr>}
-                      {formProducts.map((p, index) => (
-                        <tr key={p.id ?? `pending-${index}`}>
-                          <td data-label="Action" className="cell-actions">
-                            <button type="button" className="btn-text-danger" onClick={() => handleRemoveProductFromForm(index)} disabled={isProcessing}>Remove</button>
-                          </td>
-                          <td data-label="#">{formatSeq(index + 1)}</td>
-                          <td data-label="Item">{p.itemName}</td>
-                          <td data-label="Model">{p.modelPart}</td>
-                          <td data-label="PO" className="fw-bold text-primary">{p.po || '-'}</td>
-                          <td data-label="Qty">{p.quantity}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                <DataTable<IndexedProduct>
+                  columns={formProductColumns}
+                  rows={indexedFormProducts}
+                  rowKey={p => p.rowId}
+                  pageSize={0}
+                  hideToolbar
+                  compact
+                  emptyMessage='No products added. Click "+ Add Product".'
+                  actions={p => (
+                    <button type="button" className="icon-btn delete" onClick={() => handleRemoveProductFromForm(p.index)} disabled={isProcessing} title="Remove product"><Trash2 size={15} /></button>
+                  )}
+                />
               </div>
         </Modal>
       )}

@@ -1,12 +1,24 @@
 import { useMemo } from 'react';
-import { LayoutDashboard, Briefcase, CalendarClock, AlertTriangle, PackageSearch, Boxes, MapPin, ArrowRight } from 'lucide-react';
+import {
+  LayoutDashboard, Briefcase, CalendarClock, AlertTriangle, PackageSearch, Boxes, MapPin, ArrowRight,
+  Plus, FileSpreadsheet, BarChart2, TrendingUp, PieChart as PieIcon, CheckCircle2, Clock,
+} from 'lucide-react';
 import { useAppData } from '../hooks/useAppData';
 import { useAuth } from '../hooks/useAuth';
 import { getDetailStock } from '../utils/entrance';
-import { formatDateDisplay, getTodayString } from '../utils/helpers';
+import { formatDateDisplay, getTodayString, formatSeq } from '../utils/helpers';
 import KpiCard from '../components/KpiCard';
 import LoadingScreen from '../components/LoadingScreen';
 import SeqBadge from '../components/SeqBadge';
+import DataTable, { type DataColumn } from '../components/DataTable';
+import NotesCell from '../components/NotesCell';
+import { ScheduleCell, StockLevel } from '../components/StatusBadge';
+import ChartCard from '../components/charts/ChartCard';
+import MonthlyBars, { type MonthlyPoint } from '../components/charts/MonthlyBars';
+import DonutChart from '../components/charts/DonutChart';
+import RankBars from '../components/charts/RankBars';
+import { countBy, lastMonths, monthKey, COLOR_SUCCESS, COLOR_PRIMARY, COLOR_DANGER } from '../components/charts/chartUtils';
+import type { JobOrder } from '../types';
 import type { ModuleId } from '../App';
 import './DashboardModule.css';
 
@@ -16,6 +28,16 @@ interface Props {
 
 const LOW_STOCK_THRESHOLD = 2;
 
+interface LowStockRow {
+  id: string;
+  po: string;
+  itemName: string;
+  modelPart: string;
+  supplyCompany: string;
+  stock: number;
+  total: number;
+}
+
 /**
  * Pantalla de inicio: resumen operativo del día. Todo sale de DataProvider (sin fetch propio).
  */
@@ -23,39 +45,86 @@ export default function DashboardModule({ onNavigate }: Props) {
   const { jobOrders, entrances, usage, destinations, isLoading } = useAppData();
   const { currentUser, hasPermission } = useAuth();
   const today = getTodayString();
+  const thisMonth = today.slice(0, 7);
 
   const stats = useMemo(() => {
     const active = jobOrders.filter(o => o.workFinish === 'NO');
     const overdue = active.filter(o => o.schedule && o.schedule < today);
     const dueToday = active.filter(o => o.schedule === today);
-    const upcoming = active
-      .filter(o => o.schedule && o.schedule >= today)
+    const unscheduled = active.filter(o => !o.schedule);
+    const agenda = active
+      .filter(o => o.schedule)
       .sort((a, b) => a.schedule.localeCompare(b.schedule))
-      .slice(0, 8);
-    const finishedThisMonth = jobOrders.filter(o => o.workFinish === 'YES' && (o.createdAt || '').startsWith(today.slice(0, 7))).length;
+      .slice(0, 12);
+
+    const months = lastMonths(today, 6);
+    const perMonth = new Map<string, MonthlyPoint>(months.map(k => [k, { month: k, finished: 0, open: 0 }]));
+    for (const o of jobOrders) {
+      const point = perMonth.get(monthKey(o.createdAt));
+      if (!point) continue;
+      if (o.workFinish === 'YES') point.finished = Number(point.finished) + 1;
+      else point.open = Number(point.open) + 1;
+    }
+    const createdThisMonth = jobOrders.filter(o => monthKey(o.createdAt) === thisMonth).length;
+    const createdLastMonth = jobOrders.filter(o => monthKey(o.createdAt) === months[months.length - 2]).length;
+    const finishedThisMonth = jobOrders.filter(o => o.workFinish === 'YES' && monthKey(o.createdAt) === thisMonth).length;
 
     let stockAvailable = 0;
-    const lowStock: Array<{ po: string; itemName: string; modelPart: string; stock: number; total: number }> = [];
+    let stockTotal = 0;
+    const lowStock: LowStockRow[] = [];
     for (const e of entrances) {
       for (const d of e.details) {
         const stock = getDetailStock(d, usage);
+        stockTotal += d.itemsArrived || 0;
         if (stock > 0) stockAvailable += stock;
         if (stock <= LOW_STOCK_THRESHOLD) {
-          lowStock.push({ po: e.po, itemName: d.itemName, modelPart: d.modelPart, stock, total: d.itemsArrived });
+          lowStock.push({ id: `${e.id}-${d.detailId}`, po: e.po, itemName: d.itemName, modelPart: d.modelPart, supplyCompany: e.supplyCompany, stock, total: d.itemsArrived });
         }
       }
     }
     lowStock.sort((a, b) => a.stock - b.stock);
 
     const properties = new Set(destinations.map(d => d.property).filter(Boolean)).size;
+    const topAddresses = countBy(jobOrders, o => o.destination || '(no address)').map(([name, value]) => ({ name, value }));
 
-    return { active, overdue, dueToday, upcoming, finishedThisMonth, stockAvailable, lowStock, properties };
-  }, [jobOrders, entrances, usage, destinations, today]);
+    return {
+      active, overdue, dueToday, unscheduled, agenda, monthly: [...perMonth.values()],
+      createdThisMonth, createdLastMonth, finishedThisMonth, stockAvailable, stockTotal, lowStock, properties, topAddresses,
+    };
+  }, [jobOrders, entrances, usage, destinations, today, thisMonth]);
+
+  const agendaColumns = useMemo<DataColumn<JobOrder>[]>(() => [
+    { id: 'seq', header: '#', value: o => o.visualSeq ?? null, type: 'number', align: 'center', width: '60px', hideable: false, render: o => <SeqBadge seq={o.visualSeq} /> },
+    { id: 'schedule', header: 'Schedule', value: o => o.schedule, type: 'date', nowrap: true, render: o => <ScheduleCell date={o.schedule} /> },
+    { id: 'destination', header: 'Address', value: o => o.destination, render: o => <span className="cell-strong">{o.destination}</span> },
+    { id: 'description', header: 'Description', value: o => o.description, render: o => <span className="cell-clamp" title={o.description}>{o.description}</span> },
+    { id: 'madeBy', header: 'Made by', value: o => o.madeBy || '', render: o => o.madeBy || <span className="badge neutral">Unassigned</span> },
+    { id: 'pendingWork', header: 'Notes', value: o => o.pendingWork || '', align: 'center', sortable: false, render: o => <NotesCell text={o.pendingWork} title={`Pending work — Order ${formatSeq(o.visualSeq)}`} subtitle={`${o.destination} · ${o.description}`} /> },
+  ], []);
+
+  const lowStockColumns = useMemo<DataColumn<LowStockRow>[]>(() => [
+    { id: 'po', header: 'PO #', value: r => r.po, nowrap: true, render: r => <span className="cell-strong text-primary cell-mono">{r.po || '—'}</span> },
+    { id: 'itemName', header: 'Item', value: r => r.itemName, render: r => <span className="cell-strong">{r.itemName}</span> },
+    { id: 'modelPart', header: 'Model', value: r => r.modelPart },
+    { id: 'supplyCompany', header: 'Supplier', value: r => r.supplyCompany, defaultHidden: true },
+    { id: 'stock', header: 'Stock', value: r => r.stock, type: 'number', align: 'center', render: r => <StockLevel stock={r.stock} total={r.total} /> },
+  ], []);
 
   if (isLoading) return <LoadingScreen message="Loading dashboard..." />;
 
   const canWork = hasPermission('view_work_activity');
+  const canAddWork = hasPermission('add_work_activity');
   const canStock = hasPermission('view_item_entrance');
+  const canAddStock = hasPermission('add_item_entrance');
+  const canCatalogs = hasPermission('view_catalogs');
+  const canReports = hasPermission('view_reports');
+
+  const statusSlices = [
+    { name: 'Finished', value: jobOrders.length - stats.active.length, color: COLOR_SUCCESS },
+    { name: 'In progress', value: stats.active.length - stats.overdue.length, color: COLOR_PRIMARY },
+    { name: 'Overdue', value: stats.overdue.length, color: COLOR_DANGER },
+  ];
+  const stockPct = stats.stockTotal > 0 ? Math.round((stats.stockAvailable / stats.stockTotal) * 100) : 0;
 
   return (
     <div className="card max-1400 catalog-manager-anim">
@@ -64,85 +133,86 @@ export default function DashboardModule({ onNavigate }: Props) {
           <h2><LayoutDashboard size={28} /> Dashboard</h2>
           <p>Welcome back, {currentUser?.firstName || currentUser?.username}. Here is today&apos;s overview ({formatDateDisplay(today)}).</p>
         </div>
+        <div className="quick-actions">
+          {canAddWork && <button type="button" className="action btn-primary btn-sm" onClick={() => onNavigate('workActivity')}><Plus size={16} /> New Order</button>}
+          {canAddStock && <button type="button" className="action btn-secondary btn-sm" onClick={() => onNavigate('itemEntrance')}><PackageSearch size={16} /> New PO</button>}
+          {canCatalogs && <button type="button" className="action btn-secondary btn-sm" onClick={() => onNavigate('catalogs')}><FileSpreadsheet size={16} /> Import addresses</button>}
+          {canReports && <button type="button" className="action btn-secondary btn-sm" onClick={() => onNavigate('reports')}><BarChart2 size={16} /> Reports</button>}
+        </div>
       </div>
 
       <div className="kpi-grid">
-        <KpiCard icon={<Briefcase size={24} />} label="Active Orders" value={stats.active.length} tone="blue" onClick={canWork ? () => onNavigate('workActivity') : undefined} />
-        <KpiCard icon={<CalendarClock size={24} />} label="Due Today" value={stats.dueToday.length} tone="purple" note={`${stats.finishedThisMonth} finished this month`} />
-        <KpiCard icon={<AlertTriangle size={24} />} label="Overdue" value={stats.overdue.length} tone={stats.overdue.length > 0 ? 'red' : 'green'} note="Scheduled before today, not finished" />
-        <KpiCard icon={<Boxes size={24} />} label="Units in Stock" value={stats.stockAvailable} tone="green" note={`${stats.lowStock.length} product(s) low or out of stock`} onClick={canStock ? () => onNavigate('itemEntrance') : undefined} />
-        <KpiCard icon={<MapPin size={24} />} label="Addresses" value={destinations.length} tone="slate" note={`${stats.properties} propert${stats.properties === 1 ? 'y' : 'ies'}`} />
+        <KpiCard icon={<Briefcase size={20} />} label="Active Orders" value={stats.active.length} tone="blue" note={`${stats.unscheduled.length} without a schedule`} onClick={canWork ? () => onNavigate('workActivity') : undefined} />
+        <KpiCard icon={<CalendarClock size={20} />} label="Due Today" value={stats.dueToday.length} tone="purple" note={stats.dueToday.length === 0 ? 'Nothing scheduled for today' : 'Scheduled for today'} />
+        <KpiCard icon={<AlertTriangle size={20} />} label="Overdue" value={stats.overdue.length} tone={stats.overdue.length > 0 ? 'red' : 'green'} note={stats.overdue.length > 0 ? 'Scheduled before today, not finished' : 'Everything is on time'} />
+        <KpiCard icon={<CheckCircle2 size={20} />} label="Orders this month" value={stats.createdThisMonth} tone="cyan" trend={{ delta: stats.createdThisMonth - stats.createdLastMonth, label: 'vs last month' }} />
+        <KpiCard icon={<Boxes size={20} />} label="Units in Stock" value={stats.stockAvailable} tone={stats.lowStock.length > 0 ? 'orange' : 'green'} note={`${stockPct}% of received · ${stats.lowStock.length} low`} onClick={canStock ? () => onNavigate('itemEntrance') : undefined} />
+        <KpiCard icon={<MapPin size={20} />} label="Addresses" value={destinations.length} tone="slate" note={`${stats.properties} propert${stats.properties === 1 ? 'y' : 'ies'}`} onClick={canCatalogs ? () => onNavigate('catalogs') : undefined} />
       </div>
 
-      <div className="panel-grid">
-        <div className="panel h-400">
-          <div className="panel-header">
-            <span className="panel-icon"><CalendarClock size={20} /></span>
+      <div className="chart-grid">
+        <ChartCard title="Orders — last 6 months" subtitle="Registered per month, by status" icon={<TrendingUp size={16} />} wide empty={jobOrders.length === 0}>
+          <MonthlyBars data={stats.monthly} series={[{ key: 'finished', name: 'Finished', color: COLOR_SUCCESS }, { key: 'open', name: 'Open', color: COLOR_PRIMARY }]} />
+        </ChartCard>
+        <ChartCard title="Order status" subtitle={`${stats.finishedThisMonth} finished this month`} icon={<PieIcon size={16} />} empty={jobOrders.length === 0}>
+          <DonutChart data={statusSlices} centerLabel="Orders" />
+        </ChartCard>
+      </div>
+
+      <div className="dash-grid">
+        <section className="dash-panel">
+          <header className="dash-panel-head">
+            <span className="section-icon"><Clock size={18} /></span>
             <div className="flex-1">
-              <h4>Upcoming &amp; Overdue Work</h4>
-              <p>Active orders sorted by schedule date.</p>
+              <h3>Agenda — upcoming &amp; overdue</h3>
+              <p>Active orders sorted by schedule date. Overdue rows are marked in red.</p>
             </div>
             {canWork && (
               <button type="button" className="btn-link flex-row" onClick={() => onNavigate('workActivity')}>
                 Open <ArrowRight size={14} />
               </button>
             )}
-          </div>
-          <div className="table-container">
-            <table className="responsive-table">
-              <thead>
-                <tr><th>#</th><th>Schedule</th><th>Address</th><th>Description</th><th>Made by</th></tr>
-              </thead>
-              <tbody>
-                {stats.overdue.length === 0 && stats.upcoming.length === 0 && (
-                  <tr><td colSpan={5} className="empty-state">No active orders with a schedule.</td></tr>
-                )}
-                {[...stats.overdue, ...stats.upcoming].map(o => {
-                  const isOverdue = o.schedule < today;
-                  return (
-                    <tr key={o.id} className={isOverdue ? 'row-overdue' : undefined}>
-                      <td data-label="#"><SeqBadge seq={o.visualSeq} /></td>
-                      <td data-label="Schedule" className={isOverdue ? 'text-danger fw-bold' : 'text-primary fw-bold'}>
-                        {formatDateDisplay(o.schedule)}{isOverdue && ' ⚠'}
-                      </td>
-                      <td data-label="Address">{o.destination}</td>
-                      <td data-label="Description">{o.description}</td>
-                      <td data-label="Made by">{o.madeBy || 'Unassigned'}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </div>
+          </header>
+          <DataTable<JobOrder>
+            columns={agendaColumns}
+            rows={stats.agenda}
+            rowKey={o => o.id}
+            pageSize={0}
+            hideToolbar
+            compact
+            rowClassName={o => (o.schedule < today ? 'overdue' : o.schedule === today ? 'warn' : undefined)}
+            onRowClick={canWork ? () => onNavigate('workActivity') : undefined}
+            emptyMessage="No active orders with a schedule."
+          />
+        </section>
 
-        <div className="panel h-400">
-          <div className="panel-header">
-            <span className="panel-icon"><PackageSearch size={20} /></span>
+        <section className="dash-panel">
+          <header className="dash-panel-head">
+            <span className="section-icon warn"><Boxes size={18} /></span>
             <div className="flex-1">
-              <h4>Low Stock Alerts</h4>
+              <h3>Low stock alerts</h3>
               <p>Products with {LOW_STOCK_THRESHOLD} units or fewer remaining.</p>
             </div>
-          </div>
-          <div className="table-container">
-            <table className="responsive-table">
-              <thead>
-                <tr><th>PO #</th><th>Item</th><th>Model</th><th className="text-center">Stock</th></tr>
-              </thead>
-              <tbody>
-                {stats.lowStock.length === 0 && <tr><td colSpan={4} className="empty-state">All products have stock.</td></tr>}
-                {stats.lowStock.slice(0, 12).map((row, i) => (
-                  <tr key={`${row.po}-${row.itemName}-${i}`}>
-                    <td data-label="PO" className="text-primary fw-bold">{row.po || '-'}</td>
-                    <td data-label="Item" className="fw-bold">{row.itemName}</td>
-                    <td data-label="Model">{row.modelPart || '-'}</td>
-                    <td data-label="Stock" className={`stock-cell${row.stock <= 0 ? ' depleted' : ''}`}>{row.stock} / {row.total}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
+            {canStock && (
+              <button type="button" className="btn-link flex-row" onClick={() => onNavigate('itemEntrance')}>
+                Inventory <ArrowRight size={14} />
+              </button>
+            )}
+          </header>
+          <DataTable<LowStockRow>
+            columns={lowStockColumns}
+            rows={stats.lowStock.slice(0, 12)}
+            rowKey={r => r.id}
+            pageSize={0}
+            hideToolbar
+            compact
+            emptyMessage="All products have stock."
+          />
+        </section>
+
+        <ChartCard title="Most visited addresses" subtitle="All-time interventions" icon={<MapPin size={16} />} empty={stats.topAddresses.length === 0} height="lg">
+          <RankBars data={stats.topAddresses} valueName="Orders" max={8} />
+        </ChartCard>
       </div>
     </div>
   );

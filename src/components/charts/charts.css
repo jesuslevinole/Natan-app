@@ -1,0 +1,54 @@
+/* =========================================
+   GRÁFICOS (recharts) — tarjeta contenedora, tooltip y donut
+   ========================================= */
+.chart-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; margin-bottom: 28px; }
+.chart-grid.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.chart-card { background: #fff; border: 1px solid var(--border-color); border-radius: 14px; display: flex; flex-direction: column; min-width: 0; box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03); }
+.chart-card.wide { grid-column: span 2; }
+.chart-card-head { display: flex; align-items: flex-start; gap: 12px; padding: 16px 18px 6px; }
+.chart-card-icon { display: flex; padding: 8px; border-radius: 10px; background: #eff6ff; color: var(--primary-color); flex-shrink: 0; }
+.chart-card-title { flex: 1; min-width: 0; }
+.chart-card-title h4 { margin: 0; font-size: 0.95rem; font-weight: 700; color: #1e293b; }
+.chart-card-title p { margin: 2px 0 0; font-size: 0.78rem; color: var(--text-muted); }
+.chart-card-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.chart-card-body { padding: 8px 12px 14px; flex: 0 0 auto; min-height: 0; }
+.chart-card-body.h-sm { height: 220px; }
+.chart-card-body.h-md { height: 280px; }
+.chart-card-body.h-lg { height: 340px; }
+.chart-empty { height: 100%; display: flex; align-items: center; justify-content: center; color: var(--text-muted); font-style: italic; font-size: 0.85rem; margin: 0; }
+
+/* Tooltip propio (evita los estilos inline por defecto de recharts) */
+.chart-tooltip { background: #0f172a; color: #fff; border-radius: 10px; padding: 10px 12px; box-shadow: 0 10px 25px -8px rgba(15, 23, 42, 0.4); font-size: 0.8rem; min-width: 140px; }
+.chart-tooltip-label { margin: 0 0 6px; font-weight: 700; color: #cbd5e1; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.4px; }
+.chart-tooltip ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.chart-tooltip li { display: flex; align-items: center; gap: 8px; }
+.chart-tooltip-swatch { width: 9px; height: 9px; border-radius: 3px; background: var(--swatch, #64748b); flex-shrink: 0; }
+.chart-tooltip-name { flex: 1; color: #e2e8f0; }
+.chart-tooltip-value { font-weight: 700; font-variant-numeric: tabular-nums; }
+.chart-tooltip-total { margin: 8px 0 0; padding-top: 6px; border-top: 1px solid rgba(255,255,255,0.15); color: #cbd5e1; display: flex; justify-content: space-between; }
+.recharts-legend-item-text { color: #475569 !important; font-size: 12px; }
+.recharts-legend-wrapper { padding-top: 6px; }
+
+/* Donut con total al centro + leyenda */
+.donut-layout { display: flex; align-items: center; gap: 16px; height: 100%; }
+.donut-chart { position: relative; flex: 0 0 50%; height: 100%; min-width: 0; }
+.donut-center { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; pointer-events: none; }
+.donut-center strong { font-size: 1.6rem; color: #1e293b; line-height: 1; font-variant-numeric: tabular-nums; }
+.donut-center span { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.4px; color: var(--text-muted); margin-top: 4px; }
+.donut-legend { list-style: none; margin: 0; padding: 0; flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; font-size: 0.8rem; overflow-y: auto; max-height: 100%; }
+.donut-legend li { display: flex; align-items: center; gap: 8px; }
+.donut-legend-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #334155; }
+.donut-legend-value { font-weight: 700; font-variant-numeric: tabular-nums; color: #1e293b; }
+.donut-legend-pct { width: 36px; text-align: right; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+
+@media (max-width: 1100px) {
+  .chart-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 768px) {
+  .chart-grid, .chart-grid.two { grid-template-columns: 1fr; gap: 14px; }
+  .chart-card.wide { grid-column: auto; }
+  .chart-card-body.h-md, .chart-card-body.h-lg { height: 260px; }
+  .donut-layout { flex-direction: column; gap: 6px; }
+  .donut-chart { flex: 0 0 62%; width: 100%; }
+  .donut-legend { width: 100%; }
+}

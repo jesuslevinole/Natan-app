@@ -1,7 +1,7 @@
-import { Fragment, useState, useMemo, useCallback, type FormEvent, type MouseEvent } from 'react';
+import { useState, useMemo, useCallback, type FormEvent, type MouseEvent } from 'react';
 import { collection, addDoc, updateDoc, deleteDoc, doc } from 'firebase/firestore';
 import { db } from '../firebase';
-import { PackageSearch, Plus, X, Settings, Edit2, Trash2, Maximize2, Lock, ChevronDown, ChevronRight } from 'lucide-react';
+import { PackageSearch, Plus, X, Settings, Edit2, Trash2, Maximize2, Lock } from 'lucide-react';
 import type { NormalizedEntrance, ItemEntranceFormData, EntranceDetail } from '../types';
 import Modal from '../components/Modal';
 import ModuleHeader from '../components/ModuleHeader';
@@ -10,7 +10,8 @@ import SearchableSelect from '../components/SearchableSelect';
 import SearchBar from '../components/SearchBar';
 import FieldSecurityModal from '../components/FieldSecurityModal';
 import LoadingScreen from '../components/LoadingScreen';
-import { StockBadge } from '../components/StatusBadge';
+import { StockBadge, StockLevel } from '../components/StatusBadge';
+import DataTable, { type DataColumn } from '../components/DataTable';
 import { useFormConfig, useFieldRoles } from '../hooks/useAppHooks';
 import { useAppData } from '../hooks/useAppData';
 import { getTodayString, formatDateDisplay, matchesSearch } from '../utils/helpers';
@@ -56,7 +57,6 @@ export default function ItemEntranceModule() {
   const [historySearchTerm, setHistorySearchTerm] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
   const [selectedHistoryDetailId, setSelectedHistoryDetailId] = useState<string | null>(null);
 
   const { toggleRequired: toggleItemReq, isRequired: isItemReq } = useFormConfig('itemEntrance', ['date', 'supplyCompany', 'po']);
@@ -214,15 +214,6 @@ export default function ItemEntranceModule() {
     AuditLogger.logDelete('Item Entrance', authorName, item.id, item);
   };
 
-  const toggleRowExpansion = (id: string, e?: MouseEvent) => {
-    e?.stopPropagation();
-    setExpandedRows(prev => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id); else next.add(id);
-      return next;
-    });
-  };
-
   const filteredItems = useMemo(() => entrances.filter(item => {
     const { stock } = getEntranceStock(item, usage);
     if (stockFilter === 'AVAILABLE' && stock <= 0) return false;
@@ -233,26 +224,47 @@ export default function ItemEntranceModule() {
     );
   }), [entrances, usage, stockFilter, searchTerm]);
 
+  const entranceColumns = useMemo<DataColumn<NormalizedEntrance>[]>(() => [
+    { id: 'seq', header: '#', value: i => i.visualSeq ?? i.seq ?? null, type: 'number', align: 'center', width: '70px', hideable: false, render: i => <SeqBadge seq={i.visualSeq} /> },
+    { id: 'status', header: 'Status', value: i => (getEntranceStock(i, usage).stock > 0 ? 'AVAILABLE' : 'UNAVAILABLE'), align: 'center', render: i => <StockBadge available={getEntranceStock(i, usage).stock > 0} /> },
+    { id: 'date', header: 'Date', value: i => i.date, type: 'date', nowrap: true, render: i => formatDateDisplay(i.date) },
+    { id: 'po', header: 'PO #', value: i => i.po, nowrap: true, render: i => <span className="cell-strong text-primary cell-mono">{i.po || '—'}</span> },
+    { id: 'supplyCompany', header: 'Supply Company', value: i => i.supplyCompany, render: i => <span className="cell-strong">{i.supplyCompany || '—'}</span> },
+    { id: 'products', header: 'Products', value: i => i.details.length, type: 'number', align: 'center' },
+    { id: 'received', header: 'Received', value: i => getEntranceStock(i, usage).total, type: 'number', align: 'center' },
+    { id: 'stock', header: 'In Stock', value: i => getEntranceStock(i, usage).stock, type: 'number', align: 'center',
+      render: i => { const { stock, total } = getEntranceStock(i, usage); return <StockLevel stock={stock} total={total} />; } },
+  ], [usage]);
+
+  const detailColumns = useMemo<DataColumn<EntranceDetail>[]>(() => [
+    { id: 'itemName', header: 'Item Name', value: d => d.itemName, render: d => <span className="cell-strong">{d.itemName}</span> },
+    { id: 'modelPart', header: 'Model / Part #', value: d => d.modelPart },
+    { id: 'serial', header: 'Serial #', value: d => d.serial, render: d => d.serial ? <span className="cell-mono">{d.serial}</span> : <span className="dt-dash">—</span> },
+    { id: 'orderDate', header: 'Arrived', value: d => d.orderDate, type: 'date', nowrap: true, render: d => d.orderDate ? formatDateDisplay(d.orderDate) : '—' },
+    { id: 'stock', header: 'Stock', value: d => getDetailStock(d, usage), type: 'number', align: 'center', render: d => <StockLevel stock={getDetailStock(d, usage)} total={d.itemsArrived} /> },
+  ], [usage]);
+
   const lockHint = (field: string) => !isFieldEditable(field) && <span className="lock-hint"><Lock size={12} /> Locked</span>;
 
-  const historyTable = (rows: typeof itemHistory, emptyText: string) => (
-    <table className="responsive-table">
-      <thead>
-        <tr><th>Date</th><th>Product</th><th>Ordered By</th><th>Address</th><th className="text-center">Qty Used</th></tr>
-      </thead>
-      <tbody>
-        {rows.length === 0 && <tr><td colSpan={5} className="empty-state">{emptyText}</td></tr>}
-        {rows.map(h => (
-          <tr key={h.id}>
-            <td data-label="Date">{formatDateDisplay(h.date)}</td>
-            <td data-label="Product" className="fw-bold">{h.itemName || '-'}</td>
-            <td data-label="Ordered By" className="fw-bold">{h.jobOrder}</td>
-            <td data-label="Address">{h.destination}</td>
-            <td data-label="Qty Used" className="text-center fw-bold text-danger">-{h.quantity}</td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
+  const formDetailColumns = useMemo<DataColumn<EntranceDetail>[]>(() => [
+    { id: 'itemName', header: 'Item Name', value: d => d.itemName, render: d => <span className="cell-strong">{d.itemName}</span> },
+    { id: 'modelPart', header: 'Model / Part #', value: d => d.modelPart },
+    { id: 'serial', header: 'Serial #', value: d => d.serial, render: d => d.serial ? <span className="cell-mono">{d.serial}</span> : <span className="dt-dash">—</span> },
+    { id: 'orderDate', header: 'Arrived', value: d => d.orderDate, type: 'date', nowrap: true, render: d => d.orderDate ? formatDateDisplay(d.orderDate) : '—' },
+    { id: 'stock', header: 'Stock', value: d => (editingId ? getDetailStock(d, usage) : d.itemsArrived), type: 'number', align: 'center',
+      render: d => <StockLevel stock={editingId ? getDetailStock(d, usage) : d.itemsArrived} total={d.itemsArrived} /> },
+  ], [editingId, usage]);
+
+  type HistoryRow = (typeof itemHistory)[number];
+  const historyColumns = useMemo<DataColumn<HistoryRow>[]>(() => [
+    { id: 'date', header: 'Date', value: h => h.date, type: 'date', nowrap: true, render: h => formatDateDisplay(h.date) },
+    { id: 'itemName', header: 'Product', value: h => h.itemName, render: h => <span className="cell-strong">{h.itemName || '—'}</span> },
+    { id: 'jobOrder', header: 'Ordered By', value: h => h.jobOrder, render: h => <span className="cell-strong">{h.jobOrder}</span> },
+    { id: 'destination', header: 'Address', value: h => h.destination },
+    { id: 'quantity', header: 'Qty Used', value: h => h.quantity, type: 'number', align: 'center', render: h => <span className="fw-bold text-danger">-{h.quantity}</span> },
+  ], []);
+  const historyTable = (rows: HistoryRow[], emptyText: string, paginate = false) => (
+    <DataTable<HistoryRow> columns={historyColumns} rows={rows} rowKey={h => h.id} pageSize={paginate ? 10 : 0} hideToolbar={!paginate} compact emptyMessage={emptyText} />
   );
 
   if (isLoading) return <LoadingScreen message="Loading inventory..." />;
@@ -281,81 +293,36 @@ export default function ItemEntranceModule() {
         }
       />
 
-      <div className="table-container">
-        <table className="responsive-table">
-          <thead>
-            <tr>
-              <th className="col-actions">Actions</th>
-              <th className="col-seq">#</th>
-              <th className="text-center">Status</th>
-              <th>Date</th>
-              <th>PO #</th>
-              <th>Company</th>
-              <th className="text-center">Products</th>
-              <th>Total Stock</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filteredItems.length === 0 && <tr><td colSpan={8} className="empty-state">No records found.</td></tr>}
-            {filteredItems.map(item => {
-              const { stock, total } = getEntranceStock(item, usage);
-              const isAvailable = stock > 0;
-              const isExpanded = expandedRows.has(item.id);
-              return (
-                <Fragment key={item.id}>
-                  <tr className="clickable-row" onClick={() => handleOpenModal(item)}>
-                    <td data-label="Actions" className="cell-actions">
-                      <div className="action-btns">
-                        <button type="button" className="icon-btn" onClick={(e) => toggleRowExpansion(item.id, e)} title={isExpanded ? 'Collapse details' : 'Expand details'}>
-                          {isExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
-                        </button>
-                        <RequirePermission permission="edit_item_entrance">
-                          <button type="button" className="icon-btn edit" onClick={(e) => { e.stopPropagation(); handleOpenModal(item); }} title="Edit Record"><Edit2 size={16} /></button>
-                        </RequirePermission>
-                        <RequirePermission permission="delete_item_entrance">
-                          <button type="button" className="icon-btn delete" onClick={(e) => handleDeleteEntrance(item, e)} title="Delete Record"><Trash2 size={16} /></button>
-                        </RequirePermission>
-                      </div>
-                    </td>
-                    <td data-label="#" className="col-seq"><SeqBadge seq={item.visualSeq} /></td>
-                    <td data-label="Status" className="text-center"><StockBadge available={isAvailable} /></td>
-                    <td data-label="Date">{formatDateDisplay(item.date)}</td>
-                    <td data-label="PO" className="fw-bold text-primary">{item.po || '-'}</td>
-                    <td data-label="Company">{item.supplyCompany || '-'}</td>
-                    <td data-label="Products" className="text-center fw-bold">{item.details.length}</td>
-                    <td data-label="Stock" className={`stock-cell${isAvailable ? '' : ' depleted'}`}>{stock} / {total}</td>
-                  </tr>
-                  {isExpanded && item.details.length > 0 && (
-                    <tr className="nested-row">
-                      <td colSpan={8} className="nested-cell">
-                        <table className="responsive-table nested-table">
-                          <thead>
-                            <tr><th>Item Name</th><th>Model / Part #</th><th>Serial #</th><th>Arrived Date</th><th className="text-center">Stock</th></tr>
-                          </thead>
-                          <tbody>
-                            {item.details.map(d => {
-                              const detailStock = getDetailStock(d, usage);
-                              return (
-                                <tr key={d.detailId}>
-                                  <td data-label="Item" className="fw-bold">{d.itemName}</td>
-                                  <td data-label="Model">{d.modelPart || '-'}</td>
-                                  <td data-label="Serial" className="fw-600">{d.serial || '-'}</td>
-                                  <td data-label="Arrived">{d.orderDate ? formatDateDisplay(d.orderDate) : '-'}</td>
-                                  <td data-label="Stock" className={`stock-cell${detailStock > 0 ? '' : ' depleted'}`}>{detailStock} / {d.itemsArrived}</td>
-                                </tr>
-                              );
-                            })}
-                          </tbody>
-                        </table>
-                      </td>
-                    </tr>
-                  )}
-                </Fragment>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+      <DataTable<NormalizedEntrance>
+        columns={entranceColumns}
+        rows={filteredItems}
+        rowKey={item => item.id}
+        storageKey="item_entrance"
+        onRowClick={item => handleOpenModal(item)}
+        initialSort={{ id: 'seq', dir: 'desc' }}
+        emptyMessage="No purchase orders registered yet."
+        renderExpanded={item => (
+          <DataTable<EntranceDetail>
+            columns={detailColumns}
+            rows={item.details}
+            rowKey={d => d.detailId}
+            pageSize={0}
+            hideToolbar
+            compact
+            emptyMessage="This PO has no products."
+          />
+        )}
+        actions={item => (
+          <>
+            <RequirePermission permission="edit_item_entrance">
+              <button type="button" className="icon-btn edit" onClick={(e) => { e.stopPropagation(); handleOpenModal(item); }} title="Edit Record"><Edit2 size={16} /></button>
+            </RequirePermission>
+            <RequirePermission permission="delete_item_entrance">
+              <button type="button" className="icon-btn delete" onClick={(e) => handleDeleteEntrance(item, e)} title="Delete Record"><Trash2 size={16} /></button>
+            </RequirePermission>
+          </>
+        )}
+      />
 
       <FieldSecurityModal
         isOpen={isConfigOpen}
@@ -441,42 +408,25 @@ export default function ItemEntranceModule() {
               </div>
             </div>
 
-            <div className="table-container scroll-300">
-              <table className="responsive-table">
-                <thead>
-                  <tr>
-                    <th className="col-actions narrow">Actions</th>
-                    <th>Item Name</th><th>Model / Part #</th><th>Serial #</th><th>Arrived Date</th><th className="text-center">Stock</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(formData.details ?? []).length === 0 && (
-                    <tr><td colSpan={6} className="empty-state">No products added yet. Use the form above to add products to this PO.</td></tr>
+            <DataTable<EntranceDetail>
+              columns={formDetailColumns}
+              rows={formData.details ?? []}
+              rowKey={d => d.detailId}
+              pageSize={0}
+              hideToolbar
+              compact
+              rowClassName={d => (d.detailId === selectedHistoryDetailId ? 'warn' : undefined)}
+              emptyMessage="No products added yet. Use the form above to add products to this PO."
+              actions={d => (
+                <>
+                  <button type="button" className="icon-btn edit" onClick={() => handleEditDetail(d)} title="Edit product"><Edit2 size={14} /></button>
+                  <button type="button" className="icon-btn delete" onClick={() => handleRemoveDetail(d)} title="Remove product"><Trash2 size={14} /></button>
+                  {editingId && (
+                    <button type="button" className="icon-btn" onClick={() => setSelectedHistoryDetailId(d.detailId)} title="View history for this product"><PackageSearch size={14} /></button>
                   )}
-                  {(formData.details ?? []).map(d => {
-                    const detailStock = editingId ? getDetailStock(d, usage) : d.itemsArrived;
-                    return (
-                      <tr key={d.detailId}>
-                        <td data-label="Actions" className="cell-actions">
-                          <div className="action-btns">
-                            <button type="button" className="icon-btn edit" onClick={() => handleEditDetail(d)} title="Edit product"><Edit2 size={14} /></button>
-                            <button type="button" className="icon-btn delete" onClick={() => handleRemoveDetail(d)} title="Remove product"><Trash2 size={14} /></button>
-                            {editingId && (
-                              <button type="button" className="icon-btn" onClick={() => setSelectedHistoryDetailId(d.detailId)} title="View history for this product"><PackageSearch size={14} /></button>
-                            )}
-                          </div>
-                        </td>
-                        <td data-label="Item" className="fw-bold">{d.itemName}</td>
-                        <td data-label="Model">{d.modelPart || '-'}</td>
-                        <td data-label="Serial" className="fw-600">{d.serial || '-'}</td>
-                        <td data-label="Arrived">{d.orderDate ? formatDateDisplay(d.orderDate) : '-'}</td>
-                        <td data-label="Stock" className={`stock-cell${detailStock > 0 ? '' : ' depleted'}`}>{detailStock} / {d.itemsArrived}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+                </>
+              )}
+            />
           </div>
 
           {editingId && (
@@ -493,9 +443,7 @@ export default function ItemEntranceModule() {
                 </div>
                 <button type="button" className="action btn-secondary btn-sm" onClick={() => setIsExpandHistoryOpen(true)}><Maximize2 size={16} /> Expand</button>
               </div>
-              <div className="table-container scroll-200">
-                {historyTable(itemHistory.slice(0, 3), 'No installation history for this PO yet.')}
-              </div>
+              {historyTable(itemHistory.slice(0, 3), 'No installation history for this PO yet.')}
             </div>
           )}
         </Modal>
@@ -509,8 +457,8 @@ export default function ItemEntranceModule() {
           onClose={() => setIsExpandHistoryOpen(false)}
           actions={<SearchBar value={historySearchTerm} onChange={setHistorySearchTerm} />}
         >
-          <div className="table-container scroll-60vh mt-3">
-            {historyTable(filteredHistory, 'No records found matching your search.')}
+          <div className="mt-3">
+            {historyTable(filteredHistory, 'No records found matching your search.', true)}
           </div>
         </Modal>
       )}

@@ -4,6 +4,7 @@ import { db } from '../firebase';
 import { Activity, FileText } from 'lucide-react';
 import type { LogEntry } from '../types';
 import Modal from '../components/Modal';
+import DataTable, { type DataColumn } from '../components/DataTable';
 import ModuleHeader from '../components/ModuleHeader';
 import LoadingScreen from '../components/LoadingScreen';
 import { ActionBadge } from '../components/StatusBadge';
@@ -38,6 +39,18 @@ export default function LogsDashboard() {
     [logs, searchTerm],
   );
 
+  const logColumns = useMemo<DataColumn<LogEntry>[]>(() => [
+    { id: 'timestamp', header: 'Date & Time', value: l => l.timestamp, type: 'date', nowrap: true, hideable: false, render: l => <span className="cell-mono">{formatDateTimeDisplay(l.timestamp)}</span> },
+    { id: 'action', header: 'Action', value: l => l.action, align: 'center', render: l => <ActionBadge action={l.action} /> },
+    { id: 'module', header: 'Module', value: l => l.module, render: l => <span className="cell-strong">{l.module}</span> },
+    { id: 'user', header: 'Account User', value: l => l.user, render: l => <span className="fw-600">{l.user}</span> },
+    { id: 'details', header: 'Details', value: l => l.details, render: l => <span className="cell-clamp text-body" title={l.details}>{l.details}</span> },
+    { id: 'payload', header: 'Payload', value: l => (l.payload ? 'yes' : ''), align: 'center', sortable: false, filterable: false,
+      render: l => l.payload ? (
+        <button type="button" className="icon-btn text-primary" title="View Raw Data" onClick={() => setPayloadLog(l)}><FileText size={18} /></button>
+      ) : <span className="dt-dash">—</span> },
+  ], []);
+
   if (isLoading) return <LoadingScreen message="Loading activity history..." />;
 
   return (
@@ -50,39 +63,16 @@ export default function LogsDashboard() {
         onSearch={setSearchTerm}
       />
 
-      <div className="table-container">
-        <table className="responsive-table">
-          <thead>
-            <tr>
-              <th>Date &amp; Time</th>
-              <th className="text-center">Action</th>
-              <th>Module</th>
-              <th>Account User</th>
-              <th>Details</th>
-              <th className="text-center">Payload</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filteredLogs.length === 0 && <tr><td colSpan={6} className="empty-state">No logs found.</td></tr>}
-            {filteredLogs.map(log => (
-              <tr key={log.id}>
-                <td data-label="Date">{formatDateTimeDisplay(log.timestamp)}</td>
-                <td data-label="Action" className="text-center"><ActionBadge action={log.action} /></td>
-                <td data-label="Module" className="fw-bold">{log.module}</td>
-                <td data-label="Account User" className="fw-600">{log.user}</td>
-                <td data-label="Details" className="text-body text-sm">{log.details}</td>
-                <td data-label="Payload" className="text-center">
-                  {log.payload ? (
-                    <button type="button" className="icon-btn text-primary" title="View Raw Data" onClick={() => setPayloadLog(log)}>
-                      <FileText size={18} />
-                    </button>
-                  ) : '-'}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <DataTable<LogEntry>
+        columns={logColumns}
+        rows={filteredLogs}
+        rowKey={l => l.id ?? `${l.timestamp}-${l.user}`}
+        storageKey="logs"
+        initialSort={{ id: 'timestamp', dir: 'desc' }}
+        pageSize={50}
+        compact
+        emptyMessage="No activity recorded yet."
+      />
 
       {payloadLog && (
         <Modal title={`Payload — ${payloadLog.module} (${payloadLog.action})`} onClose={() => setPayloadLog(null)} size="lg">
