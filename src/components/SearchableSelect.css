@@ -1,25 +1,25 @@
 .searchable-select { position: relative; width: 100%; }
 .searchable-select-input { position: relative; display: flex; align-items: center; }
 .searchable-select-input input {
-  width: 100%; padding: 12px 40px 12px 14px; border: 1px solid #cbd5e1; background: #fff;
-  color: #334155; border-radius: 8px; font-size: 0.95rem; outline: none; transition: all 0.2s; cursor: text;
+  width: 100%; padding: 12px 40px 12px 14px; border: 1px solid var(--border-strong); background: var(--card-bg);
+  color: var(--text-main); border-radius: 8px; font-size: 0.95rem; outline: none; transition: all 0.2s; cursor: text;
 }
 .searchable-select.open .searchable-select-input input { border-color: #3b82f6; }
-.searchable-select-icon { position: absolute; right: 14px; pointer-events: none; color: #94a3b8; }
+.searchable-select-icon { position: absolute; right: 14px; pointer-events: none; color: var(--text-faint); }
 
 .searchable-select-list {
-  position: absolute; top: 100%; left: 0; right: 0; background: #fff; border: 1px solid #e2e8f0;
+  position: absolute; top: 100%; left: 0; right: 0; background: var(--card-bg); border: 1px solid var(--border-color);
   border-radius: 8px; margin: 4px 0 0 0; max-height: 250px; overflow-y: auto; z-index: 1000;
   list-style: none; padding: 0; box-shadow: 0 4px 12px rgba(0,0,0,0.1);
 }
 .searchable-select-option {
-  padding: 10px 14px; cursor: pointer; border-bottom: 1px solid #f1f5f9; color: #334155;
+  padding: 10px 14px; cursor: pointer; border-bottom: 1px solid var(--surface-3); color: var(--text-main);
   font-size: 0.9rem; display: flex; align-items: center; gap: 8px; transition: background-color 0.15s;
 }
 .searchable-select-option:last-child { border-bottom: none; }
 .searchable-select-option > svg { color: var(--primary-color); flex-shrink: 0; }
 .searchable-select-label { display: flex; flex-direction: column; font-weight: 500; }
 .searchable-select-label small { font-weight: normal; color: var(--text-muted); font-size: 0.75rem; }
-.searchable-select-option.active { background: #f1f5f9; }
-.searchable-select-option:hover { background: #f1f5f9; }
-.searchable-select-empty { padding: 15px; color: #94a3b8; font-size: 0.9rem; text-align: center; }
+.searchable-select-option.active { background: var(--surface-3); }
+.searchable-select-option:hover { background: var(--surface-3); }
+.searchable-select-empty { padding: 15px; color: var(--text-faint); font-size: 0.9rem; text-align: center; }

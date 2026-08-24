@@ -41,13 +41,13 @@ export const mockOrders: JobOrder[] = Array.from({ length: 64 }, (_, i) => {
   };
 }).sort((a, b) => b.createdAt.localeCompare(a.createdAt)).map((o, i, arr) => ({ ...o, visualSeq: arr.length - i }));
 
-const items = [['Bathroom Faucet', 'MOEN-8412'], ['Door Lock Set', 'KW-660'], ['AC Capacitor 45/5', 'CAP-455'], ['Smoke Detector', 'KID-9120'], ['Garbage Disposal 1/2HP', 'ISE-BADGER5'], ['Water Heater Element', 'WH-4500'], ['Interior Paint 1gal', 'SW-7008']];
+const items = [['Bathroom Faucet', 'MOEN-8412', 'PLUMBING', 77.06], ['Door Lock Set', 'KW-660', 'Window/Glass/Screen', 45.5], ['AC Capacitor 45/5', 'CAP-455', 'AC, HVAC', 57.14], ['Smoke Detector', 'KID-9120', 'Elec, Rhood, Fire Equip', 46.48], ['Garbage Disposal 1/2HP', 'ISE-BADGER5', 'PLUMBING', 139.39], ['Water Heater Element', 'WH-4500', 'Boiler/HW Heater', 43.87], ['Interior Paint 1gal', 'SW-7008', 'Floors', 37.98]] as const;
 const suppliers = ['Home Depot', 'Lowe\'s', 'Ferguson', 'Grainger'];
 export const mockEntrances: NormalizedEntrance[] = Array.from({ length: 14 }, (_, i) => {
   const date = daysAgo(Math.floor(rand() * 160));
   const details: EntranceDetail[] = Array.from({ length: 1 + Math.floor(rand() * 3) }, (_, j) => {
-    const [itemName, modelPart] = pick(items);
-    return { detailId: `e${i}-${j}`, itemName, modelPart, serial: rand() < 0.5 ? `SN${1000 + i * 10 + j}` : '', orderDate: date, itemsArrived: 1 + Math.floor(rand() * 8) };
+    const [itemName, modelPart, category, price] = pick([...items]);
+    return { detailId: `e${i}-${j}`, itemName, modelPart, serial: rand() < 0.5 ? `SN${1000 + i * 10 + j}` : '', orderDate: date, itemsArrived: 1 + Math.floor(rand() * 8), category, price, invoice: `92${40000000 + i * 137}`, comments: rand() < 0.3 ? 'Installed in OV39 on 3/11/26' : '' };
   });
   return { id: `e${i}`, seq: i + 1, visualSeq: i + 1, createdAt: date, date, po: `PO${String(i + 1).padStart(3, '0')}`, supplyCompany: pick(suppliers), details };
 }).sort((a, b) => b.po.localeCompare(a.po));

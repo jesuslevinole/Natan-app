@@ -1,0 +1,5 @@
+.brand-mark { display: inline-flex; align-items: center; gap: 10px; min-width: 0; }
+.brand-logo { display: inline-flex; align-items: center; justify-content: center; width: var(--brand-size); height: var(--brand-size); border-radius: 22%; background: var(--primary-color); color: #fff; flex-shrink: 0; overflow: hidden; }
+.brand-logo.has-logo { background: #fff; }
+.brand-logo img { width: 100%; height: 100%; object-fit: contain; display: block; }
+.brand-name { font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

@@ -1,13 +1,17 @@
 import { useState, lazy, Suspense, type ReactNode } from 'react';
 import {
   PackageSearch, Briefcase, LogOut, BookOpen, BarChart2, Menu, ChevronRight, ChevronLeft,
-  ShieldAlert, Users as UsersIcon, ShieldCheck, LayoutDashboard,
+  ShieldAlert, Users as UsersIcon, ShieldCheck, LayoutDashboard, Settings, Sun, Moon,
 } from 'lucide-react';
 import AuthScreen from './components/AuthScreen';
 import LoadingScreen from './components/LoadingScreen';
 import { useAuth } from './hooks/useAuth';
 import { AuthProvider } from './context/AuthProvider';
 import { DataProvider } from './context/DataProvider';
+import { CompanyProvider } from './context/CompanyProvider';
+import { useCompany } from './hooks/useCompany';
+import { useTheme } from './hooks/useTheme';
+import BrandMark from './components/BrandMark';
 import './App.css';
 
 // Code-splitting: cada módulo se descarga la primera vez que se abre, no todo en el login.
@@ -19,8 +23,9 @@ const ReportsModule = lazy(() => import('./modules/ReportsModule'));
 const UsersDashboard = lazy(() => import('./modules/UsersDashboard'));
 const RolesDashboard = lazy(() => import('./modules/RolesDashboard'));
 const LogsDashboard = lazy(() => import('./modules/LogsDashboard'));
+const SettingsModule = lazy(() => import('./modules/SettingsModule'));
 
-export type ModuleId = 'dashboard' | 'workActivity' | 'itemEntrance' | 'catalogs' | 'reports' | 'users' | 'roles' | 'audit_logs';
+export type ModuleId = 'dashboard' | 'workActivity' | 'itemEntrance' | 'catalogs' | 'reports' | 'users' | 'roles' | 'audit_logs' | 'settings';
 
 interface NavItem {
   id: ModuleId;
@@ -40,10 +45,13 @@ const NAV_ITEMS: NavItem[] = [
   { id: 'users', label: 'Account Users', icon: <UsersIcon size={20} />, permission: 'manage_security', section: 'admin' },
   { id: 'roles', label: 'Manage Roles', icon: <ShieldCheck size={20} />, permission: 'manage_security', section: 'admin' },
   { id: 'audit_logs', label: 'Activity History', icon: <ShieldAlert size={20} />, permission: 'manage_security', section: 'admin' },
+  { id: 'settings', label: 'Business Settings', icon: <Settings size={20} />, permission: 'manage_security', section: 'admin' },
 ];
 
 function AppShell() {
   const { currentUser, userRole, logout, hasPermission } = useAuth();
+  const { company } = useCompany();
+  const { theme, toggle: toggleTheme } = useTheme();
   const [activeModule, setActiveModule] = useState<ModuleId>('dashboard');
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -65,6 +73,7 @@ function AppShell() {
       case 'users': return <UsersDashboard />;
       case 'roles': return <RolesDashboard />;
       case 'audit_logs': return <LogsDashboard />;
+      case 'settings': return <SettingsModule />;
     }
   };
 
@@ -75,8 +84,8 @@ function AppShell() {
       <aside className={`sidebar${isSidebarCollapsed ? ' collapsed' : ''}${isMobileMenuOpen ? ' open' : ''}`}>
         <div className="sidebar-header">
           <div className="sidebar-logo">
-            <div className="logo-icon"><Briefcase size={24} /></div>
-            <span className="logo-text">Mr Natan</span>
+            <BrandMark size={36} />
+            <span className="logo-text">{company.name}</span>
           </div>
           <button type="button" className="collapse-btn desktop-only" onClick={() => setIsSidebarCollapsed(v => !v)} title="Toggle sidebar">
             {isSidebarCollapsed ? <ChevronRight size={20} /> : <ChevronLeft size={20} />}
@@ -97,6 +106,9 @@ function AppShell() {
         </ul>
 
         <div className="sidebar-footer">
+          <button type="button" className="theme-toggle" onClick={toggleTheme} title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}>
+            {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />} <span>{theme === 'dark' ? 'Light mode' : 'Dark mode'}</span>
+          </button>
           <div className="sidebar-user">
             Logged in as <b>{currentUser?.username}</b>
             <span className={`sidebar-role ${userRole ? '' : 'missing'}`}>{userRole ? userRole.name : 'No role assigned'}</span>
@@ -110,11 +122,16 @@ function AppShell() {
       <div className="main-wrapper">
         <div className="mobile-header">
           <div className="mobile-brand">
-            <Briefcase size={24} /> <h2>Mr Natan</h2>
+            <BrandMark size={28} /> <h2>{company.name}</h2>
           </div>
-          <button type="button" className="icon-btn" onClick={() => setIsMobileMenuOpen(true)} title="Open menu">
-            <Menu size={28} />
-          </button>
+          <div className="flex-row">
+            <button type="button" className="theme-toggle" onClick={toggleTheme} title="Toggle dark mode">
+              {theme === 'dark' ? <Sun size={22} /> : <Moon size={22} />}
+            </button>
+            <button type="button" className="icon-btn" onClick={() => setIsMobileMenuOpen(true)} title="Open menu">
+              <Menu size={28} />
+            </button>
+          </div>
         </div>
 
         <main className="main-content">
@@ -138,8 +155,10 @@ function AuthGate() {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <AuthGate />
-    </AuthProvider>
+    <CompanyProvider>
+      <AuthProvider>
+        <AuthGate />
+      </AuthProvider>
+    </CompanyProvider>
   );
 }

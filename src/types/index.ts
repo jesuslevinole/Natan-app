@@ -89,6 +89,13 @@ export interface EntranceDetail {
   serial: string;
   orderDate: string;     // Arrived Date por producto
   itemsArrived: number;  // Total inicial recibido para este producto
+  // Campos del reporte de inventario del cliente (opcionales; llegan por importación o por el formulario)
+  category?: string;     // "PLUMBING", "AC, HVAC", ...
+  price?: number;        // Precio unitario
+  invoice?: string;      // Factura del proveedor
+  warrantyExp?: string;  // YYYY-MM-DD
+  manufacturer?: string; // "AO SMITH", "GE"
+  comments?: string;
 }
 
 export interface ItemEntranceRecord {
@@ -99,6 +106,9 @@ export interface ItemEntranceRecord {
   date: string;          // Date (Registration) — header
   po: string;            // PO # — header (consecutivo: PO000, PO001, ...)
   supplyCompany: string; // Supply Company — header
+  property?: string;     // Complejo al que pertenece el stock ("Hidden Creek Apartments")
+  location?: string;     // Ubicación física ("0BLDG/SHOP")
+  notes?: string;
 
   details?: EntranceDetail[];
 

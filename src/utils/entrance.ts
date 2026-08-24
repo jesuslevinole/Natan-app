@@ -76,3 +76,7 @@ export const flattenEntrances = (entrances: NormalizedEntrance[]): FlatDetailOpt
       itemsArrived: d.itemsArrived || 0,
     })),
   );
+
+/** Valor del stock disponible de un PO (stock restante × precio unitario de cada detalle). */
+export const entranceStockValue = (entrance: NormalizedEntrance, usage: Map<string, number>): number =>
+  entrance.details.reduce((sum, d) => sum + Math.max(0, getDetailStock(d, usage)) * (d.price ?? 0), 0);

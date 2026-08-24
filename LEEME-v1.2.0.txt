@@ -1,0 +1,35 @@
+Natan-app v1.2.0 — archivos para copiar sobre el proyecto
+==========================================================
+
+Este zip contiene SOLO los archivos nuevos o modificados respecto a lo que hoy está en
+GitHub (commit 441a0bc). No hay archivos borrados ni cambios en package.json, así que
+no hace falta instalar nada.
+
+Cómo aplicarlo
+--------------
+1. Extraé este zip DENTRO de la carpeta del proyecto (C:\Users\Jesus\Desktop\Projects\Natan-app),
+   aceptando reemplazar los archivos existentes. Las carpetas src/ y data/ del zip se
+   fusionan con las tuyas.
+2. En Git Bash:
+      npm run build          (debe terminar sin errores)
+      git add -A
+      git commit -m "v1.2.0: inventario, modo oscuro, datos del negocio, gráficos"
+      git push
+
+Qué incluye
+-----------
+- src/                       43 archivos (código de la app)
+- data/inventory-hidden-creek-shop.xlsx / .csv   inventario transcrito (128 unidades, $17,265.90)
+- CLAUDE.md, README.md, code-notes.md            documentación actualizada
+
+Después del deploy
+------------------
+- Firebase Console → Firestore → Reglas: agregar
+      match /settings/{docId} {
+        allow read: if true;
+        allow write: if request.auth != null;
+      }
+  (para que el logo se vea en el login antes de iniciar sesión).
+- Item Entrance → Import → elegir data/inventory-hidden-creek-shop.xlsx → Import.
+- Barra lateral → botón Luna/Sol para el modo oscuro.
+- Business Settings (menú de administración) para nombre, datos y logo.

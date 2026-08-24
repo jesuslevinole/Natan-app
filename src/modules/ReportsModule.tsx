@@ -6,7 +6,7 @@ import DestinationSearch from '../components/DestinationSearch';
 import ModuleHeader from '../components/ModuleHeader';
 import LoadingScreen from '../components/LoadingScreen';
 import { useAppData } from '../hooks/useAppData';
-import { formatDateDisplay, displayName, formatSeq, getTodayString } from '../utils/helpers';
+import { formatDateDisplay, displayName, formatSeq, getTodayString, formatCurrency } from '../utils/helpers';
 import { downloadWorkbook } from '../utils/excel';
 import DataTable, { type DataColumn } from '../components/DataTable';
 import NotesCell from '../components/NotesCell';
@@ -18,6 +18,9 @@ import MonthlyBars, { type MonthlyPoint } from '../components/charts/MonthlyBars
 import DonutChart from '../components/charts/DonutChart';
 import RankBars from '../components/charts/RankBars';
 import { countBy, lastMonths, monthKey, COLOR_SUCCESS, COLOR_PRIMARY, COLOR_DANGER, COLOR_WARNING, truncate } from '../components/charts/chartUtils';
+import ChartTypeToggle from '../components/charts/ChartTypeToggle';
+import { useChartVariant } from '../hooks/useChartVariant';
+import ShareBar from '../components/charts/ShareBar';
 import './ReportsModule.css';
 
 type ReportTab = 'activities' | 'products' | 'po' | 'addresses' | 'repeated';
@@ -36,6 +39,7 @@ export default function ReportsModule() {
   const { jobOrders, jobProducts, entrances, users, destinations, isLoading } = useAppData();
   const [filters, setFilters] = useState(EMPTY_FILTERS);
   const [tab, setTab] = useState<ReportTab>('activities');
+  const [trendVariant, setTrendVariant] = useChartVariant('report_trend');
   const set = (key: FilterKey) => (value: string) => setFilters(prev => ({ ...prev, [key]: value }));
   const today = getTodayString();
   const activeFilters = (Object.keys(filters) as FilterKey[]).filter(k => filters[k] !== '');
@@ -49,6 +53,12 @@ export default function ReportsModule() {
       map.set(e.id, e.supplyCompany || '');
       for (const d of e.details) map.set(d.detailId, e.supplyCompany || '');
     }
+    return map;
+  }, [entrances]);
+
+  const priceByDetail = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const e of entrances) for (const d of e.details) if (d.price) map.set(d.detailId, d.price);
     return map;
   }, [entrances]);
 
@@ -101,12 +111,13 @@ export default function ReportsModule() {
           orderWorker: order.jobOrder || '',
           orderMadeBy: order.madeBy || '',
           supplyCompany: supplyCompanyOf(p),
+          unitPrice: priceByDetail.get(p.entranceDetailId || '') ?? null,
         };
       })
       .sort((a, b) => new Date(b.orderDate).getTime() - new Date(a.orderDate).getTime());
-  }, [jobProducts, filteredOrders, productMatches, supplyCompanyOf]);
+  }, [jobProducts, filteredOrders, productMatches, supplyCompanyOf, priceByDetail]);
 
-  const { totalItemsInstalled, aptList, mostWorkedApt, repeatedList, topWorker } = useMemo(() => {
+  const { totalItemsInstalled, installedValue, aptList, mostWorkedApt, repeatedList, topWorker } = useMemo(() => {
     const count = (keys: string[]) => {
       const m = new Map<string, number>();
       keys.forEach(k => m.set(k, (m.get(k) || 0) + 1));
@@ -120,6 +131,7 @@ export default function ReportsModule() {
     const workers = count(filteredOrders.map(o => o.jobOrder));
     return {
       totalItemsInstalled: filteredProductsDetailed.reduce((sum, p) => sum + p.quantity, 0),
+      installedValue: filteredProductsDetailed.reduce((sum, p) => sum + p.quantity * (p.unitPrice ?? 0), 0),
       aptList: apt.map(([dest, n]) => ({ dest, count: n })),
       mostWorkedApt: apt[0]?.[0] ?? '-',
       repeatedList: repeated,
@@ -237,6 +249,8 @@ export default function ReportsModule() {
     { id: 'po', header: 'PO #', value: p => p.po, nowrap: true, render: p => <span className="cell-strong text-primary cell-mono">{p.po || '—'}</span> },
     { id: 'supplyCompany', header: 'Supplier', value: p => p.supplyCompany },
     { id: 'quantity', header: 'Qty', value: p => p.quantity, type: 'number', align: 'center', render: p => <span className="badge negative">-{p.quantity}</span> },
+    { id: 'unitPrice', header: 'Unit Price', value: p => p.unitPrice, type: 'number', align: 'right', render: p => formatCurrency(p.unitPrice) },
+    { id: 'total', header: 'Total', value: p => (p.unitPrice === null ? null : p.unitPrice * p.quantity), type: 'number', align: 'right', render: p => p.unitPrice === null ? <span className="dt-dash">—</span> : <span className="fw-bold">{formatCurrency(p.unitPrice * p.quantity)}</span> },
   ], []);
 
   type PoRow = (typeof poAggregate)[number];
@@ -255,8 +269,8 @@ export default function ReportsModule() {
   type AptRow = (typeof aptList)[number];
   const aptColumns = useMemo<DataColumn<AptRow>[]>(() => [
     { id: 'dest', header: 'Address', value: a => a.dest, hideable: false, render: a => <span className="cell-strong">{a.dest}</span> },
-    { id: 'count', header: 'Interventions', value: a => a.count, type: 'number', align: 'center', render: a => <span className="badge info">{a.count}</span> },
-  ], []);
+    { id: 'count', header: 'Interventions', value: a => a.count, type: 'number', align: 'left', width: '220px', render: a => <ShareBar value={a.count} total={filteredOrders.length} /> },
+  ], [filteredOrders.length]);
 
   type RepRow = (typeof repeatedList)[number];
   const repeatedColumns = useMemo<DataColumn<RepRow>[]>(() => [
@@ -339,14 +353,14 @@ export default function ReportsModule() {
         <KpiCard icon={<Activity size={20} />} label="Activities" value={filteredOrders.length} tone="blue" note={`${filteredOrders.length - completed} still open`} />
         <KpiCard icon={<CheckCircle2 size={20} />} label="Completed" value={<>{completed} <small className="kpi-sub">({completionRate}%)</small></>} tone="green" note="Work finish = YES" />
         <KpiCard icon={<AlertTriangle size={20} />} label="Overdue" value={overdue} tone={overdue > 0 ? 'red' : 'slate'} note="Scheduled before today, not finished" />
-        <KpiCard icon={<Wrench size={20} />} label="Items Installed" value={totalItemsInstalled} tone="purple" note={`${filteredProductsDetailed.length} product lines`} />
+        <KpiCard icon={<Wrench size={20} />} label="Items Installed" value={totalItemsInstalled} tone="purple" note={installedValue > 0 ? `${formatCurrency(installedValue)} in materials` : `${filteredProductsDetailed.length} product lines`} />
         <KpiCard icon={<MapPin size={20} />} label="Top Address" value={<span className="kpi-value small">{mostWorkedApt}</span>} tone="cyan" note={aptList[0] ? `${aptList[0].count} interventions` : undefined} />
         <KpiCard icon={<Award size={20} />} label="Top Account User" value={<span className="kpi-value small">{topWorker}</span>} tone="orange" />
       </div>
 
       <div className="chart-grid">
-        <ChartCard title="Activity over time" subtitle="Orders registered per month, by status" icon={<TrendingUp size={16} />} wide empty={filteredOrders.length === 0}>
-          <MonthlyBars data={monthly} series={[{ key: 'finished', name: 'Finished', color: COLOR_SUCCESS }, { key: 'open', name: 'Open', color: COLOR_PRIMARY }]} />
+        <ChartCard title="Activity over time" subtitle="Orders registered per month, by status" icon={<TrendingUp size={16} />} wide empty={filteredOrders.length === 0} actions={<ChartTypeToggle value={trendVariant} onChange={setTrendVariant} />}>
+          <MonthlyBars data={monthly} variant={trendVariant} series={[{ key: 'finished', name: 'Finished', color: COLOR_SUCCESS }, { key: 'open', name: 'Open', color: COLOR_PRIMARY }]} />
         </ChartCard>
         <ChartCard title="Completion status" subtitle="Finished vs in progress vs overdue" icon={<PieIcon size={16} />} empty={filteredOrders.length === 0}>
           <DonutChart data={statusSlices} centerLabel="Orders" />

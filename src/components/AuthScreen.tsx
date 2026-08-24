@@ -5,6 +5,7 @@ import { FirebaseError } from 'firebase/app';
 import { auth } from '../firebase';
 import { AuditLogger } from '../utils/logger';
 import { resolveSystemUser } from '../utils/auth';
+import { useCompany } from '../hooks/useCompany';
 import type { User } from '../types';
 import './AuthScreen.css';
 
@@ -16,6 +17,7 @@ interface Props {
 const INVALID_CREDENTIAL_CODES = ['auth/invalid-credential', 'auth/user-not-found', 'auth/wrong-password', 'auth/invalid-email'];
 
 export default function AuthScreen({ onDevLogin }: Props) {
+  const { company } = useCompany();
   const [view, setView] = useState<'login' | 'forgot'>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -100,12 +102,14 @@ export default function AuthScreen({ onDevLogin }: Props) {
   return (
     <div className="auth-wrapper">
       <div className="auth-card">
-        <div className="catalog-icon auth-logo"><Briefcase size={32} /></div>
-        <h2>App Mr Natan</h2>
+        <div className={`auth-logo${company.logo ? ' has-logo' : ''}`}>
+          {company.logo ? <img src={company.logo} alt={company.name} /> : <Briefcase size={32} />}
+        </div>
+        <h2>{company.name}</h2>
 
         {view === 'login' ? (
           <>
-            <p className="subtitle">Secure System Login</p>
+            <p className="subtitle">{company.tagline || 'Secure System Login'}</p>
             {message && <p className={`alert ${messageKind}`}>{message}</p>}
             <form onSubmit={handleLogin}>
               <div className="form-group mb-3">

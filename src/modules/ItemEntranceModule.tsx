@@ -1,7 +1,7 @@
 import { useState, useMemo, useCallback, type FormEvent, type MouseEvent } from 'react';
 import { collection, addDoc, updateDoc, deleteDoc, doc } from 'firebase/firestore';
 import { db } from '../firebase';
-import { PackageSearch, Plus, X, Settings, Edit2, Trash2, Maximize2, Lock } from 'lucide-react';
+import { PackageSearch, Plus, X, Settings, Edit2, Trash2, Maximize2, Lock, FileSpreadsheet } from 'lucide-react';
 import type { NormalizedEntrance, ItemEntranceFormData, EntranceDetail } from '../types';
 import Modal from '../components/Modal';
 import ModuleHeader from '../components/ModuleHeader';
@@ -11,11 +11,13 @@ import SearchBar from '../components/SearchBar';
 import FieldSecurityModal from '../components/FieldSecurityModal';
 import LoadingScreen from '../components/LoadingScreen';
 import { StockBadge, StockLevel } from '../components/StatusBadge';
+import ImportInventoryModal from '../components/ImportInventoryModal';
+import NotesCell from '../components/NotesCell';
 import DataTable, { type DataColumn } from '../components/DataTable';
 import { useFormConfig, useFieldRoles } from '../hooks/useAppHooks';
 import { useAppData } from '../hooks/useAppData';
-import { getTodayString, formatDateDisplay, matchesSearch } from '../utils/helpers';
-import { getDetailStock, getEntranceStock } from '../utils/entrance';
+import { getTodayString, formatDateDisplay, matchesSearch, formatCurrency } from '../utils/helpers';
+import { getDetailStock, getEntranceStock, entranceStockValue } from '../utils/entrance';
 import { nextSequence, formatPONumber } from '../utils/firestore';
 import { AuditLogger } from '../utils/logger';
 import { useAuth, useAuthorName } from '../hooks/useAuth';
@@ -34,11 +36,15 @@ const DETAIL_FIELDS = [
   { name: 'serial', label: 'Serial #' },
   { name: 'orderDate', label: 'Arrived Date' },
   { name: 'itemsArrived', label: 'Items Arrived' },
+  { name: 'category', label: 'Category' },
+  { name: 'price', label: 'Unit Price' },
+  { name: 'invoice', label: 'Invoice #' },
+  { name: 'warrantyExp', label: 'Warranty Exp.' },
 ];
 
 const generateDetailId = () => `det_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
 
-const emptyDetail: EntranceDetail = { detailId: '', itemName: '', modelPart: '', serial: '', orderDate: '', itemsArrived: 0 };
+const emptyDetail: EntranceDetail = { detailId: '', itemName: '', modelPart: '', serial: '', orderDate: '', itemsArrived: 0, category: '', price: undefined, invoice: '', warrantyExp: '', manufacturer: '', comments: '' };
 
 const initialForm = (): ItemEntranceFormData => ({
   date: getTodayString(), po: '', supplyCompany: '', details: [],
@@ -47,7 +53,7 @@ const initialForm = (): ItemEntranceFormData => ({
 export default function ItemEntranceModule() {
   const { currentUser } = useAuth();
   const authorName = useAuthorName();
-  const { entrances, jobProducts, jobOrders, usage, roles, supplyCompanies, itemNames, isLoading } = useAppData();
+  const { entrances, jobProducts, jobOrders, usage, roles, supplyCompanies, itemNames, destinations, isLoading } = useAppData();
 
   const [searchTerm, setSearchTerm] = useState('');
   const [stockFilter, setStockFilter] = useState<StockFilter>('ALL');
@@ -65,6 +71,7 @@ export default function ItemEntranceModule() {
 
   const [formData, setFormData] = useState<ItemEntranceFormData>(initialForm);
   const [detailDraft, setDetailDraft] = useState<EntranceDetail>(emptyDetail);
+  const [isImportOpen, setIsImportOpen] = useState(false);
   const [editingDetailId, setEditingDetailId] = useState<string | null>(null);
 
   const isFieldEditable = useCallback((fieldName: string) => {
@@ -74,6 +81,14 @@ export default function ItemEntranceModule() {
     return !requiredRole || currentUser?.roleId === requiredRole;
   }, [isProcessing, currentUser, fieldRoles]);
 
+  const propertyOptions = useMemo(
+    () => [...new Set([...destinations.map(d => d.property || ''), ...entrances.map(e => e.property || '')].filter(Boolean))].sort(),
+    [destinations, entrances],
+  );
+  const categoryOptions = useMemo(
+    () => [...new Set(entrances.flatMap(e => e.details.map(d => d.category || '')).filter(Boolean))].sort(),
+    [entrances],
+  );
   const companyOptions = useMemo(
     () => supplyCompanies.filter(c => c.company).map(c => ({ id: c.company, label: c.company })),
     [supplyCompanies],
@@ -167,7 +182,8 @@ export default function ItemEntranceModule() {
 
   const handleSave = async (e: FormEvent) => {
     e.preventDefault();
-    const details = formData.details ?? [];
+    // Firestore rechaza `undefined`: el precio vacío se guarda como null.
+    const details = (formData.details ?? []).map(d => ({ ...d, price: d.price ?? null }));
     if (details.length === 0) { alert('Please add at least one product before saving.'); return; }
     setIsProcessing(true);
     try {
@@ -178,6 +194,9 @@ export default function ItemEntranceModule() {
         date: formData.date,
         supplyCompany: formData.supplyCompany,
         po: formData.po,
+        property: formData.property ?? '',
+        location: formData.location ?? '',
+        notes: formData.notes ?? '',
         details,
         itemName: first.itemName || '',
         modelPart: first.modelPart || '',
@@ -230,17 +249,24 @@ export default function ItemEntranceModule() {
     { id: 'date', header: 'Date', value: i => i.date, type: 'date', nowrap: true, render: i => formatDateDisplay(i.date) },
     { id: 'po', header: 'PO #', value: i => i.po, nowrap: true, render: i => <span className="cell-strong text-primary cell-mono">{i.po || '—'}</span> },
     { id: 'supplyCompany', header: 'Supply Company', value: i => i.supplyCompany, render: i => <span className="cell-strong">{i.supplyCompany || '—'}</span> },
+    { id: 'property', header: 'Property', value: i => i.property || '', defaultHidden: true },
     { id: 'products', header: 'Products', value: i => i.details.length, type: 'number', align: 'center' },
     { id: 'received', header: 'Received', value: i => getEntranceStock(i, usage).total, type: 'number', align: 'center' },
+    { id: 'value', header: 'Stock Value', value: i => entranceStockValue(i, usage), type: 'number', align: 'right', render: i => (i.details.some(d => d.price) ? formatCurrency(entranceStockValue(i, usage)) : <span className="dt-dash">—</span>) },
     { id: 'stock', header: 'In Stock', value: i => getEntranceStock(i, usage).stock, type: 'number', align: 'center',
       render: i => { const { stock, total } = getEntranceStock(i, usage); return <StockLevel stock={stock} total={total} />; } },
   ], [usage]);
 
   const detailColumns = useMemo<DataColumn<EntranceDetail>[]>(() => [
     { id: 'itemName', header: 'Item Name', value: d => d.itemName, render: d => <span className="cell-strong">{d.itemName}</span> },
+    { id: 'category', header: 'Category', value: d => d.category || '', render: d => d.category ? <span className="badge neutral">{d.category}</span> : <span className="dt-dash">—</span> },
     { id: 'modelPart', header: 'Model / Part #', value: d => d.modelPart },
     { id: 'serial', header: 'Serial #', value: d => d.serial, render: d => d.serial ? <span className="cell-mono">{d.serial}</span> : <span className="dt-dash">—</span> },
     { id: 'orderDate', header: 'Arrived', value: d => d.orderDate, type: 'date', nowrap: true, render: d => d.orderDate ? formatDateDisplay(d.orderDate) : '—' },
+    { id: 'price', header: 'Unit Price', value: d => d.price ?? null, type: 'number', align: 'right', render: d => formatCurrency(d.price) },
+    { id: 'invoice', header: 'Invoice', value: d => d.invoice || '', defaultHidden: true, render: d => d.invoice ? <span className="cell-mono">{d.invoice}</span> : <span className="dt-dash">—</span> },
+    { id: 'warrantyExp', header: 'Warranty', value: d => d.warrantyExp || '', type: 'date', nowrap: true, defaultHidden: true, render: d => d.warrantyExp ? formatDateDisplay(d.warrantyExp) : '—' },
+    { id: 'comments', header: 'Notes', value: d => d.comments || '', align: 'center', sortable: false, render: d => <NotesCell text={d.comments} title={`Notes — ${d.itemName}`} subtitle={d.modelPart} level={3} /> },
     { id: 'stock', header: 'Stock', value: d => getDetailStock(d, usage), type: 'number', align: 'center', render: d => <StockLevel stock={getDetailStock(d, usage)} total={d.itemsArrived} /> },
   ], [usage]);
 
@@ -248,9 +274,14 @@ export default function ItemEntranceModule() {
 
   const formDetailColumns = useMemo<DataColumn<EntranceDetail>[]>(() => [
     { id: 'itemName', header: 'Item Name', value: d => d.itemName, render: d => <span className="cell-strong">{d.itemName}</span> },
+    { id: 'category', header: 'Category', value: d => d.category || '', render: d => d.category ? <span className="badge neutral">{d.category}</span> : <span className="dt-dash">—</span> },
     { id: 'modelPart', header: 'Model / Part #', value: d => d.modelPart },
     { id: 'serial', header: 'Serial #', value: d => d.serial, render: d => d.serial ? <span className="cell-mono">{d.serial}</span> : <span className="dt-dash">—</span> },
     { id: 'orderDate', header: 'Arrived', value: d => d.orderDate, type: 'date', nowrap: true, render: d => d.orderDate ? formatDateDisplay(d.orderDate) : '—' },
+    { id: 'price', header: 'Unit Price', value: d => d.price ?? null, type: 'number', align: 'right', render: d => formatCurrency(d.price) },
+    { id: 'invoice', header: 'Invoice', value: d => d.invoice || '', defaultHidden: true, render: d => d.invoice ? <span className="cell-mono">{d.invoice}</span> : <span className="dt-dash">—</span> },
+    { id: 'warrantyExp', header: 'Warranty', value: d => d.warrantyExp || '', type: 'date', nowrap: true, defaultHidden: true, render: d => d.warrantyExp ? formatDateDisplay(d.warrantyExp) : '—' },
+    { id: 'comments', header: 'Notes', value: d => d.comments || '', align: 'center', sortable: false, render: d => <NotesCell text={d.comments} title={`Notes — ${d.itemName}`} subtitle={d.modelPart} level={3} /> },
     { id: 'stock', header: 'Stock', value: d => (editingId ? getDetailStock(d, usage) : d.itemsArrived), type: 'number', align: 'center',
       render: d => <StockLevel stock={editingId ? getDetailStock(d, usage) : d.itemsArrived} total={d.itemsArrived} /> },
   ], [editingId, usage]);
@@ -286,6 +317,9 @@ export default function ItemEntranceModule() {
         }
         actions={
           <RequirePermission permission="add_item_entrance">
+            <button type="button" className="action btn-secondary btn-header" onClick={() => setIsImportOpen(true)} title="Import the client's inventory report (Excel/CSV)">
+              <FileSpreadsheet size={18} /> Import
+            </button>
             <button type="button" className="action btn-primary btn-header" onClick={() => handleOpenModal(null)}>
               <Plus size={18} /> New Entrance
             </button>
@@ -323,6 +357,8 @@ export default function ItemEntranceModule() {
           </>
         )}
       />
+
+      {isImportOpen && <ImportInventoryModal onClose={() => setIsImportOpen(false)} />}
 
       <FieldSecurityModal
         isOpen={isConfigOpen}
@@ -364,6 +400,15 @@ export default function ItemEntranceModule() {
               <label className="label-primary">PO # {isItemReq('po') && '*'} <span className="label-note">(auto-generated)</span></label>
               <input type="text" className="readonly-po" value={formData.po} readOnly />
             </div>
+            <div className="form-group">
+              <label>Property / Complex</label>
+              <input type="text" list="po-properties" value={formData.property ?? ''} onChange={e => setFormData({ ...formData, property: e.target.value })} placeholder="e.g. Hidden Creek Apartments" />
+              <datalist id="po-properties">{propertyOptions.map(p => <option key={p} value={p} />)}</datalist>
+            </div>
+            <div className="form-group">
+              <label>Stock location</label>
+              <input type="text" value={formData.location ?? ''} onChange={e => setFormData({ ...formData, location: e.target.value })} placeholder="e.g. 0BLDG/SHOP" />
+            </div>
           </div>
 
           <div className="section-divider">
@@ -396,6 +441,31 @@ export default function ItemEntranceModule() {
                 <div className="form-group">
                   <label>Items Arrived {isDetailReq('itemsArrived') && '*'}</label>
                   <input type="number" min="0" value={detailDraft.itemsArrived} onChange={e => setDetailDraft({ ...detailDraft, itemsArrived: Number(e.target.value) })} />
+                </div>
+                <div className="form-group">
+                  <label>Category {isDetailReq('category') && '*'}</label>
+                  <input type="text" list="detail-categories" value={detailDraft.category ?? ''} onChange={e => setDetailDraft({ ...detailDraft, category: e.target.value })} required={isDetailReq('category')} placeholder="e.g. PLUMBING" />
+                  <datalist id="detail-categories">{categoryOptions.map(c => <option key={c} value={c} />)}</datalist>
+                </div>
+                <div className="form-group">
+                  <label>Unit Price {isDetailReq('price') && '*'}</label>
+                  <input type="number" min="0" step="0.01" value={detailDraft.price ?? ''} onChange={e => setDetailDraft({ ...detailDraft, price: e.target.value === '' ? undefined : Number(e.target.value) })} required={isDetailReq('price')} placeholder="0.00" />
+                </div>
+                <div className="form-group">
+                  <label>Invoice # {isDetailReq('invoice') && '*'}</label>
+                  <input type="text" value={detailDraft.invoice ?? ''} onChange={e => setDetailDraft({ ...detailDraft, invoice: e.target.value })} required={isDetailReq('invoice')} />
+                </div>
+                <div className="form-group">
+                  <label>Warranty Exp. {isDetailReq('warrantyExp') && '*'}</label>
+                  <input type="date" value={detailDraft.warrantyExp ?? ''} onChange={e => setDetailDraft({ ...detailDraft, warrantyExp: e.target.value })} required={isDetailReq('warrantyExp')} />
+                </div>
+                <div className="form-group">
+                  <label>Manufacturer</label>
+                  <input type="text" value={detailDraft.manufacturer ?? ''} onChange={e => setDetailDraft({ ...detailDraft, manufacturer: e.target.value })} placeholder="e.g. AO SMITH" />
+                </div>
+                <div className="form-group span-2">
+                  <label>Notes / Comments</label>
+                  <input type="text" value={detailDraft.comments ?? ''} onChange={e => setDetailDraft({ ...detailDraft, comments: e.target.value })} placeholder="e.g. installed in OV39 on 3/11/26" />
                 </div>
                 <div className="form-group flex-row items-end">
                   <button type="button" className="action btn-primary w-100" onClick={handleAddOrUpdateDetail}>

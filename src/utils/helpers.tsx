@@ -64,6 +64,10 @@ export const formatDateTimeDisplay = (isoString: string): string => {
   return isNaN(d.getTime()) ? isoString : dateTimeFormatter.format(d);
 };
 
+const currencyFormatter = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
+/** $1,234.56 (USD). */
+export const formatCurrency = (n: number | null | undefined): string => (n === null || n === undefined || !Number.isFinite(n) ? '—' : currencyFormatter.format(n));
+
 export const formatSeq = (seq?: number): string => String(seq || 0).padStart(3, '0');
 
 /** Nombre a mostrar de un usuario: "Nombre Apellido" o el fallback (email/username). */

@@ -3,6 +3,8 @@ import { DataContext } from '../context/dataContext';
 import { AuthContext } from '../context/authContext';
 import { mockAppData } from './mockData';
 import LoadingScreen from '../components/LoadingScreen';
+import { useTheme } from '../hooks/useTheme';
+import { Sun, Moon } from 'lucide-react';
 import '../index.css';
 import '../App.css';
 
@@ -14,6 +16,7 @@ const modules = {
   reports: lazy(() => import('../modules/ReportsModule')),
   users: lazy(() => import('../modules/UsersDashboard')),
   roles: lazy(() => import('../modules/RolesDashboard')),
+  settings: lazy(() => import('../modules/SettingsModule')),
 };
 type Key = keyof typeof modules;
 
@@ -25,6 +28,7 @@ export default function Preview() {
   const initial = (new URLSearchParams(window.location.search).get('module') as Key) || 'dashboard';
   const [active, setActive] = useState<Key>(initial in modules ? initial : 'dashboard');
   const Module = modules[active];
+  const { theme, toggle } = useTheme();
   return (
     <AuthContext.Provider value={{
       currentUser: { uid: 'preview', username: 'Preview', firstName: 'Jesus', email: 'preview@example.com', roleId: 'admin_role' },
@@ -37,6 +41,7 @@ export default function Preview() {
             {(Object.keys(modules) as Key[]).map(k => (
               <button key={k} type="button" className={`chip${k === active ? ' active' : ''}`} onClick={() => setActive(k)}>{k}</button>
             ))}
+            <button type="button" className="chip" onClick={toggle} title="Toggle theme">{theme === 'dark' ? <Sun size={14} /> : <Moon size={14} />}</button>
           </nav>
           <main className="preview-main">
             <Suspense fallback={<LoadingScreen message="Loading preview..." />}>

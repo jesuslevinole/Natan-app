@@ -141,6 +141,8 @@ Si encontrás dos implementaciones distintas de la misma idea de producto (dos r
 - **Textos largos en celdas**: `NotesCell` (ícono → modal) para notas/observaciones; `.cell-clamp` con `title` para descripciones.
 - **Gráficos**: `src/components/charts/` (recharts). Tooltip propio (`ChartTooltip`), nunca `contentStyle`/`wrapperStyle`. Colores de la paleta en `chartUtils.ts`. Siempre dentro de `ChartCard` (recharts necesita alto fijo).
 - **Vista previa**: `/preview.html` con `src/dev/mockData.ts` para revisar diseño sin Firebase. Si agregás un módulo, sumalo a `src/dev/Preview.tsx`.
+- **Colores**: nunca hex directo en CSS. Usar las variables de `:root` en `App.css` (`--card-bg`, `--surface-2/3`, `--text-main/strong/body/muted/faint`, `--border-color/strong`, `--primary-soft`, `--success-soft`, `--warning-soft`, `--danger-soft`...). El modo oscuro (`[data-theme="dark"]`) solo redefine esas variables; un color hex nuevo rompe el tema oscuro. Verificar con `grep -rn "#[0-9a-f]\{6\}" src --include=*.css` (solo deben quedar acentos de badges/estados y la barra lateral).
+- **Datos del negocio**: `useCompany()` (nombre, logo, contacto) desde `settings/company`. No hardcodear "Mr Natan" en la UI.
 - **Modales**: `src/components/Modal.tsx` (`size`, `level`, `actions`, `onSubmit`). Cabeceras de módulo: `ModuleHeader`. Badges de estado: `StatusBadge.tsx`.
 - **Handlers de lista**: reciben el objeto completo (`handleDelete(order)`), nunca un id que después se busca en estado.
 - **Import/Export Excel**: `src/utils/excel.ts` (SheetJS). `xlsx` va en un chunk aparte; importalo solo desde módulos lazy, nunca desde `App.tsx`.

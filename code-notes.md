@@ -116,3 +116,14 @@ Referencia: patrones de Roelca (orden por columna ▲/▼, filtros por columna, 
 - Quedan dos `<table>` a mano (`FieldSecurityModal`, `ImportDestinationsModal`): son formularios (checkbox/select por fila), no listados; `DataTable` no aplica.
 
 Verificación: `npm run check` 0/0, `npm run build` OK, `grep "style={{"` solo variables CSS (`--progress`, `--swatch`).
+
+## Ronda 4 — inventario del cliente, modo oscuro, datos del negocio, gráficos
+
+- **Inventario**: `EntranceDetail` suma `category`, `price`, `invoice`, `warrantyExp`, `manufacturer`, `comments`; `ItemEntranceRecord` suma `property`, `location`, `notes` (todos opcionales: los registros viejos siguen válidos). El precio vacío se guarda como `null` (Firestore rechaza `undefined`). `parseInventoryFile` + `groupInventoryRows` en `utils/excel.ts`; `ImportInventoryModal` escribe un doc por PO en batch, reserva secuencias con `reserveSequenceBlock('itemEntranceSeq')` y crea proveedores/ítems faltantes en los catálogos. `data/inventory-hidden-creek-shop.csv|xlsx` es la transcripción de las 5 páginas (suma exacta al total impreso).
+- **Valor de inventario**: `entranceStockValue` en `utils/entrance.ts`; KPI en Dashboard y columna "Stock Value" en Item Entrance; en Reports, precio unitario y total por producto instalado (lookup por `entranceDetailId`).
+- **Modo oscuro**: `hooks/useTheme.ts` pone `data-theme` en `<html>` y persiste en `localStorage` (`natan_theme`). Barrido de todos los hex de CSS a variables (`--surface-2/3`, `--text-strong/body/faint`, `--border-strong`, `--*-soft`). Los ejes/grilla de recharts se colorean por CSS (`.recharts-text`, `.recharts-cartesian-grid`), no por props, para que sigan el tema.
+- **Datos del negocio**: `CompanyProvider` (fuera del login) lee `settings/company` con `onSnapshot`, cachea en `localStorage` y reintenta al cambiar el estado de auth. `BrandMark` reemplaza el ícono fijo en login/sidebar/móvil. `SettingsModule` redimensiona el logo con canvas (320 px, PNG o JPEG si pesa mucho) y lo guarda como data URL.
+- **Gráficos**: `MonthlyBars` acepta `variant` (bars/line/area) y `ChartTypeToggle` + `useChartVariant` persisten la elección por gráfico; selector de período 3M/6M/12M en Dashboard; `ShareBar` (barra de participación) en "Works per Address".
+- Pendiente de reglas de Firestore: `settings/company` con lectura pública y escritura autenticada (ver README).
+
+Verificación: `npm run check` 0/0, `npm run build` OK, render en Chromium claro y oscuro (Dashboard, Reports, Item Entrance con importación, Settings).

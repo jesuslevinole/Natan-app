@@ -34,16 +34,37 @@ remitente o el texto: Firebase Console → Authentication → Templates.
 `itemEntrance`, `catalogs`, `users`, `roles`). Renderiza los módulos con datos de ejemplo
 (`src/dev/mockData.ts`) para trabajar el diseño sin login ni conexión. No entra en el build de producción.
 
+### Modo oscuro
+
+Botón Sol/Luna en la barra lateral (y en la cabecera móvil). Se guarda en `localStorage` y por defecto
+sigue la preferencia del sistema. Todo el CSS usa las variables de tema de `App.css`.
+
+### Datos del negocio y logo
+
+*Business Settings* (admin) → nombre, eslogan, contacto y logo. Se guarda en `settings/company`
+(el logo como imagen embebida, redimensionada a 320 px) y se muestra en el login, la barra lateral y el
+título de la pestaña. **Reglas de Firestore**: para que el logo aparezca en el login antes de iniciar
+sesión, `settings/company` debe permitir lectura pública (`allow read: if true;`) y escritura solo a
+usuarios autenticados; si no, la app usa la copia guardada en el dispositivo desde la última sesión.
+
+### Importar el inventario del cliente
+
+Item Entrance → **Import** → elegir `data/inventory-hidden-creek-shop.xlsx` (transcripción del
+"Inventory Report — Hidden Creek Apartments, 0BLDG/SHOP", 128 unidades, $17,265.90, verificado contra el
+total impreso) o cualquier export con las mismas columnas (Item, Purch Date, Model #, Serial #, War Exp,
+Vendor, Mfr, Invoice, Price, Comments). Cada fila es una unidad; se agrupan por PO # y las filas
+idénticas se fusionan. También hay una plantilla descargable con columnas PO # y Qty.
+
 ## Módulos
 
 | Módulo | Qué hace |
 |---|---|
 | Dashboard | KPIs del día: órdenes activas, vencidas, para hoy, stock disponible, alertas de stock bajo |
 | Work Activity | Órdenes de trabajo (activas / histórico), productos consumidos por orden |
-| Item Entrance | Entradas de inventario por PO (header + productos), stock en tiempo real, historial de instalación |
+| Item Entrance | Entradas de inventario por PO (header + productos con categoría, precio, factura, garantía), stock y valor en tiempo real, **importación del reporte de inventario**, historial de instalación |
 | Catalogs | Destinos (direcciones/unidades), proveedores, nombres de ítem. **Importación masiva desde Excel** y exportación |
 | Reports | Filtros combinados, KPIs, consumo por PO, log de productos instalados. **Exportación a Excel** |
-| Account Users / Roles / Activity History | Administración (permiso `manage_security`) |
+| Account Users / Roles / Activity History / Business Settings | Administración (permiso `manage_security`) |
 
 ## Importar las direcciones del cliente
 

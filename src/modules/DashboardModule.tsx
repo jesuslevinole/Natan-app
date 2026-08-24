@@ -1,12 +1,14 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import {
   LayoutDashboard, Briefcase, CalendarClock, AlertTriangle, PackageSearch, Boxes, MapPin, ArrowRight,
-  Plus, FileSpreadsheet, BarChart2, TrendingUp, PieChart as PieIcon, CheckCircle2, Clock,
+  Plus, FileSpreadsheet, BarChart2, TrendingUp, PieChart as PieIcon, CheckCircle2, Clock, DollarSign,
 } from 'lucide-react';
 import { useAppData } from '../hooks/useAppData';
 import { useAuth } from '../hooks/useAuth';
 import { getDetailStock } from '../utils/entrance';
-import { formatDateDisplay, getTodayString, formatSeq } from '../utils/helpers';
+import ChartTypeToggle from '../components/charts/ChartTypeToggle';
+import { useChartVariant } from '../hooks/useChartVariant';
+import { formatDateDisplay, getTodayString, formatSeq, formatCurrency } from '../utils/helpers';
 import KpiCard from '../components/KpiCard';
 import LoadingScreen from '../components/LoadingScreen';
 import SeqBadge from '../components/SeqBadge';
@@ -27,6 +29,8 @@ interface Props {
 }
 
 const LOW_STOCK_THRESHOLD = 2;
+const PERIODS = [{ id: 3, label: '3M' }, { id: 6, label: '6M' }, { id: 12, label: '12M' }] as const;
+type PeriodMonths = (typeof PERIODS)[number]['id'];
 
 interface LowStockRow {
   id: string;
@@ -46,6 +50,8 @@ export default function DashboardModule({ onNavigate }: Props) {
   const { currentUser, hasPermission } = useAuth();
   const today = getTodayString();
   const thisMonth = today.slice(0, 7);
+  const [period, setPeriod] = useState<PeriodMonths>(6);
+  const [variant, setVariant] = useChartVariant('dashboard_orders');
 
   const stats = useMemo(() => {
     const active = jobOrders.filter(o => o.workFinish === 'NO');
@@ -57,7 +63,7 @@ export default function DashboardModule({ onNavigate }: Props) {
       .sort((a, b) => a.schedule.localeCompare(b.schedule))
       .slice(0, 12);
 
-    const months = lastMonths(today, 6);
+    const months = lastMonths(today, period);
     const perMonth = new Map<string, MonthlyPoint>(months.map(k => [k, { month: k, finished: 0, open: 0 }]));
     for (const o of jobOrders) {
       const point = perMonth.get(monthKey(o.createdAt));
@@ -71,12 +77,16 @@ export default function DashboardModule({ onNavigate }: Props) {
 
     let stockAvailable = 0;
     let stockTotal = 0;
+    let stockValue = 0;
+    let receivedValue = 0;
     const lowStock: LowStockRow[] = [];
     for (const e of entrances) {
       for (const d of e.details) {
         const stock = getDetailStock(d, usage);
         stockTotal += d.itemsArrived || 0;
         if (stock > 0) stockAvailable += stock;
+        stockValue += Math.max(0, stock) * (d.price ?? 0);
+        receivedValue += (d.itemsArrived || 0) * (d.price ?? 0);
         if (stock <= LOW_STOCK_THRESHOLD) {
           lowStock.push({ id: `${e.id}-${d.detailId}`, po: e.po, itemName: d.itemName, modelPart: d.modelPart, supplyCompany: e.supplyCompany, stock, total: d.itemsArrived });
         }
@@ -89,9 +99,10 @@ export default function DashboardModule({ onNavigate }: Props) {
 
     return {
       active, overdue, dueToday, unscheduled, agenda, monthly: [...perMonth.values()],
-      createdThisMonth, createdLastMonth, finishedThisMonth, stockAvailable, stockTotal, lowStock, properties, topAddresses,
+      createdThisMonth, createdLastMonth, finishedThisMonth, stockAvailable, stockTotal, stockValue, receivedValue, lowStock, properties, topAddresses,
+      periodOrders: jobOrders.filter(o => months.includes(monthKey(o.createdAt))).length,
     };
-  }, [jobOrders, entrances, usage, destinations, today, thisMonth]);
+  }, [jobOrders, entrances, usage, destinations, today, thisMonth, period]);
 
   const agendaColumns = useMemo<DataColumn<JobOrder>[]>(() => [
     { id: 'seq', header: '#', value: o => o.visualSeq ?? null, type: 'number', align: 'center', width: '60px', hideable: false, render: o => <SeqBadge seq={o.visualSeq} /> },
@@ -147,12 +158,27 @@ export default function DashboardModule({ onNavigate }: Props) {
         <KpiCard icon={<AlertTriangle size={20} />} label="Overdue" value={stats.overdue.length} tone={stats.overdue.length > 0 ? 'red' : 'green'} note={stats.overdue.length > 0 ? 'Scheduled before today, not finished' : 'Everything is on time'} />
         <KpiCard icon={<CheckCircle2 size={20} />} label="Orders this month" value={stats.createdThisMonth} tone="cyan" trend={{ delta: stats.createdThisMonth - stats.createdLastMonth, label: 'vs last month' }} />
         <KpiCard icon={<Boxes size={20} />} label="Units in Stock" value={stats.stockAvailable} tone={stats.lowStock.length > 0 ? 'orange' : 'green'} note={`${stockPct}% of received · ${stats.lowStock.length} low`} onClick={canStock ? () => onNavigate('itemEntrance') : undefined} />
+        <KpiCard icon={<DollarSign size={20} />} label="Inventory value" value={formatCurrency(stats.stockValue)} tone="green" note={stats.receivedValue > 0 ? `of ${formatCurrency(stats.receivedValue)} received` : 'Add unit prices to POs to track value'} onClick={canStock ? () => onNavigate('itemEntrance') : undefined} />
         <KpiCard icon={<MapPin size={20} />} label="Addresses" value={destinations.length} tone="slate" note={`${stats.properties} propert${stats.properties === 1 ? 'y' : 'ies'}`} onClick={canCatalogs ? () => onNavigate('catalogs') : undefined} />
       </div>
 
       <div className="chart-grid">
-        <ChartCard title="Orders — last 6 months" subtitle="Registered per month, by status" icon={<TrendingUp size={16} />} wide empty={jobOrders.length === 0}>
-          <MonthlyBars data={stats.monthly} series={[{ key: 'finished', name: 'Finished', color: COLOR_SUCCESS }, { key: 'open', name: 'Open', color: COLOR_PRIMARY }]} />
+        <ChartCard
+          title={`Orders — last ${period} months`}
+          subtitle={`${stats.periodOrders} orders registered in the period, by status`}
+          icon={<TrendingUp size={16} />}
+          wide
+          empty={jobOrders.length === 0}
+          actions={
+            <>
+              <div className="chip-group compact" role="group" aria-label="Period">
+                {PERIODS.map(p => <button key={p.id} type="button" className={`chip${period === p.id ? ' active' : ''}`} onClick={() => setPeriod(p.id)} aria-pressed={period === p.id}>{p.label}</button>)}
+              </div>
+              <ChartTypeToggle value={variant} onChange={setVariant} />
+            </>
+          }
+        >
+          <MonthlyBars data={stats.monthly} variant={variant} series={[{ key: 'finished', name: 'Finished', color: COLOR_SUCCESS }, { key: 'open', name: 'Open', color: COLOR_PRIMARY }]} />
         </ChartCard>
         <ChartCard title="Order status" subtitle={`${stats.finishedThisMonth} finished this month`} icon={<PieIcon size={16} />} empty={jobOrders.length === 0}>
           <DonutChart data={statusSlices} centerLabel="Orders" />
