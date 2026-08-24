@@ -72,6 +72,8 @@ body { background-color: var(--bg-color); color: var(--text-main); height: 100vh
 
 .sidebar-footer { padding: 20px; border-top: 1px solid rgba(255, 255, 255, 0.05); white-space: nowrap;}
 .sidebar-user { padding-bottom: 15px; color: #94a3b8; font-size: 0.8rem; text-align: center; }
+.sidebar-user .sidebar-role { display: block; margin-top: 2px; font-size: 0.72rem; color: #60a5fa; }
+.sidebar-user .sidebar-role.missing { color: #fbbf24; }
 .sidebar.collapsed .sidebar-user { display: none; }
 .logout-btn { 
   width: 100%; padding: 10px; background-color: transparent; color: #f87171; 

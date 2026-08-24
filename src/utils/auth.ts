@@ -1,7 +1,7 @@
 import type { User as FirebaseUser } from 'firebase/auth';
 import { collection, getDocs, query, where } from 'firebase/firestore';
 import { db } from '../firebase';
-import type { User, SystemUser } from '../types';
+import type { User, SystemUser, Role } from '../types';
 import { displayName } from './helpers';
 
 /**
@@ -23,3 +23,17 @@ export const resolveSystemUser = async (firebaseUser: FirebaseUser): Promise<Use
     roleId: data.roleId,
   };
 };
+
+/**
+ * Emails "dueños" del sistema (VITE_OWNER_EMAILS, separados por coma). Siempre reciben Super Admin,
+ * aunque su rol en Firestore esté incompleto: evita quedar bloqueado sin acceso a Users/Roles.
+ * La protección real de los datos sigue siendo las reglas de Firestore.
+ */
+const OWNER_EMAILS = (import.meta.env.VITE_OWNER_EMAILS ?? '')
+  .split(',')
+  .map((e: string) => e.trim().toLowerCase())
+  .filter(Boolean);
+
+export const SUPER_ADMIN_ROLE: Role = { id: 'admin_role', name: 'Super Admin', permissions: [] };
+
+export const isOwnerEmail = (email?: string | null) => !!email && OWNER_EMAILS.includes(email.trim().toLowerCase());

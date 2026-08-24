@@ -43,7 +43,7 @@ const NAV_ITEMS: NavItem[] = [
 ];
 
 function AppShell() {
-  const { currentUser, logout, hasPermission } = useAuth();
+  const { currentUser, userRole, logout, hasPermission } = useAuth();
   const [activeModule, setActiveModule] = useState<ModuleId>('dashboard');
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -97,7 +97,10 @@ function AppShell() {
         </ul>
 
         <div className="sidebar-footer">
-          <div className="sidebar-user">Logged in as <b>{currentUser?.username}</b></div>
+          <div className="sidebar-user">
+            Logged in as <b>{currentUser?.username}</b>
+            <span className={`sidebar-role ${userRole ? '' : 'missing'}`}>{userRole ? userRole.name : 'No role assigned'}</span>
+          </div>
           <button type="button" className="action logout-btn" onClick={logout}>
             <LogOut size={20} /> <span>Log Out</span>
           </button>

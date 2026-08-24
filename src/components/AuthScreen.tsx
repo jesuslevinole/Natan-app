@@ -20,12 +20,14 @@ export default function AuthScreen({ onDevLogin }: Props) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [message, setMessage] = useState('');
+  const [messageKind, setMessageKind] = useState<'error' | 'success'>('error');
   const [isLoading, setIsLoading] = useState(false);
 
   const handleLogin = async (e: FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
     setMessage('');
+    setMessageKind('error');
     try {
       const credential = await signInWithEmailAndPassword(auth, email.trim(), password);
       const user = await resolveSystemUser(credential.user);
@@ -63,13 +65,33 @@ export default function AuthScreen({ onDevLogin }: Props) {
 
   const handleForgot = async (e: FormEvent) => {
     e.preventDefault();
+    const target = email.trim().toLowerCase();
     setIsLoading(true);
+    setMessage('');
     try {
-      await sendPasswordResetEmail(auth, email.trim());
-      setMessage(`Password reset link sent to ${email}`);
-      setTimeout(() => { setView('login'); setMessage(''); }, 4000);
-    } catch {
-      setMessage('Failed to send reset link. Check your email address.');
+      try {
+        // Con `url`, el botón "Continue" de la página de Firebase vuelve a la app.
+        await sendPasswordResetEmail(auth, target, { url: window.location.origin });
+      } catch (error) {
+        // El dominio no está en Authentication → Settings → Authorized domains: enviamos sin continue URL.
+        if (error instanceof FirebaseError && error.code === 'auth/unauthorized-continue-uri') {
+          await sendPasswordResetEmail(auth, target);
+        } else {
+          throw error;
+        }
+      }
+      setMessageKind('success');
+      setMessage(`If ${target} has an account, a reset link is on its way. Check your spam folder if it doesn't arrive within a few minutes.`);
+    } catch (error) {
+      setMessageKind('error');
+      if (error instanceof FirebaseError) {
+        if (error.code === 'auth/invalid-email') setMessage('That email address is not valid.');
+        else if (error.code === 'auth/user-not-found') setMessage('No account found with that email.');
+        else if (error.code === 'auth/too-many-requests') setMessage('Too many attempts. Please wait a few minutes and try again.');
+        else setMessage(`Could not send the reset link (${error.code}).`);
+      } else {
+        setMessage('Could not send the reset link. Please try again.');
+      }
     } finally {
       setIsLoading(false);
     }
@@ -84,7 +106,7 @@ export default function AuthScreen({ onDevLogin }: Props) {
         {view === 'login' ? (
           <>
             <p className="subtitle">Secure System Login</p>
-            {message && <p className="alert error">{message}</p>}
+            {message && <p className={`alert ${messageKind}`}>{message}</p>}
             <form onSubmit={handleLogin}>
               <div className="form-group mb-3">
                 <label htmlFor="login-email">Email Address</label>
@@ -99,7 +121,7 @@ export default function AuthScreen({ onDevLogin }: Props) {
               </button>
             </form>
 
-            <button type="button" className="toggle-auth" onClick={() => { setView('forgot'); setMessage(''); }}>
+            <button type="button" className="toggle-auth" onClick={() => { setView('forgot'); setMessage(''); setMessageKind('error'); }}>
               Forgot your password?
             </button>
 
@@ -114,7 +136,8 @@ export default function AuthScreen({ onDevLogin }: Props) {
         ) : (
           <>
             <p className="subtitle">Reset your password</p>
-            {message && <p className="alert success">{message}</p>}
+            {message && <p className={`alert ${messageKind}`}>{message}</p>}
+            <p className="hint">Enter the email of your account. Firebase will send you a link to choose a new password.</p>
             <form onSubmit={handleForgot}>
               <div className="form-group mb-4">
                 <label htmlFor="forgot-email">Email Address</label>
@@ -123,7 +146,7 @@ export default function AuthScreen({ onDevLogin }: Props) {
               <button type="submit" className="auth-btn mb-3" disabled={isLoading}>
                 {isLoading ? 'Sending...' : 'Send Reset Link'}
               </button>
-              <button type="button" className="btn-secondary block" onClick={() => setView('login')} disabled={isLoading}>
+              <button type="button" className="btn-secondary block" onClick={() => { setView('login'); setMessage(''); }} disabled={isLoading}>
                 <ArrowLeft size={16} /> Back to Login
               </button>
             </form>

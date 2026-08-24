@@ -4,7 +4,7 @@ import { doc, onSnapshot } from 'firebase/firestore';
 import { auth, db } from '../firebase';
 import type { User, Role } from '../types';
 import { AuthContext } from './authContext';
-import { resolveSystemUser } from '../utils/auth';
+import { resolveSystemUser, isOwnerEmail, SUPER_ADMIN_ROLE } from '../utils/auth';
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -39,7 +39,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // El rol se escucha en tiempo real: si un admin cambia permisos, aplican sin re-login.
   useEffect(() => {
-    if (!currentUser?.roleId) {
+    if (!currentUser) {
+      setUserRole(null);
+      return;
+    }
+    if (isOwnerEmail(currentUser.email)) {
+      setUserRole(SUPER_ADMIN_ROLE);
+      return;
+    }
+    if (!currentUser.roleId) {
       setUserRole(null);
       return;
     }
@@ -50,7 +58,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setUserRole({ id: roleDoc.id, ...roleDoc.data() } as Role);
         } else if (currentUser.roleId === 'admin_role') {
           // Fallback para entornos sin la colección `roles` poblada.
-          setUserRole({ id: 'admin_role', name: 'Super Admin', permissions: [] });
+          setUserRole(SUPER_ADMIN_ROLE);
         } else {
           setUserRole(null);
         }

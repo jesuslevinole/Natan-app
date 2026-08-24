@@ -93,3 +93,9 @@ npm run build               # OK
 grep -rn "style={{" src     # solo 2 (variables CSS --progress)
 ```
 **No se pudo probar en navegador contra Firebase** (entorno sin credenciales ni salida a Firebase). Lo que verifica `tsc`/`eslint`/`build` es que compila, no que funciona: probar a mano login, restauración de sesión, importación de Excel y el flujo de agregar productos a una orden.
+
+## Ronda 2 — acceso admin garantizado y recuperación de contraseña
+
+- **Síntoma**: al entrar con la cuenta real no aparecían Catalogs / Account Users / Manage Roles. Causa: el menú se filtra por los permisos del rol en Firestore (igual que antes), pero antes se entraba siempre con el bypass "Acceder como Admin" que daba Super Admin; el rol real no tiene `view_catalogs` ni `manage_security`.
+- **Solución**: `VITE_OWNER_EMAILS` (`utils/auth.ts` → `isOwnerEmail`, `SUPER_ADMIN_ROLE`). `AuthProvider` asigna Super Admin a esos emails sin leer `roles`. La barra lateral muestra el rol activo (o "No role assigned") para que sea evidente por qué falta un módulo.
+- **Forgot password**: ya usaba `sendPasswordResetEmail`; ahora envía `continueUrl` a la app (con fallback si el dominio no está autorizado), distingue éxito/error (antes el error se mostraba en verde), y traduce los códigos `auth/invalid-email`, `auth/user-not-found`, `auth/too-many-requests`.
