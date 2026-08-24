@@ -1,131 +1,142 @@
-import { useState } from 'react';
-import { PackageSearch, Briefcase, LogOut, BookOpen, BarChart2, Menu, ChevronRight, ChevronLeft, ShieldAlert, Users as UsersIcon, ShieldCheck } from 'lucide-react';
-import { AuthScreen } from './components/SharedUI'; 
-import { AuthProvider, useAuth, RequirePermission } from './hooks/useAuth';
-
-// Módulos
-import { CatalogsModule } from './modules/CatalogsModule';
-import { ItemEntrance } from './modules/ItemEntranceModule';
-import { WorkActivity } from './modules/WorkActivityModule';
-import { ReportsModule } from './modules/ReportsModule';
-import { LogsDashboard } from './modules/LogsDashboard';
-import { UsersDashboard } from './modules/UsersDashboard';
-import { RolesDashboard } from './modules/RolesDashboard';
-
+import { useState, lazy, Suspense, type ReactNode } from 'react';
+import {
+  PackageSearch, Briefcase, LogOut, BookOpen, BarChart2, Menu, ChevronRight, ChevronLeft,
+  ShieldAlert, Users as UsersIcon, ShieldCheck, LayoutDashboard,
+} from 'lucide-react';
+import AuthScreen from './components/AuthScreen';
+import LoadingScreen from './components/LoadingScreen';
+import { useAuth } from './hooks/useAuth';
+import { AuthProvider } from './context/AuthProvider';
+import { DataProvider } from './context/DataProvider';
 import './App.css';
 
-function AppShell() {
-  const { currentUser, logout } = useAuth();
-  const [activeModule, setActiveModule] = useState<string>('workActivity'); 
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(false);
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState<boolean>(false);
+// Code-splitting: cada módulo se descarga la primera vez que se abre, no todo en el login.
+const DashboardModule = lazy(() => import('./modules/DashboardModule'));
+const WorkActivityModule = lazy(() => import('./modules/WorkActivityModule'));
+const ItemEntranceModule = lazy(() => import('./modules/ItemEntranceModule'));
+const CatalogsModule = lazy(() => import('./modules/CatalogsModule'));
+const ReportsModule = lazy(() => import('./modules/ReportsModule'));
+const UsersDashboard = lazy(() => import('./modules/UsersDashboard'));
+const RolesDashboard = lazy(() => import('./modules/RolesDashboard'));
+const LogsDashboard = lazy(() => import('./modules/LogsDashboard'));
 
-  const handleModuleChange = (module: string) => {
+export type ModuleId = 'dashboard' | 'workActivity' | 'itemEntrance' | 'catalogs' | 'reports' | 'users' | 'roles' | 'audit_logs';
+
+interface NavItem {
+  id: ModuleId;
+  label: string;
+  icon: ReactNode;
+  /** Permiso requerido; `null` = visible para cualquier usuario autenticado. */
+  permission: string | null;
+  section?: 'admin';
+}
+
+const NAV_ITEMS: NavItem[] = [
+  { id: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard size={20} />, permission: null },
+  { id: 'workActivity', label: 'Work Activity', icon: <Briefcase size={20} />, permission: 'view_work_activity' },
+  { id: 'itemEntrance', label: 'Item Entrance', icon: <PackageSearch size={20} />, permission: 'view_item_entrance' },
+  { id: 'catalogs', label: 'Catalogs', icon: <BookOpen size={20} />, permission: 'view_catalogs' },
+  { id: 'reports', label: 'Reports', icon: <BarChart2 size={20} />, permission: 'view_reports' },
+  { id: 'users', label: 'Account Users', icon: <UsersIcon size={20} />, permission: 'manage_security', section: 'admin' },
+  { id: 'roles', label: 'Manage Roles', icon: <ShieldCheck size={20} />, permission: 'manage_security', section: 'admin' },
+  { id: 'audit_logs', label: 'Activity History', icon: <ShieldAlert size={20} />, permission: 'manage_security', section: 'admin' },
+];
+
+function AppShell() {
+  const { currentUser, logout, hasPermission } = useAuth();
+  const [activeModule, setActiveModule] = useState<ModuleId>('dashboard');
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
+  const handleModuleChange = (module: ModuleId) => {
     setActiveModule(module);
     setIsMobileMenuOpen(false);
   };
 
+  const visibleItems = NAV_ITEMS.filter(item => item.permission === null || hasPermission(item.permission));
+
+  const renderModule = () => {
+    switch (activeModule) {
+      case 'dashboard': return <DashboardModule onNavigate={handleModuleChange} />;
+      case 'workActivity': return <WorkActivityModule />;
+      case 'itemEntrance': return <ItemEntranceModule />;
+      case 'catalogs': return <CatalogsModule />;
+      case 'reports': return <ReportsModule />;
+      case 'users': return <UsersDashboard />;
+      case 'roles': return <RolesDashboard />;
+      case 'audit_logs': return <LogsDashboard />;
+    }
+  };
+
   return (
     <div className="app-layout active">
-      <div className={`sidebar-overlay ${isMobileMenuOpen ? 'active' : ''}`} onClick={() => setIsMobileMenuOpen(false)}></div>
-      
-      <aside className={`sidebar ${isSidebarCollapsed ? 'collapsed' : ''} ${isMobileMenuOpen ? 'open' : ''}`}>
+      <div className={`sidebar-overlay${isMobileMenuOpen ? ' active' : ''}`} onClick={() => setIsMobileMenuOpen(false)} />
+
+      <aside className={`sidebar${isSidebarCollapsed ? ' collapsed' : ''}${isMobileMenuOpen ? ' open' : ''}`}>
         <div className="sidebar-header">
           <div className="sidebar-logo">
             <div className="logo-icon"><Briefcase size={24} /></div>
-            {!isSidebarCollapsed && <span className="logo-text">Mr Natan</span>}
+            <span className="logo-text">Mr Natan</span>
           </div>
-          <button type="button" className="collapse-btn desktop-only" onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}>
-            {isSidebarCollapsed ? <ChevronRight size={20}/> : <ChevronLeft size={20}/>}
+          <button type="button" className="collapse-btn desktop-only" onClick={() => setIsSidebarCollapsed(v => !v)} title="Toggle sidebar">
+            {isSidebarCollapsed ? <ChevronRight size={20} /> : <ChevronLeft size={20} />}
           </button>
         </div>
-        
+
         <ul className="nav-links">
-          {/* Módulos estándar controlados por permisos */}
-          <RequirePermission permission="view_work_activity">
-            <li className={activeModule === 'workActivity' ? 'active' : ''} onClick={() => handleModuleChange('workActivity')}>
-              <Briefcase size={20}/> <span>Work Activity</span>
+          {visibleItems.map(item => (
+            <li
+              key={item.id}
+              className={activeModule === item.id ? 'active' : ''}
+              onClick={() => handleModuleChange(item.id)}
+              title={isSidebarCollapsed ? item.label : undefined}
+            >
+              {item.icon} <span>{item.label}</span>
             </li>
-          </RequirePermission>
-          
-          <RequirePermission permission="view_item_entrance">
-            <li className={activeModule === 'itemEntrance' ? 'active' : ''} onClick={() => handleModuleChange('itemEntrance')}>
-              <PackageSearch size={20}/> <span>Item Entrance</span>
-            </li>
-          </RequirePermission>
-          
-          <RequirePermission permission="view_catalogs">
-            <li className={activeModule === 'catalogs' ? 'active' : ''} onClick={() => handleModuleChange('catalogs')}>
-              <BookOpen size={20}/> <span>Catalogs</span>
-            </li>
-          </RequirePermission>
-          
-          <RequirePermission permission="view_reports">
-            <li className={activeModule === 'reports' ? 'active' : ''} onClick={() => handleModuleChange('reports')}>
-              <BarChart2 size={20}/> <span>Reports</span>
-            </li>
-          </RequirePermission>
-          
-          {/* Módulos Administrativos */}
-          <RequirePermission permission="manage_security">
-            <>
-              <li className={activeModule === 'users' ? 'active' : ''} onClick={() => handleModuleChange('users')}>
-                <UsersIcon size={20}/> <span>Account Users</span>
-              </li>
-              <li className={activeModule === 'roles' ? 'active' : ''} onClick={() => handleModuleChange('roles')}>
-                <ShieldCheck size={20}/> <span>Manage Roles</span>
-              </li>
-              <li className={activeModule === 'audit_logs' ? 'active' : ''} onClick={() => handleModuleChange('audit_logs')}>
-                <ShieldAlert size={20}/> <span>Activity History</span>
-              </li>
-            </>
-          </RequirePermission>
+          ))}
         </ul>
-        
+
         <div className="sidebar-footer">
-          <div style={{ paddingBottom: '15px', color: '#94a3b8', fontSize: '0.8rem', textAlign: 'center', display: isSidebarCollapsed ? 'none' : 'block' }}>
-            Logged in as <b>{currentUser?.username}</b>
-          </div>
+          <div className="sidebar-user">Logged in as <b>{currentUser?.username}</b></div>
           <button type="button" className="action logout-btn" onClick={logout}>
-            <LogOut size={20}/> <span>Log Out</span>
+            <LogOut size={20} /> <span>Log Out</span>
           </button>
         </div>
       </aside>
-      
+
       <div className="main-wrapper">
         <div className="mobile-header">
-          <div style={{display: 'flex', alignItems: 'center', gap: '10px'}}>
+          <div className="mobile-brand">
             <Briefcase size={24} /> <h2>Mr Natan</h2>
           </div>
-          <button type="button" className="icon-btn" style={{color: 'white'}} onClick={() => setIsMobileMenuOpen(true)}>
-            <Menu size={28}/>
+          <button type="button" className="icon-btn" onClick={() => setIsMobileMenuOpen(true)} title="Open menu">
+            <Menu size={28} />
           </button>
         </div>
 
         <main className="main-content">
-          {activeModule === 'workActivity' && <WorkActivity />}
-          {activeModule === 'itemEntrance' && <ItemEntrance />}
-          {activeModule === 'catalogs' && <CatalogsModule />}
-          {activeModule === 'reports' && <ReportsModule />}
-          {activeModule === 'users' && <UsersDashboard />}
-          {activeModule === 'roles' && <RolesDashboard />}
-          {activeModule === 'audit_logs' && <LogsDashboard />}
+          <Suspense fallback={<LoadingScreen />}>{renderModule()}</Suspense>
         </main>
       </div>
     </div>
   );
 }
 
-// Punto de entrada real
-export default function App() {
+function AuthGate() {
+  const { currentUser, isRestoring, login } = useAuth();
+  if (isRestoring) return <div className="auth-wrapper"><LoadingScreen message="Restoring session..." /></div>;
+  if (!currentUser) return <AuthScreen onDevLogin={login} />;
   return (
-    <AuthProvider>
-      <AuthConsumer />
-    </AuthProvider>
+    <DataProvider>
+      <AppShell />
+    </DataProvider>
   );
 }
 
-const AuthConsumer = () => {
-  const { currentUser, login } = useAuth();
-  return currentUser ? <AppShell /> : <AuthScreen onLoginSuccess={login} />;
-};
+export default function App() {
+  return (
+    <AuthProvider>
+      <AuthGate />
+    </AuthProvider>
+  );
+}

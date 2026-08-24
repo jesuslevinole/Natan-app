@@ -1,30 +1,51 @@
-# React + TypeScript + Vite
+# Mr Natan App
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Gestión de órdenes de trabajo, inventario por PO y reportes para mantenimiento de propiedades.
+React 18 + TypeScript + Vite + Firebase (Auth + Firestore).
 
-Currently, two official plugins are available:
+## Puesta en marcha
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react/README.md) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type aware lint rules:
-
-- Configure the top-level `parserOptions` property like this:
-
-```js
-export default {
-  // other rules...
-  parserOptions: {
-    ecmaVersion: 'latest',
-    sourceType: 'module',
-    project: ['./tsconfig.json', './tsconfig.node.json'],
-    tsconfigRootDir: __dirname,
-  },
-}
+```bash
+cp .env.example .env     # completar con las credenciales del proyecto Firebase
+npm install
+npm run dev              # desarrollo (incluye botón "Dev access" en el login)
+npm run check            # tsc + eslint (0 errores, 0 warnings)
+npm run build            # producción → dist/
 ```
 
-- Replace `plugin:@typescript-eslint/recommended` to `plugin:@typescript-eslint/recommended-type-checked` or `plugin:@typescript-eslint/strict-type-checked`
-- Optionally add `plugin:@typescript-eslint/stylistic-type-checked`
-- Install [eslint-plugin-react](https://github.com/jsx-eslint/eslint-plugin-react) and add `plugin:react/recommended` & `plugin:react/jsx-runtime` to the `extends` list
+## Módulos
+
+| Módulo | Qué hace |
+|---|---|
+| Dashboard | KPIs del día: órdenes activas, vencidas, para hoy, stock disponible, alertas de stock bajo |
+| Work Activity | Órdenes de trabajo (activas / histórico), productos consumidos por orden |
+| Item Entrance | Entradas de inventario por PO (header + productos), stock en tiempo real, historial de instalación |
+| Catalogs | Destinos (direcciones/unidades), proveedores, nombres de ítem. **Importación masiva desde Excel** y exportación |
+| Reports | Filtros combinados, KPIs, consumo por PO, log de productos instalados. **Exportación a Excel** |
+| Account Users / Roles / Activity History | Administración (permiso `manage_security`) |
+
+## Importar las direcciones del cliente
+
+1. Catalogs → Destinations → **Import**.
+2. Escribir el nombre de la propiedad (ej. `Hidden Creek Apartments`) y elegir `HIDDEN_CREEK_APARMENT.xlsx`.
+3. Revisar la vista previa (detecta duplicados y permite desmarcar filas) → **Import**.
+4. Repetir con `LAKEHURST_PARK__APARTMENT.xlsx` → `Lakehurst Park Apartments`.
+
+El importador reconoce el formato original del cliente (bloques `unidad | calle`) y también
+tablas con encabezado `Address, Property, Street, Unit` (ver `data/destinations-hidden-creek-lakehurst.csv`,
+que ya contiene las 261 direcciones normalizadas).
+
+## Arquitectura
+
+- `src/context/DataProvider.tsx` — un `onSnapshot` por colección, compartido por toda la app. Los módulos **no** hacen fetch propio.
+- `src/context/AuthProvider.tsx` — sesión persistente (`onAuthStateChanged`) + rol en tiempo real.
+- `src/components/` — componentes reutilizables, cada uno con su `.css` hermano.
+- `src/utils/` — `entrance.ts` (stock), `firestore.ts` (contadores), `excel.ts` (import/export), `helpers.tsx` (fechas, catálogos).
+- `src/index.css` — utilidades globales; `src/App.css` — layout, tablas, modales.
+
+Convenciones de código y CSS: ver `CLAUDE.md`. Historial de la revisión: `code-notes.md`.
+
+## Colecciones de Firestore
+
+`jobOrders`, `jobProducts`, `itemEntrance`, `users`, `roles`, `system_logs`, `counters`,
+`catalog_destinations`, `catalog_supply_companies`, `catalog_item_names`.

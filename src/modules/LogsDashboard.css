@@ -1,0 +1,5 @@
+.log-payload {
+  background: #0f172a; color: #e2e8f0; padding: 16px; border-radius: 10px; font-size: 0.8rem;
+  line-height: 1.5; max-height: 60vh; overflow: auto; white-space: pre-wrap; word-break: break-word;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}

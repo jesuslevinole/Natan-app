@@ -1,47 +1,53 @@
-import { useState, useEffect } from 'react';
-import { collection, onSnapshot } from 'firebase/firestore';
-import { db } from '../firebase'; 
-
-/** Obtiene dinámicamente las opciones de un catálogo desde Firestore */
-export const useCatalogOptions = (catalogId: string, displayField: string, valueField: string = displayField) => {
-  const [options, setOptions] = useState<{id: string, value: string, label: string}[]>([]);
-  
-  useEffect(() => {
-    const unsubscribe = onSnapshot(collection(db, `catalog_${catalogId}`), (snapshot) => {
-      const fetched = snapshot.docs.map(doc => {
-        const data = doc.data();
-        const labelText = data[displayField] && data[displayField] !== '-' ? data[displayField] : data[valueField];
-        return { 
-          id: doc.id, 
-          value: data[valueField] || '', 
-          label: labelText || '' 
-        };
-      });
-      fetched.sort((a, b) => a.label.localeCompare(b.label));
-      setOptions(fetched);
-    });
-    return () => unsubscribe();
-  }, [catalogId, displayField, valueField]);
-  
-  return options;
-};
+import { useState, useCallback } from 'react';
 
 /** Gestiona los campos requeridos dinámicos guardados en LocalStorage */
 export const useFormConfig = (formKey: string, defaultRequired: string[]) => {
+  const storageKey = `formConfig_${formKey}`;
   const [requiredFields, setRequiredFields] = useState<string[]>(() => {
-    const saved = localStorage.getItem(`formConfig_${formKey}`);
-    return saved ? JSON.parse(saved) : defaultRequired;
+    try {
+      const saved = localStorage.getItem(storageKey);
+      return saved ? (JSON.parse(saved) as string[]) : defaultRequired;
+    } catch {
+      return defaultRequired;
+    }
   });
 
-  const toggleRequired = (field: string) => {
-    const newRequired = requiredFields.includes(field)
-      ? requiredFields.filter(f => f !== field)
-      : [...requiredFields, field];
-    setRequiredFields(newRequired);
-    localStorage.setItem(`formConfig_${formKey}`, JSON.stringify(newRequired));
-  };
+  const toggleRequired = useCallback((field: string) => {
+    setRequiredFields(prev => {
+      const next = prev.includes(field) ? prev.filter(f => f !== field) : [...prev, field];
+      localStorage.setItem(storageKey, JSON.stringify(next));
+      return next;
+    });
+  }, [storageKey]);
 
-  const isRequired = (field: string) => requiredFields.includes(field);
+  const isRequired = useCallback((field: string) => requiredFields.includes(field), [requiredFields]);
 
   return { requiredFields, toggleRequired, isRequired };
+};
+
+/**
+ * Seguridad a nivel de campo (qué rol puede editar cada campo), persistida en LocalStorage.
+ * Antes estaba duplicada en Work Activity e Item Entrance.
+ */
+export const useFieldRoles = (storageKey: string) => {
+  const [fieldRoles, setFieldRoles] = useState<Record<string, string>>(() => {
+    try {
+      const saved = localStorage.getItem(storageKey);
+      return saved ? (JSON.parse(saved) as Record<string, string>) : {};
+    } catch {
+      return {};
+    }
+  });
+
+  const setFieldRole = useCallback((field: string, roleId: string) => {
+    setFieldRoles(prev => {
+      const next = { ...prev };
+      if (roleId) next[field] = roleId;
+      else delete next[field];
+      localStorage.setItem(storageKey, JSON.stringify(next));
+      return next;
+    });
+  }, [storageKey]);
+
+  return { fieldRoles, setFieldRole };
 };

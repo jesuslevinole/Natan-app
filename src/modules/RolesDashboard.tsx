@@ -1,157 +1,132 @@
-import React, { useState, useEffect } from 'react';
-import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc } from 'firebase/firestore';
-import { db } from '../firebase'; 
-import { ShieldCheck, Plus, Edit2, Trash2, X, Save } from 'lucide-react';
-import { Role } from '../types';
-import { SearchBar } from '../components/SharedUI';
+import { useState, useMemo, type FormEvent } from 'react';
+import { collection, addDoc, updateDoc, deleteDoc, doc } from 'firebase/firestore';
+import { db } from '../firebase';
+import { ShieldCheck, Plus, Edit2, Trash2, Save } from 'lucide-react';
+import type { Role } from '../types';
+import Modal from '../components/Modal';
+import ModuleHeader from '../components/ModuleHeader';
+import LoadingScreen from '../components/LoadingScreen';
 import { AuditLogger } from '../utils/logger';
-import { useAuth } from '../hooks/useAuth';
+import { useAuthorName } from '../hooks/useAuth';
+import { useAppData } from '../hooks/useAppData';
+import { matchesSearch } from '../utils/helpers';
+
+const SUPER_ADMIN = 'Super Admin';
 
 // Diccionario de permisos agrupados para renderizar la UI dinámicamente
 const PERMISSION_GROUPS = [
-  {
-    module: 'Work Activity',
-    permissions: [
-      { id: 'view_work_activity', label: 'View Activities' },
-      { id: 'add_work_activity', label: 'Add Activity' },
-      { id: 'edit_work_activity', label: 'Edit Activity' },
-      { id: 'delete_work_activity', label: 'Delete Activity' },
-    ]
-  },
-  {
-    module: 'Item Entrance',
-    permissions: [
-      { id: 'view_item_entrance', label: 'View Items' },
-      { id: 'add_item_entrance', label: 'Add Item' },
-      { id: 'edit_item_entrance', label: 'Edit Item' },
-      { id: 'delete_item_entrance', label: 'Delete Item' },
-    ]
-  },
-  {
-    module: 'Catalogs',
-    permissions: [
-      { id: 'view_catalogs', label: 'View Catalogs' },
-      { id: 'manage_catalogs', label: 'Add/Edit/Delete Catalogs' },
-    ]
-  },
-  {
-    module: 'System & Security',
-    permissions: [
-      { id: 'view_reports', label: 'View Reports' },
-      { id: 'manage_security', label: 'Manage Users & Roles (Admin)' },
-    ]
-  }
+  { module: 'Work Activity', permissions: [
+    { id: 'view_work_activity', label: 'View Activities' },
+    { id: 'add_work_activity', label: 'Add Activity' },
+    { id: 'edit_work_activity', label: 'Edit Activity' },
+    { id: 'delete_work_activity', label: 'Delete Activity' },
+  ] },
+  { module: 'Item Entrance', permissions: [
+    { id: 'view_item_entrance', label: 'View Items' },
+    { id: 'add_item_entrance', label: 'Add Item' },
+    { id: 'edit_item_entrance', label: 'Edit Item' },
+    { id: 'delete_item_entrance', label: 'Delete Item' },
+  ] },
+  { module: 'Catalogs', permissions: [
+    { id: 'view_catalogs', label: 'View Catalogs' },
+    { id: 'manage_catalogs', label: 'Add/Edit/Delete/Import Catalogs' },
+  ] },
+  { module: 'System & Security', permissions: [
+    { id: 'view_reports', label: 'View Reports' },
+    { id: 'manage_security', label: 'Manage Users & Roles (Admin)' },
+  ] },
 ];
 
-export const RolesDashboard: React.FC = () => {
-  const { currentUser } = useAuth();
-  const [roles, setRoles] = useState<Role[]>([]);
+export default function RolesDashboard() {
+  const authorName = useAuthorName();
+  const { roles, users, isLoading } = useAppData();
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
-  
+  const [isProcessing, setIsProcessing] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [roleName, setRoleName] = useState('');
   const [selectedPermissions, setSelectedPermissions] = useState<string[]>([]);
 
-  const fetchRoles = async () => {
-    const roleData = await getDocs(collection(db, "roles"));
-    const fetchedRoles = roleData.docs.map(doc => ({ id: doc.id, ...doc.data() } as Role));
-    setRoles(fetchedRoles);
-  };
+  const usersPerRole = useMemo(() => {
+    const m = new Map<string, number>();
+    users.forEach(u => m.set(u.roleId, (m.get(u.roleId) || 0) + 1));
+    return m;
+  }, [users]);
 
-  useEffect(() => { fetchRoles(); }, []);
+  const filteredRoles = useMemo(() => roles.filter(r => matchesSearch(searchTerm, r.name)), [roles, searchTerm]);
+  const isSuperAdmin = roleName === SUPER_ADMIN;
 
-  const handleOpenModal = (role: Role | null = null) => {
-    if (role) {
-      setEditingId(role.id);
-      setRoleName(role.name);
-      setSelectedPermissions(role.permissions || []);
-    } else {
-      setEditingId(null);
-      setRoleName('');
-      setSelectedPermissions([]);
-    }
+  const handleOpenModal = (role: Role | null) => {
+    setEditingId(role?.id ?? null);
+    setRoleName(role?.name ?? '');
+    setSelectedPermissions(role?.permissions ?? []);
     setIsModalOpen(true);
   };
 
-  const togglePermission = (permId: string) => {
-    setSelectedPermissions(prev => 
-      prev.includes(permId) ? prev.filter(p => p !== permId) : [...prev, permId]
-    );
-  };
+  const togglePermission = (permId: string) =>
+    setSelectedPermissions(prev => (prev.includes(permId) ? prev.filter(p => p !== permId) : [...prev, permId]));
 
-  const handleSaveRole = async (e: React.FormEvent) => {
+  const handleSaveRole = async (e: FormEvent) => {
     e.preventDefault();
+    setIsProcessing(true);
     try {
-      const roleData = { name: roleName, permissions: selectedPermissions };
-      
+      const roleData = { name: roleName.trim(), permissions: selectedPermissions };
       if (editingId) {
-        await updateDoc(doc(db, "roles", editingId), roleData);
-        AuditLogger.logUpdate('Roles', currentUser?.username || 'Unknown', editingId, roleData);
+        await updateDoc(doc(db, 'roles', editingId), roleData);
+        AuditLogger.logUpdate('Roles', authorName, editingId, roleData);
       } else {
-        const docRef = await addDoc(collection(db, "roles"), roleData);
-        AuditLogger.logCreate('Roles', currentUser?.username || 'Unknown', docRef.id, roleData);
+        const docRef = await addDoc(collection(db, 'roles'), roleData);
+        AuditLogger.logCreate('Roles', authorName, docRef.id, roleData);
       }
-      
-      fetchRoles();
       setIsModalOpen(false);
     } catch (error) {
-      console.error("Error saving role:", error);
-      alert("Failed to save role.");
+      console.error('Error saving role:', error);
+      alert('Failed to save role.');
+    } finally {
+      setIsProcessing(false);
     }
   };
 
-  const handleDelete = async (id: string, name: string) => {
-    if (window.confirm(`Are you sure you want to delete the role "${name}"?`)) {
-      await deleteDoc(doc(db, "roles", id));
-      AuditLogger.logDelete('Roles', currentUser?.username || 'Unknown', id, { name });
-      fetchRoles();
-    }
+  const handleDelete = async (role: Role) => {
+    const inUse = usersPerRole.get(role.id) || 0;
+    if (inUse > 0) { alert(`"${role.name}" is assigned to ${inUse} user(s). Reassign them before deleting the role.`); return; }
+    if (!window.confirm(`Are you sure you want to delete the role "${role.name}"?`)) return;
+    await deleteDoc(doc(db, 'roles', role.id));
+    AuditLogger.logDelete('Roles', authorName, role.id, { name: role.name });
   };
 
-  const filteredRoles = roles.filter(r => r.name.toLowerCase().includes(searchTerm.toLowerCase()));
+  if (isLoading) return <LoadingScreen message="Loading roles..." />;
 
   return (
-    <div className="card catalog-manager-anim" style={{ maxWidth: '1200px' }}>
-      <div className="card-header" style={{ flexWrap: 'wrap', gap: '15px' }}>
-        <div className="card-header-text" style={{ flex: 1, minWidth: '200px' }}>
-          <h2 style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><ShieldCheck size={28}/> Role Management</h2>
-          <p>Define roles and granular access permissions.</p>
-        </div>
-        <div style={{ flex: 2, display: 'flex', justifyContent: 'center', minWidth: '250px' }}>
-          <SearchBar value={searchTerm} onChange={setSearchTerm} />
-        </div>
-        <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flex: 1, justifyContent: 'flex-end', minWidth: '150px' }}>
-          <button className="action btn-primary" style={{ height: '42px', padding: '0 20px', whiteSpace: 'nowrap' }} onClick={() => handleOpenModal(null)}>
-            <Plus size={18}/> New Role
-          </button>
-        </div>
-      </div>
+    <div className="card max-1200 catalog-manager-anim">
+      <ModuleHeader
+        icon={<ShieldCheck size={28} />}
+        title="Role Management"
+        subtitle="Define roles and granular access permissions."
+        searchValue={searchTerm}
+        onSearch={setSearchTerm}
+        actions={<button type="button" className="action btn-primary btn-header" onClick={() => handleOpenModal(null)}><Plus size={18} /> New Role</button>}
+      />
 
       <div className="table-container">
         <table className="responsive-table">
           <thead>
-            <tr>
-              <th>Role Name</th>
-              <th>Permissions Count</th>
-              <th style={{ textAlign: 'center' }}>Actions</th>
-            </tr>
+            <tr><th>Role Name</th><th>Permissions</th><th className="text-center">Users</th><th className="text-center">Actions</th></tr>
           </thead>
           <tbody>
-            {filteredRoles.length === 0 && <tr><td colSpan={3} className="empty-state">No roles found.</td></tr>}
+            {filteredRoles.length === 0 && <tr><td colSpan={4} className="empty-state">No roles found.</td></tr>}
             {filteredRoles.map(role => (
-              <tr key={role.id} className="clickable-row">
-                <td data-label="Role Name" style={{ fontWeight: 'bold', color: '#1e293b' }}>{role.name}</td>
+              <tr key={role.id}>
+                <td data-label="Role Name" className="fw-bold text-dark">{role.name}</td>
                 <td data-label="Permissions">
-                  <span style={{ backgroundColor: '#f1f5f9', color: '#475569', padding: '4px 12px', borderRadius: '12px', fontSize: '0.85rem', fontWeight: 'bold' }}>
-                    {role.permissions.length} rules assigned
-                  </span>
+                  <span className="badge neutral">{role.name === SUPER_ADMIN ? 'Full access' : `${role.permissions.length} rules assigned`}</span>
                 </td>
-                <td data-label="Actions" style={{ textAlign: 'center' }}>
+                <td data-label="Users" className="text-center">{usersPerRole.get(role.id) || 0}</td>
+                <td data-label="Actions" className="cell-actions">
                   <div className="action-btns">
-                    <button className="icon-btn edit" onClick={() => handleOpenModal(role)}><Edit2 size={16}/></button>
-                    {role.name !== 'Super Admin' && (
-                       <button className="icon-btn delete" onClick={() => handleDelete(role.id, role.name)}><Trash2 size={16}/></button>
+                    <button type="button" className="icon-btn edit" onClick={() => handleOpenModal(role)} title="Edit role"><Edit2 size={16} /></button>
+                    {role.name !== SUPER_ADMIN && (
+                      <button type="button" className="icon-btn delete" onClick={() => handleDelete(role)} title="Delete role"><Trash2 size={16} /></button>
                     )}
                   </div>
                 </td>
@@ -162,58 +137,38 @@ export const RolesDashboard: React.FC = () => {
       </div>
 
       {isModalOpen && (
-        <div className="modal-overlay active">
-          <div className="modal-content modal-large" style={{ maxWidth: '800px' }}>
-            <form onSubmit={handleSaveRole}>
-              <div className="modal-header">
-                <h3>{editingId ? "Edit Role" : "Create New Role"}</h3>
-                <div style={{ display: 'flex', gap: '10px' }}>
-                  <button type="submit" className="action btn-primary"><Save size={18} style={{marginRight: '5px'}}/> Save Role</button>
-                  <button type="button" className="close-modal" onClick={() => setIsModalOpen(false)}><X size={24}/></button>
-                </div>
-              </div>
-              
-              <div className="form-group" style={{ marginBottom: '25px' }}>
-                <label>Role Name *</label>
-                <input 
-                  type="text" 
-                  required 
-                  value={roleName} 
-                  onChange={e => setRoleName(e.target.value)} 
-                  placeholder="e.g., Warehouse Manager"
-                  disabled={roleName === 'Super Admin'} // Proteger el super admin
-                />
-              </div>
-
-              <h4 style={{ borderBottom: '1px solid #e2e8f0', paddingBottom: '10px', marginBottom: '20px', color: '#334155' }}>
-                Access Permissions
-              </h4>
-              
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '20px' }}>
-                {PERMISSION_GROUPS.map(group => (
-                  <div key={group.module} style={{ backgroundColor: '#f8fafc', padding: '15px', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
-                    <h5 style={{ marginTop: 0, marginBottom: '15px', color: 'var(--primary-color)' }}>{group.module}</h5>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                      {group.permissions.map(perm => (
-                        <label key={perm.id} style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', fontSize: '0.9rem', fontWeight: 'normal' }}>
-                          <input 
-                            type="checkbox" 
-                            checked={selectedPermissions.includes(perm.id)}
-                            onChange={() => togglePermission(perm.id)}
-                            style={{ width: '18px', height: '18px', accentColor: 'var(--primary-color)' }}
-                            disabled={roleName === 'Super Admin'} // Super Admin siempre tiene todo
-                          />
-                          {perm.label}
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </form>
+        <Modal
+          size="xl"
+          title={editingId ? 'Edit Role' : 'Create New Role'}
+          onClose={() => setIsModalOpen(false)}
+          onSubmit={handleSaveRole}
+          closeDisabled={isProcessing}
+          actions={<button type="submit" className="action btn-primary" disabled={isProcessing || isSuperAdmin}><Save size={18} /> {isProcessing ? 'Saving...' : 'Save Role'}</button>}
+        >
+          <div className="form-group mb-5">
+            <label htmlFor="role-name">Role Name *</label>
+            <input id="role-name" type="text" required value={roleName} onChange={e => setRoleName(e.target.value)} placeholder="e.g., Warehouse Manager" disabled={isSuperAdmin} />
+            {isSuperAdmin && <span className="hint warn">The Super Admin role always has every permission and cannot be edited.</span>}
           </div>
-        </div>
+
+          <h4 className="subheading">Access Permissions</h4>
+          <div className="group-grid">
+            {PERMISSION_GROUPS.map(group => (
+              <fieldset key={group.module} className="group-box">
+                <h5>{group.module}</h5>
+                <div className="flex-col checkbox-list">
+                  {group.permissions.map(perm => (
+                    <label key={perm.id} className="checkbox-label">
+                      <input type="checkbox" className="checkbox-lg" checked={isSuperAdmin || selectedPermissions.includes(perm.id)} onChange={() => togglePermission(perm.id)} disabled={isSuperAdmin} />
+                      {perm.label}
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
+            ))}
+          </div>
+        </Modal>
       )}
     </div>
   );
-};
+}

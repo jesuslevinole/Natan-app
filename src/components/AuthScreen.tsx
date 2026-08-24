@@ -1,65 +1,129 @@
-import React, { useState } from 'react';
-import { Briefcase, ArrowLeft } from 'lucide-react';
+import { useState, type FormEvent } from 'react';
+import { Briefcase, ArrowLeft, ShieldAlert } from 'lucide-react';
+import { signInWithEmailAndPassword, sendPasswordResetEmail, signOut } from 'firebase/auth';
+import { FirebaseError } from 'firebase/app';
+import { auth } from '../firebase';
 import { AuditLogger } from '../utils/logger';
+import { resolveSystemUser } from '../utils/auth';
+import type { User } from '../types';
+import './AuthScreen.css';
 
-export const AuthScreen: React.FC<{ onLoginSuccess: (u: any) => void }> = ({ onLoginSuccess }) => {
+interface Props {
+  /** Solo lo usa el acceso de desarrollo; el login real lo resuelve AuthProvider vía onAuthStateChanged. */
+  onDevLogin: (user: User) => void;
+}
+
+const INVALID_CREDENTIAL_CODES = ['auth/invalid-credential', 'auth/user-not-found', 'auth/wrong-password', 'auth/invalid-email'];
+
+export default function AuthScreen({ onDevLogin }: Props) {
   const [view, setView] = useState<'login' | 'forgot'>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [message, setMessage] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
 
-  const handleLogin = async (e: React.FormEvent) => {
+  const handleLogin = async (e: FormEvent) => {
     e.preventDefault();
+    setIsLoading(true);
+    setMessage('');
     try {
-      // Simulación de respuesta de Auth (Reemplazar con Firebase Auth real)
-      const fakeUser = { uid: 'uid_123', username: email.split('@')[0], email, roleId: 'admin_role' };
-      AuditLogger.logLogin(fakeUser.username);
-      onLoginSuccess(fakeUser);
-    } catch (error: any) {
-      setMessage('Invalid credentials.');
+      const credential = await signInWithEmailAndPassword(auth, email.trim(), password);
+      const user = await resolveSystemUser(credential.user);
+      if (!user) {
+        await signOut(auth);
+        throw new Error('Access Denied: Your account has not been authorized by an Administrator.');
+      }
+      AuditLogger.logLogin(user.username);
+      // AuthProvider recibe el usuario por onAuthStateChanged; no hace falta setearlo acá.
+    } catch (error) {
+      console.error(error);
+      if (error instanceof FirebaseError && INVALID_CREDENTIAL_CODES.includes(error.code)) {
+        setMessage('Invalid email or password.');
+      } else {
+        setMessage(error instanceof Error ? error.message : 'Failed to authenticate.');
+      }
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  const handleForgot = async (e: React.FormEvent) => {
+  // ⚠️ Acceso sin credenciales para desarrollo local. Solo existe en `npm run dev`;
+  // Vite elimina este bloque del build de producción (import.meta.env.DEV = false).
+  const handleDevBypass = () => {
+    const devUser: User = {
+      uid: 'dev_admin_001',
+      username: 'Dev Admin',
+      firstName: 'Dev',
+      lastName: 'Admin',
+      email: 'dev@localhost',
+      roleId: 'admin_role',
+    };
+    onDevLogin(devUser);
+  };
+
+  const handleForgot = async (e: FormEvent) => {
     e.preventDefault();
-    setMessage(`Password reset link sent to ${email}`);
-    setTimeout(() => { setView('login'); setMessage(''); }, 3000);
+    setIsLoading(true);
+    try {
+      await sendPasswordResetEmail(auth, email.trim());
+      setMessage(`Password reset link sent to ${email}`);
+      setTimeout(() => { setView('login'); setMessage(''); }, 4000);
+    } catch {
+      setMessage('Failed to send reset link. Check your email address.');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
     <div className="auth-wrapper">
       <div className="auth-card">
-        <div className="catalog-icon" style={{ marginBottom: '15px' }}><Briefcase size={32} /></div>
+        <div className="catalog-icon auth-logo"><Briefcase size={32} /></div>
         <h2>App Mr Natan</h2>
-        
+
         {view === 'login' ? (
           <>
             <p className="subtitle">Secure System Login</p>
-            {message && <p style={{ color: '#ef4444', fontSize: '0.85rem' }}>{message}</p>}
+            {message && <p className="alert error">{message}</p>}
             <form onSubmit={handleLogin}>
-              <div className="form-group" style={{ marginBottom: '15px' }}>
-                <label>Email Address</label>
-                <input type="email" value={email} onChange={e => setEmail(e.target.value)} required />
+              <div className="form-group mb-3">
+                <label htmlFor="login-email">Email Address</label>
+                <input id="login-email" type="email" autoComplete="email" value={email} onChange={e => setEmail(e.target.value)} required disabled={isLoading} />
               </div>
               <div className="form-group">
-                <label>Password</label>
-                <input type="password" value={password} onChange={e => setPassword(e.target.value)} required />
+                <label htmlFor="login-password">Password</label>
+                <input id="login-password" type="password" autoComplete="current-password" value={password} onChange={e => setPassword(e.target.value)} required disabled={isLoading} />
               </div>
-              <button type="submit" className="auth-btn">Authenticate</button>
+              <button type="submit" className="auth-btn" disabled={isLoading}>
+                {isLoading ? 'Authenticating...' : 'Log In'}
+              </button>
             </form>
-            <p className="toggle-auth" onClick={() => { setView('forgot'); setMessage(''); }}>Forgot your password?</p>
+
+            <button type="button" className="toggle-auth" onClick={() => { setView('forgot'); setMessage(''); }}>
+              Forgot your password?
+            </button>
+
+            {import.meta.env.DEV && (
+              <div className="auth-dev-zone">
+                <button type="button" className="btn-dashed" onClick={handleDevBypass}>
+                  <ShieldAlert size={14} /> Dev access (local only)
+                </button>
+              </div>
+            )}
           </>
         ) : (
           <>
             <p className="subtitle">Reset your password</p>
-            {message && <p style={{ color: '#10b981', fontSize: '0.85rem', marginBottom: '10px', fontWeight: 'bold' }}>{message}</p>}
+            {message && <p className="alert success">{message}</p>}
             <form onSubmit={handleForgot}>
-              <div className="form-group" style={{ marginBottom: '20px' }}>
-                <label>Email Address</label>
-                <input type="email" value={email} onChange={e => setEmail(e.target.value)} required placeholder="Enter your email" />
+              <div className="form-group mb-4">
+                <label htmlFor="forgot-email">Email Address</label>
+                <input id="forgot-email" type="email" autoComplete="email" value={email} onChange={e => setEmail(e.target.value)} required placeholder="Enter your email" disabled={isLoading} />
               </div>
-              <button type="submit" className="auth-btn" style={{ marginBottom: '15px' }}>Send Reset Link</button>
-              <button type="button" className="btn-secondary" style={{ width: '100%', padding: '12px', borderRadius: '8px', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px' }} onClick={() => setView('login')}>
+              <button type="submit" className="auth-btn mb-3" disabled={isLoading}>
+                {isLoading ? 'Sending...' : 'Send Reset Link'}
+              </button>
+              <button type="button" className="btn-secondary block" onClick={() => setView('login')} disabled={isLoading}>
                 <ArrowLeft size={16} /> Back to Login
               </button>
             </form>
@@ -68,4 +132,4 @@ export const AuthScreen: React.FC<{ onLoginSuccess: (u: any) => void }> = ({ onL
       </div>
     </div>
   );
-};
+}

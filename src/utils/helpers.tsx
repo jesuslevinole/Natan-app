@@ -1,63 +1,40 @@
-import React from 'react';
 import { MapPin, Building2, Tag } from 'lucide-react';
-import { CatalogSchema } from '../types';
+import type { CatalogSchema } from '../types';
 
 /** Configuración maestra de los catálogos del sistema */
 export const catalogsConfig: Record<string, CatalogSchema> = {
   destinations: {
-    id: 'destinations', 
+    id: 'destinations',
     title: 'Destinations',
-    // Usamos React.createElement para evitar errores de compilación en utilidades
-    icon: React.createElement(MapPin, { size: 32 }),
+    icon: <MapPin size={32} />,
+    importable: true,
     fields: [
-      // Se eliminan Property Name y Contact; se conserva solo Description como requerido
-      { name: 'description', label: 'Description', type: 'text', required: true }
-    ]
+      { name: 'description', label: 'Address', type: 'text', required: true },
+      { name: 'property', label: 'Property / Complex', type: 'text' },
+      { name: 'street', label: 'Street', type: 'text', hiddenInTable: true },
+      { name: 'unit', label: 'Unit #', type: 'number', hiddenInTable: true },
+      { name: 'contact', label: 'Contact', type: 'text', hiddenInTable: true },
+    ],
   },
   supply_companies: {
-    id: 'supply_companies', 
+    id: 'supply_companies',
     title: 'Supply Companies',
-    icon: React.createElement(Building2, { size: 32 }),
+    icon: <Building2 size={32} />,
     fields: [
       { name: 'company', label: 'Company', type: 'text', required: true },
-      { name: 'address', label: 'Address', type: 'text' }
-    ]
+      { name: 'address', label: 'Address', type: 'text' },
+    ],
   },
-  // 🔥 NUEVO CATÁLOGO: Item Names
   item_names: {
     id: 'item_names',
     title: 'Item Names',
-    icon: React.createElement(Tag, { size: 32 }),
+    icon: <Tag size={32} />,
     fields: [
       { name: 'item_name', label: 'Item Name', type: 'text', required: true },
-      { name: 'category', label: 'Category / Brand', type: 'text' }
-    ]
-  }
+      { name: 'category', label: 'Category / Brand', type: 'text' },
+    ],
+  },
 };
-
-export const getStatusStyles = (status: 'YES' | 'NO' | string): React.CSSProperties => ({
-  backgroundColor: status === 'YES' ? '#edf7ed' : '#fdf0f0', 
-  color: status === 'YES' ? '#1e4620' : '#d32f2f',
-  padding: '6px 12px',
-  borderRadius: '20px',
-  fontSize: '0.75rem',
-  fontWeight: 'bold',
-  border: `1px solid ${status === 'YES' ? '#4caf50' : '#ef5350'}`,
-  display: 'inline-block',
-  boxShadow: '0 2px 4px rgba(0,0,0,0.05)'
-});
-
-export const getInventoryStatusStyles = (isAvailable: boolean): React.CSSProperties => ({
-  backgroundColor: isAvailable ? '#10b981' : '#ef4444', 
-  color: '#ffffff',
-  padding: '4px 10px',
-  borderRadius: '12px',
-  fontSize: '0.7rem',
-  fontWeight: 'bold',
-  display: 'inline-block',
-  boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-  letterSpacing: '0.5px'
-});
 
 export const getTodayString = (): string => {
   const d = new Date();
@@ -67,28 +44,35 @@ export const getTodayString = (): string => {
   return `${year}-${month}-${day}`;
 };
 
-/** Formatea las fechas dinámicas garantizando la salida en español */
-export const formatDateDisplay = (dateStr: string): string => {
+const dateFormatter = new Intl.DateTimeFormat('es-ES', { day: '2-digit', month: 'short', year: 'numeric' });
+const dateTimeFormatter = new Intl.DateTimeFormat('es-ES', {
+  day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit',
+});
+
+/** Formatea fechas (YYYY-MM-DD o ISO) en formato corto en español: "15 abr 2026". */
+export const formatDateDisplay = (dateStr?: string): string => {
   if (!dateStr) return '-';
-  try {
-    // Normalización de la cadena de entrada para prevenir desajustes de zona horaria
-    const normalizedDateStr = dateStr.includes('T') ? dateStr : `${dateStr}T12:00:00`;
-    const dateObj = new Date(normalizedDateStr);
-    
-    if (!isNaN(dateObj.getTime())) {
-      // Formato localizado en español (ej: 15 abr 2026)
-      return new Intl.DateTimeFormat('es-ES', { 
-        day: '2-digit', 
-        month: 'short', 
-        year: 'numeric' 
-      }).format(dateObj);
-    }
-    return dateStr;
-  } catch { 
-    return dateStr; 
-  }
+  // Normalización para prevenir desajustes de zona horaria en fechas sin hora.
+  const normalized = dateStr.includes('T') ? dateStr : `${dateStr}T12:00:00`;
+  const dateObj = new Date(normalized);
+  return isNaN(dateObj.getTime()) ? dateStr : dateFormatter.format(dateObj);
 };
 
-export const formatSeq = (seq?: number): string => {
-  return String(seq || 0).padStart(3, '0');
+/** Formatea un ISO string con fecha y hora: "15/04/2026, 14:30". */
+export const formatDateTimeDisplay = (isoString: string): string => {
+  const d = new Date(isoString);
+  return isNaN(d.getTime()) ? isoString : dateTimeFormatter.format(d);
+};
+
+export const formatSeq = (seq?: number): string => String(seq || 0).padStart(3, '0');
+
+/** Nombre a mostrar de un usuario: "Nombre Apellido" o el fallback (email/username). */
+export const displayName = (u: { firstName?: string; lastName?: string }, fallback: string): string =>
+  `${u.firstName || ''} ${u.lastName || ''}`.trim() || fallback;
+
+/** Búsqueda case-insensitive sobre varios campos de texto. */
+export const matchesSearch = (term: string, ...values: Array<string | number | undefined | null>): boolean => {
+  if (!term) return true;
+  const t = term.toLowerCase();
+  return values.some(v => v !== undefined && v !== null && String(v).toLowerCase().includes(t));
 };

@@ -1,0 +1,19 @@
+.kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 20px; margin-bottom: 30px; }
+.kpi-card {
+  padding: 20px; border-radius: 16px; border: 1px solid; display: flex; align-items: center; gap: 15px;
+  text-align: left; font: inherit; width: 100%;
+}
+.kpi-card.clickable { cursor: pointer; transition: transform 0.15s, box-shadow 0.15s; }
+.kpi-card.clickable:hover { transform: translateY(-2px); box-shadow: 0 8px 20px -8px rgba(0,0,0,0.15); }
+.kpi-icon { color: #fff; padding: 12px; border-radius: 12px; display: flex; flex-shrink: 0; }
+.kpi-label { margin: 0; font-size: 0.85rem; color: #64748b; font-weight: bold; text-transform: uppercase; }
+.kpi-value { margin: 0; font-size: 1.6rem; color: #1e293b; line-height: 1.2; }
+.kpi-value.small { font-size: 1.1rem; }
+.kpi-note { font-size: 0.75rem; color: #64748b; }
+
+.kpi-card.blue   { background: #eff6ff; border-color: #bfdbfe; }  .kpi-card.blue .kpi-icon   { background: #3b82f6; }
+.kpi-card.purple { background: #fdf4ff; border-color: #f5d0fe; }  .kpi-card.purple .kpi-icon { background: #d946ef; }
+.kpi-card.green  { background: #f0fdf4; border-color: #bbf7d0; }  .kpi-card.green .kpi-icon  { background: #22c55e; }
+.kpi-card.orange { background: #fff7ed; border-color: #fed7aa; }  .kpi-card.orange .kpi-icon { background: #f97316; }
+.kpi-card.red    { background: #fef2f2; border-color: #fecaca; }  .kpi-card.red .kpi-icon    { background: #ef4444; }
+.kpi-card.slate  { background: #f8fafc; border-color: #e2e8f0; }  .kpi-card.slate .kpi-icon  { background: #64748b; }

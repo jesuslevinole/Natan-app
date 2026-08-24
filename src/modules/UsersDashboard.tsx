@@ -1,348 +1,237 @@
-import React, { useState, useEffect } from 'react';
-import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc } from 'firebase/firestore';
-import { initializeApp, getApp } from 'firebase/app';
+import { useState, useMemo, useCallback, type FormEvent } from 'react';
+import { collection, addDoc, updateDoc, deleteDoc, doc } from 'firebase/firestore';
+import { initializeApp, getApp, deleteApp } from 'firebase/app';
 import { getAuth, createUserWithEmailAndPassword, sendPasswordResetEmail, signOut } from 'firebase/auth';
-import { db } from '../firebase'; 
-import { Users, Plus, Trash2, X, User as UserIcon, Edit2, ShieldAlert } from 'lucide-react';
-import { SearchBar } from '../components/SharedUI';
-import { Role, SystemUser } from '../types';
+import { db } from '../firebase';
+import { Users, Plus, Trash2, User as UserIcon, Edit2, ShieldAlert } from 'lucide-react';
+import type { SystemUser, UserStatus } from '../types';
+import Modal from '../components/Modal';
+import ModuleHeader from '../components/ModuleHeader';
+import LoadingScreen from '../components/LoadingScreen';
+import { UserStatusBadge } from '../components/StatusBadge';
 import { AuditLogger } from '../utils/logger';
-import { useAuth, RequirePermission } from '../hooks/useAuth';
-import { formatDateDisplay } from '../utils/helpers';
+import { useAuth, useAuthorName } from '../hooks/useAuth';
+import RequirePermission from '../components/RequirePermission';
+import { useAppData } from '../hooks/useAppData';
+import { formatDateDisplay, displayName, matchesSearch } from '../utils/helpers';
 
-export const UsersDashboard: React.FC = () => {
+type ModalState = 'closed' | 'add' | 'edit' | 'detail';
+
+export default function UsersDashboard() {
   const { currentUser } = useAuth();
-  
+  const authorName = useAuthorName();
+  const { roles, users, isLoading } = useAppData();
+
   const [searchTerm, setSearchTerm] = useState('');
-  const [isProcessing, setIsProcessing] = useState(false); 
-  
-  const [modalState, setModalState] = useState<'closed' | 'add' | 'edit' | 'detail'>('closed');
-  const [selectedUser, setSelectedUser] = useState<SystemUser | null>(null);
-  
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [modalState, setModalState] = useState<ModalState>('closed');
+  const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
+
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
   const [roleId, setRoleId] = useState('');
-  const [status, setStatus] = useState<'Pending' | 'Active' | string>('Pending');
-  
-  const [availableRoles, setAvailableRoles] = useState<Role[]>([]);
-  const [systemUsers, setSystemUsers] = useState<SystemUser[]>([]);
+  const [status, setStatus] = useState<UserStatus>('Pending');
 
-  const fetchData = async () => {
-    try {
-      const rolesSnap = await getDocs(collection(db, 'roles'));
-      const fetchedRoles = rolesSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Role));
-      setAvailableRoles(fetchedRoles);
+  const roleName = useCallback((id: string) => roles.find(r => r.id === id)?.name || 'Unknown Role', [roles]);
+  const selectedUser = useMemo(() => users.find(u => u.id === selectedUserId) ?? null, [users, selectedUserId]);
 
-      const usersSnap = await getDocs(collection(db, 'users'));
-      const fetchedUsers = usersSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as SystemUser));
-      
-      fetchedUsers.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-      setSystemUsers(fetchedUsers);
-    } catch (error) {
-      console.error("Error fetching users or roles:", error);
-    }
-  };
-
-  useEffect(() => {
-    fetchData();
-  }, []);
+  const sortedUsers = useMemo(
+    () => [...users]
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      .filter(u => matchesSearch(searchTerm, u.email, u.firstName, u.lastName, roleName(u.roleId))),
+    [users, searchTerm, roleName],
+  );
 
   const handleOpenAdd = () => {
-    setSelectedUser(null);
-    setFirstName('');
-    setLastName('');
-    setEmail('');
-    setRoleId('');
-    setStatus('Pending');
+    setSelectedUserId(null);
+    setFirstName(''); setLastName(''); setEmail(''); setRoleId(''); setStatus('Pending');
     setModalState('add');
   };
 
   const handleOpenEdit = (user: SystemUser) => {
-    setSelectedUser(user);
-    setFirstName(user.firstName || '');
-    setLastName(user.lastName || '');
-    setEmail(user.email);
-    setRoleId(user.roleId);
-    setStatus(user.status);
+    setSelectedUserId(user.id ?? null);
+    setFirstName(user.firstName || ''); setLastName(user.lastName || ''); setEmail(user.email);
+    setRoleId(user.roleId); setStatus(user.status);
     setModalState('edit');
   };
 
-  const handleOpenDetail = (user: SystemUser) => {
-    setSelectedUser(user);
-    setModalState('detail');
-  };
-
-  const handleSaveUser = async (e: React.FormEvent) => {
+  const handleSaveUser = async (e: FormEvent) => {
     e.preventDefault();
     setIsProcessing(true);
-    
     try {
       if (modalState === 'add') {
-        const mainApp = getApp();
-        const secondaryAppName = `SecondaryApp_${Date.now()}`;
-        const secondaryApp = initializeApp(mainApp.options, secondaryAppName);
-        const secondaryAuth = getAuth(secondaryApp);
-
-        const tempPassword = `Temp@${Math.random().toString(36).slice(-8)}!`;
-        await createUserWithEmailAndPassword(secondaryAuth, email, tempPassword);
-        await sendPasswordResetEmail(secondaryAuth, email);
-        await signOut(secondaryAuth);
-
+        const normalizedEmail = email.trim().toLowerCase();
+        if (users.some(u => u.email.toLowerCase() === normalizedEmail)) {
+          alert('A user with this email already exists.');
+          return;
+        }
+        // App secundaria para crear la cuenta sin cerrar la sesión del admin actual.
+        const secondaryApp = initializeApp(getApp().options, `SecondaryApp_${Date.now()}`);
+        try {
+          const secondaryAuth = getAuth(secondaryApp);
+          const tempPassword = `Temp@${Math.random().toString(36).slice(-8)}!`;
+          await createUserWithEmailAndPassword(secondaryAuth, normalizedEmail, tempPassword);
+          await sendPasswordResetEmail(secondaryAuth, normalizedEmail);
+          await signOut(secondaryAuth);
+        } finally {
+          await deleteApp(secondaryApp);
+        }
         const newUser: SystemUser = {
-          firstName: firstName.trim(),
-          lastName: lastName.trim(),
-          email: email.trim(),
-          roleId: roleId,
-          status: 'Pending', 
-          createdAt: new Date().toISOString()
+          firstName: firstName.trim(), lastName: lastName.trim(), email: normalizedEmail,
+          roleId, status: 'Pending', createdAt: new Date().toISOString(),
         };
-
         const docRef = await addDoc(collection(db, 'users'), newUser);
-        AuditLogger.logCreate('Account Users', currentUser?.username || 'System', docRef.id, newUser);
-        alert(`Success! An invitation email has been sent to ${email}.`);
-
+        AuditLogger.logCreate('Account Users', authorName, docRef.id, newUser);
+        alert(`Success! An invitation email has been sent to ${normalizedEmail}.`);
       } else if (modalState === 'edit' && selectedUser?.id) {
-        const updatedData = {
-          firstName: firstName.trim(),
-          lastName: lastName.trim(),
-          roleId: roleId,
-          status: status
-        };
-
+        const updatedData = { firstName: firstName.trim(), lastName: lastName.trim(), roleId, status };
         await updateDoc(doc(db, 'users', selectedUser.id), updatedData);
-        AuditLogger.logUpdate('Account Users', currentUser?.username || 'System', selectedUser.id, updatedData);
+        AuditLogger.logUpdate('Account Users', authorName, selectedUser.id, updatedData);
       }
-
       setModalState('closed');
-      fetchData();
-      
-    } catch (error: any) {
-      console.error("Error saving user:", error);
-      alert(`Error processing request: ${error.message}`);
+    } catch (error) {
+      console.error('Error saving user:', error);
+      alert(`Error processing request: ${error instanceof Error ? error.message : String(error)}`);
     } finally {
       setIsProcessing(false);
     }
   };
 
-  const handleDeleteUser = async (id: string, email: string) => {
-    if (window.confirm(`Are you sure you want to revoke access for ${email}?`)) {
-      await deleteDoc(doc(db, "users", id));
-      AuditLogger.logDelete('Account Users', currentUser?.username || 'System', id, { email });
-      fetchData();
-    }
+  const handleDeleteUser = async (user: SystemUser) => {
+    if (!user.id) return;
+    if (user.email.toLowerCase() === currentUser?.email.toLowerCase()) { alert('You cannot revoke your own access.'); return; }
+    if (!window.confirm(`Are you sure you want to revoke access for ${user.email}?`)) return;
+    await deleteDoc(doc(db, 'users', user.id));
+    AuditLogger.logDelete('Account Users', authorName, user.id, { email: user.email });
+    if (selectedUserId === user.id) setModalState('closed');
   };
 
-  const filteredUsers = systemUsers.filter(u => 
-    u.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (u.firstName && u.firstName.toLowerCase().includes(searchTerm.toLowerCase())) ||
-    (u.lastName && u.lastName.toLowerCase().includes(searchTerm.toLowerCase()))
-  );
+  if (isLoading) return <LoadingScreen message="Loading users..." />;
+
+  const modalTitle = modalState === 'add' ? 'Invite New User' : modalState === 'edit' ? 'Edit User Record' : 'User Details';
 
   return (
-    <div className="card catalog-manager-anim" style={{ maxWidth: '1400px' }}>
-      <div className="card-header" style={{ flexWrap: 'wrap', gap: '15px' }}>
-        <div className="card-header-text" style={{ flex: 1, minWidth: '200px' }}>
-          <h2 style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><Users size={28}/> Account Users</h2>
-          <p>Manage system access, roles, and invitations.</p>
-        </div>
-        <div style={{ flex: 2, display: 'flex', justifyContent: 'center', minWidth: '250px' }}>
-          <SearchBar value={searchTerm} onChange={setSearchTerm} />
-        </div>
-        <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flex: 1, justifyContent: 'flex-end', minWidth: '150px' }}>
+    <div className="card max-1400 catalog-manager-anim">
+      <ModuleHeader
+        icon={<Users size={28} />}
+        title="Account Users"
+        subtitle="Manage system access, roles, and invitations."
+        searchValue={searchTerm}
+        onSearch={setSearchTerm}
+        actions={
           <RequirePermission permission="manage_security">
-            <button className="action btn-primary" style={{ height: '42px', padding: '0 20px', whiteSpace: 'nowrap' }} onClick={handleOpenAdd}>
-              <Plus size={18}/> Invite User
-            </button>
+            <button type="button" className="action btn-primary btn-header" onClick={handleOpenAdd}><Plus size={18} /> Invite User</button>
           </RequirePermission>
-        </div>
-      </div>
-      
+        }
+      />
+
       <div className="table-container">
         <table className="responsive-table">
           <thead>
             <tr>
-              {/* 🔥 COLUMNA DE ACCIÓN EN LA PRIMERA POSICIÓN */}
-              <th style={{ textAlign: 'center', width: '90px' }}>Action</th>
+              <th className="col-actions narrow">Action</th>
               <th>Account User</th>
               <th>Assigned Role</th>
-              <th style={{ textAlign: 'center' }}>Status</th>
+              <th className="text-center">Status</th>
             </tr>
           </thead>
           <tbody>
-            {filteredUsers.length === 0 && <tr><td colSpan={4} className="empty-state">No users found.</td></tr>}
-            {filteredUsers.map(user => {
-              const roleName = availableRoles.find(r => r.id === user.roleId)?.name || 'Unknown Role';
-              const displayName = user.firstName || user.lastName 
-                ? `${user.firstName || ''} ${user.lastName || ''}`.trim() 
-                : 'No Name Set';
-              
-              return (
-                <tr key={user.id} className="clickable-row" onClick={() => handleOpenDetail(user)}>
-                  {/* 🔥 BOTONES DE ACCIÓN CON e.stopPropagation() AL INICIO */}
-                  <td data-label="Action" style={{ textAlign: 'center', verticalAlign: 'middle' }}>
-                    <div className="action-btns" style={{ display: 'flex', justifyContent: 'center', gap: '8px' }}>
-                      <RequirePermission permission="manage_security">
-                        <button 
-                          className="icon-btn edit" 
-                          onClick={(e) => { e.stopPropagation(); handleOpenEdit(user); }} 
-                          title="Edit User"
-                        >
-                          <Edit2 size={16}/>
-                        </button>
-                        <button 
-                          className="icon-btn delete" 
-                          onClick={(e) => { e.stopPropagation(); handleDeleteUser(user.id!, user.email); }} 
-                          title="Revoke Access"
-                        >
-                          <Trash2 size={16}/>
-                        </button>
-                      </RequirePermission>
+            {sortedUsers.length === 0 && <tr><td colSpan={4} className="empty-state">No users found.</td></tr>}
+            {sortedUsers.map(user => (
+              <tr key={user.id} className="clickable-row" onClick={() => { setSelectedUserId(user.id ?? null); setModalState('detail'); }}>
+                <td data-label="Action" className="cell-actions">
+                  <div className="action-btns">
+                    <RequirePermission permission="manage_security">
+                      <button type="button" className="icon-btn edit" onClick={(e) => { e.stopPropagation(); handleOpenEdit(user); }} title="Edit User"><Edit2 size={16} /></button>
+                      <button type="button" className="icon-btn delete" onClick={(e) => { e.stopPropagation(); handleDeleteUser(user); }} title="Revoke Access"><Trash2 size={16} /></button>
+                    </RequirePermission>
+                  </div>
+                </td>
+                <td data-label="User">
+                  <div className="user-cell">
+                    <div className="user-avatar"><UserIcon size={18} /></div>
+                    <div className="flex-col">
+                      <span className="user-name">{user.firstName || user.lastName ? displayName(user, '') : 'No Name Set'}</span>
+                      <span className="user-email">{user.email}</span>
                     </div>
-                  </td>
-                  <td data-label="User">
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                      <div style={{ backgroundColor: '#f1f5f9', padding: '8px', borderRadius: '50%', color: '#64748b' }}>
-                        <UserIcon size={18} />
-                      </div>
-                      <div style={{ display: 'flex', flexDirection: 'column' }}>
-                        <span style={{ fontWeight: 'bold', color: '#1e293b' }}>
-                          {displayName}
-                        </span>
-                        <span style={{ fontSize: '0.8rem', color: '#64748b' }}>{user.email}</span>
-                      </div>
-                    </div>
-                  </td>
-                  <td data-label="Role" style={{ color: '#475569', verticalAlign: 'middle' }}>
-                    {roleName}
-                  </td>
-                  <td data-label="Status" style={{ textAlign: 'center', verticalAlign: 'middle' }}>
-                    <span style={{ 
-                      backgroundColor: user.status === 'Pending' ? '#fef08a' : '#d1fae5', 
-                      color: user.status === 'Pending' ? '#ea580c' : '#16a34a', 
-                      padding: '4px 12px', 
-                      borderRadius: '12px', 
-                      fontWeight: 'bold',
-                      fontSize: '0.8rem'
-                    }}>
-                      {user.status}
-                    </span>
-                  </td>
-                </tr>
-              )
-            })}
+                  </div>
+                </td>
+                <td data-label="Role" className="text-body">{roleName(user.roleId)}</td>
+                <td data-label="Status" className="text-center"><UserStatusBadge status={user.status} /></td>
+              </tr>
+            ))}
           </tbody>
         </table>
       </div>
 
-      {modalState !== 'closed' && (
-        <div className="modal-overlay active">
-          <div className="modal-content" style={{ maxWidth: '600px' }}>
-            
-            <div className="modal-header">
-              <h3>
-                {modalState === 'add' ? 'Invite New User' : 
-                 modalState === 'edit' ? 'Edit User Record' : 'User Details'}
-              </h3>
-              <div style={{ display: 'flex', gap: '10px' }}>
-                {modalState === 'detail' && (
-                   <RequirePermission permission="manage_security">
-                     <button className="action btn-primary" onClick={() => handleOpenEdit(selectedUser!)}><Edit2 size={16}/> Edit</button>
-                   </RequirePermission>
-                )}
-                <button type="button" className="close-modal" onClick={() => setModalState('closed')} disabled={isProcessing}><X size={24}/></button>
-              </div>
+      {modalState === 'detail' && selectedUser && (
+        <Modal
+          title={modalTitle}
+          onClose={() => setModalState('closed')}
+          actions={
+            <RequirePermission permission="manage_security">
+              <button type="button" className="action btn-primary" onClick={() => handleOpenEdit(selectedUser)}><Edit2 size={16} /> Edit</button>
+            </RequirePermission>
+          }
+        >
+          <dl className="details-grid">
+            <div className="detail-item"><dt>First Name</dt><dd>{selectedUser.firstName || '-'}</dd></div>
+            <div className="detail-item"><dt>Last Name</dt><dd>{selectedUser.lastName || '-'}</dd></div>
+            <div className="detail-item"><dt>Email Address</dt><dd>{selectedUser.email}</dd></div>
+            <div className="detail-item"><dt>Role Assigned</dt><dd>{roleName(selectedUser.roleId)}</dd></div>
+            <div className="detail-item"><dt>Status</dt><dd><UserStatusBadge status={selectedUser.status} /></dd></div>
+            <div className="detail-item"><dt>Registration Date</dt><dd>{formatDateDisplay(selectedUser.createdAt)}</dd></div>
+          </dl>
+        </Modal>
+      )}
+
+      {(modalState === 'add' || modalState === 'edit') && (
+        <Modal title={modalTitle} onClose={() => setModalState('closed')} onSubmit={handleSaveUser} closeDisabled={isProcessing}>
+          <div className="form-grid two-col mb-3">
+            <div className="form-group">
+              <label htmlFor="user-first">First Name *</label>
+              <input id="user-first" type="text" required value={firstName} onChange={e => setFirstName(e.target.value)} disabled={isProcessing} placeholder="e.g. John" />
             </div>
-
-            {modalState === 'detail' && selectedUser ? (
-              <div className="details-grid">
-                <div className="detail-item"><span>First Name:</span> <p>{selectedUser.firstName || '-'}</p></div>
-                <div className="detail-item"><span>Last Name:</span> <p>{selectedUser.lastName || '-'}</p></div>
-                <div className="detail-item"><span>Email Address:</span> <p>{selectedUser.email}</p></div>
-                <div className="detail-item"><span>Role Assigned:</span> <p>{availableRoles.find(r => r.id === selectedUser.roleId)?.name || 'Unknown'}</p></div>
-                <div className="detail-item">
-                  <span>Status:</span> 
-                  <p style={{ color: selectedUser.status === 'Pending' ? '#ea580c' : '#16a34a', fontWeight: 'bold' }}>
-                    {selectedUser.status}
-                  </p>
-                </div>
-                <div className="detail-item"><span>Registration Date:</span> <p>{formatDateDisplay(selectedUser.createdAt)}</p></div>
+            <div className="form-group">
+              <label htmlFor="user-last">Last Name *</label>
+              <input id="user-last" type="text" required value={lastName} onChange={e => setLastName(e.target.value)} disabled={isProcessing} placeholder="e.g. Doe" />
+            </div>
+          </div>
+          <div className="form-group mb-3">
+            <label htmlFor="user-email">Email Address *</label>
+            <input id="user-email" type="email" required value={email} onChange={e => setEmail(e.target.value)} className={modalState === 'edit' ? 'locked' : undefined} disabled={isProcessing || modalState === 'edit'} placeholder="name@company.com" />
+            {modalState === 'add'
+              ? <span className="hint">A real email will be sent to establish their password.</span>
+              : <span className="hint warn"><ShieldAlert size={12} /> Email cannot be changed here for security reasons.</span>}
+          </div>
+          <div className="form-grid two-col mb-5">
+            <div className="form-group">
+              <label htmlFor="user-role">Assign Role *</label>
+              <select id="user-role" required value={roleId} onChange={e => setRoleId(e.target.value)} disabled={isProcessing}>
+                <option value="">Select a Role...</option>
+                {roles.map(role => <option key={role.id} value={role.id}>{role.name}</option>)}
+              </select>
+            </div>
+            {modalState === 'edit' && (
+              <div className="form-group">
+                <label htmlFor="user-status">Status</label>
+                <select id="user-status" required value={status} onChange={e => setStatus(e.target.value as UserStatus)} disabled={isProcessing}>
+                  <option value="Pending">Pending</option>
+                  <option value="Active">Active</option>
+                  <option value="Suspended">Suspended</option>
+                </select>
               </div>
-            ) : (
-              <form onSubmit={handleSaveUser}>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '15px', marginBottom: '15px' }}>
-                  <div className="form-group">
-                    <label>First Name *</label>
-                    <input 
-                      type="text" required 
-                      value={firstName} onChange={e => setFirstName(e.target.value)} 
-                      disabled={isProcessing} placeholder="e.g. John"
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label>Last Name *</label>
-                    <input 
-                      type="text" required 
-                      value={lastName} onChange={e => setLastName(e.target.value)} 
-                      disabled={isProcessing} placeholder="e.g. Doe"
-                    />
-                  </div>
-                </div>
-
-                <div className="form-group" style={{ marginBottom: '15px' }}>
-                  <label>Email Address *</label>
-                  <input 
-                    type="email" required 
-                    value={email} onChange={e => setEmail(e.target.value)} 
-                    disabled={isProcessing || modalState === 'edit'} 
-                    placeholder="name@company.com"
-                    style={{ backgroundColor: modalState === 'edit' ? '#f1f5f9' : 'white' }}
-                  />
-                  {modalState === 'add' ? (
-                     <span style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '4px' }}>
-                       A real email will be sent to establish their password.
-                     </span>
-                  ) : (
-                     <span style={{ fontSize: '0.75rem', color: '#ea580c', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                       <ShieldAlert size={12}/> Email cannot be changed here for security reasons.
-                     </span>
-                  )}
-                </div>
-
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '15px', marginBottom: '25px' }}>
-                  <div className="form-group">
-                    <label>Assign Role *</label>
-                    <select required value={roleId} onChange={e => setRoleId(e.target.value)} disabled={isProcessing}>
-                      <option value="">Select a Role...</option>
-                      {availableRoles.map(role => (
-                        <option key={role.id} value={role.id}>{role.name}</option>
-                      ))}
-                    </select>
-                  </div>
-                  
-                  {modalState === 'edit' && (
-                    <div className="form-group">
-                      <label>Status</label>
-                      <select required value={status} onChange={e => setStatus(e.target.value)} disabled={isProcessing}>
-                        <option value="Pending">Pending</option>
-                        <option value="Active">Active</option>
-                        <option value="Suspended">Suspended</option>
-                      </select>
-                    </div>
-                  )}
-                </div>
-
-                <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '20px', borderTop: '1px solid #e2e8f0', paddingTop: '20px' }}>
-                  <button type="button" className="action btn-secondary" onClick={() => setModalState('closed')} disabled={isProcessing}>Cancel</button>
-                  <button type="submit" className="action btn-primary" disabled={isProcessing}>
-                    {isProcessing ? 'Saving...' : modalState === 'add' ? 'Send Invitation' : 'Save Changes'}
-                  </button>
-                </div>
-              </form>
             )}
           </div>
-        </div>
+          <div className="form-actions">
+            <button type="button" className="action btn-secondary" onClick={() => setModalState('closed')} disabled={isProcessing}>Cancel</button>
+            <button type="submit" className="action btn-primary" disabled={isProcessing}>
+              {isProcessing ? 'Saving...' : modalState === 'add' ? 'Send Invitation' : 'Save Changes'}
+            </button>
+          </div>
+        </Modal>
       )}
     </div>
   );
-};
+}

@@ -1,484 +1,293 @@
-import React, { useState, useEffect } from 'react';
-import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, query, where, runTransaction } from 'firebase/firestore';
-import { db } from '../firebase'; 
-import { Briefcase, Plus, X, Settings, Edit2, Trash2, Lock } from 'lucide-react';
-import { JobOrder, JobProduct, ItemEntranceRecord, EntranceDetail, JobFormData, ProductFormData, Role, SystemUser } from '../types';
-import { SearchBar, FieldConfigModal, SeqBadge, SearchableSelect, DestinationSearch } from '../components/SharedUI';
-import { useFormConfig } from '../hooks/useAppHooks';
-import { getTodayString, formatDateDisplay, getStatusStyles, formatSeq } from '../utils/helpers';
+import { useState, useMemo, useCallback, type FormEvent, type MouseEvent } from 'react';
+import { collection, addDoc, updateDoc, deleteDoc, doc, writeBatch } from 'firebase/firestore';
+import { db } from '../firebase';
+import { Briefcase, Plus, Settings, Edit2, Trash2, Lock } from 'lucide-react';
+import type { JobOrder, JobProduct, JobFormData, ProductFormData, WorkFinish } from '../types';
+import Modal from '../components/Modal';
+import ModuleHeader from '../components/ModuleHeader';
+import SeqBadge from '../components/SeqBadge';
+import SearchableSelect from '../components/SearchableSelect';
+import DestinationSearch from '../components/DestinationSearch';
+import FieldSecurityModal from '../components/FieldSecurityModal';
+import LoadingScreen from '../components/LoadingScreen';
+import { WorkFinishBadge } from '../components/StatusBadge';
+import { useFormConfig, useFieldRoles } from '../hooks/useAppHooks';
+import { useAppData } from '../hooks/useAppData';
+import { getTodayString, formatDateDisplay, formatSeq, displayName, matchesSearch } from '../utils/helpers';
+import { flattenEntrances } from '../utils/entrance';
+import { nextSequence } from '../utils/firestore';
 import { AuditLogger } from '../utils/logger';
-import { useAuth, RequirePermission } from '../hooks/useAuth';
+import { useAuth, useAuthorName } from '../hooks/useAuth';
+import RequirePermission from '../components/RequirePermission';
 
-type ExtendedJobFormData = JobFormData & { madeBy?: string };
-type ExtendedJobOrder = JobOrder & { madeBy?: string };
+const JOB_FIELDS = [
+  { name: 'createdAt', label: 'Registration Date' },
+  { name: 'destination', label: 'Address' },
+  { name: 'jobOrder', label: 'Ordered by' },
+  { name: 'madeBy', label: 'Made by' },
+  { name: 'workFinish', label: 'Work Finish' },
+  { name: 'description', label: 'Description' },
+  { name: 'pendingWork', label: 'Pending Work' },
+  { name: 'schedule', label: 'Schedule' },
+];
+const PRODUCT_FIELDS = [
+  { name: 'itemEntranceId', label: 'Select Item' },
+  { name: 'quantity', label: 'Quantity' },
+];
 
-// 🔥 Tipo helper: representa un detalle "aplanado" combinado con su PO padre
-// Necesario porque el dropdown ya no muestra POs, sino productos (details) de POs.
-interface FlatDetailOption {
-  entranceId: string;       // id del doc itemEntrance (header/PO)
-  detailId: string;         // detailId del detalle dentro del PO
-  composedId: string;       // `${entranceId}::${detailId}` — id usado en SearchableSelect
-  itemName: string;
-  modelPart: string;
-  serial: string;
-  po: string;               // PO# del header (PO000, PO001, ...)
-  itemsArrived: number;     // cantidad inicial del detalle
-}
+const emptyProduct: ProductFormData = {
+  itemEntranceId: '', entranceDetailId: '', modelPart: '', serial: '', po: '', quantity: 1, itemName: '',
+};
 
-export const WorkActivity: React.FC = () => {
+export default function WorkActivityModule() {
   const { currentUser } = useAuth();
-  
-  const authorName = currentUser 
-    ? `${currentUser.firstName || ''} ${currentUser.lastName || ''}`.trim() || currentUser.username 
-    : 'Unknown User';
-  
-  const [orders, setOrders] = useState<ExtendedJobOrder[]>([]);
-  const [entranceList, setEntranceList] = useState<ItemEntranceRecord[]>([]); 
-  const [allJobProducts, setAllJobProducts] = useState<JobProduct[]>([]);
-  const [systemRoles, setSystemRoles] = useState<Role[]>([]); 
-  const [systemUsers, setSystemUsers] = useState<SystemUser[]>([]); 
+  const authorName = useAuthorName();
+  const { jobOrders, jobProducts, entrances, usage, roles, users, isLoading } = useAppData();
 
-  const [searchTerm, setSearchTerm] = useState(''); 
-  const [isJobModalOpen, setIsJobModalOpen] = useState<boolean>(false);
-  const [isProductModalOpen, setIsProductModalOpen] = useState<boolean>(false);
-  const [isJobConfigOpen, setIsJobConfigOpen] = useState<boolean>(false);
-  const [isProductConfigOpen, setIsProductConfigOpen] = useState<boolean>(false);
-  const [isProcessing, setIsProcessing] = useState<boolean>(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [showHistoric, setShowHistoric] = useState(false);
+  const [isJobModalOpen, setIsJobModalOpen] = useState(false);
+  const [isProductModalOpen, setIsProductModalOpen] = useState(false);
+  const [isJobConfigOpen, setIsJobConfigOpen] = useState(false);
+  const [isProductConfigOpen, setIsProductConfigOpen] = useState(false);
+  const [isQuickDestOpen, setIsQuickDestOpen] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
 
   const [editingJob, setEditingJob] = useState<string | null>(null);
-  const [viewingJob, setViewingJob] = useState<ExtendedJobOrder | null>(null);
-  const [viewProducts, setViewProducts] = useState<JobProduct[]>([]);
-  const [showHistoric, setShowHistoric] = useState<boolean>(false); 
-  const [isQuickDestOpen, setIsQuickDestOpen] = useState<boolean>(false);
-  const [newDestData, setNewDestData] = useState({ property_name: '', description: '', contact: '' });
+  const [viewingJobId, setViewingJobId] = useState<string | null>(null);
+  const [newDestData, setNewDestData] = useState({ description: '', property: '', contact: '' });
 
-  const jobFields = [
-    { name: 'createdAt', label: 'Registration Date' },
-    { name: 'destination', label: 'Address' },
-    { name: 'jobOrder', label: 'Ordered by' },
-    { name: 'madeBy', label: 'Made by' },
-    { name: 'workFinish', label: 'Work Finish' },
-    { name: 'description', label: 'Description' },
-    { name: 'pendingWork', label: 'Pending Work' },
-    { name: 'schedule', label: 'Schedule' }
-  ];
-  
-  const { toggleRequired: toggleJobReq, isRequired: isJobReq } = useFormConfig('jobOrder', ['createdAt', 'destination', 'jobOrder', 'madeBy', 'workFinish']);
-  
-  const [jobFieldRoles, setJobFieldRoles] = useState<Record<string, string>>({});
+  const { toggleRequired: toggleJobReq, isRequired: isJobReq } = useFormConfig(
+    'jobOrder', ['createdAt', 'destination', 'jobOrder', 'madeBy', 'workFinish'],
+  );
+  const { toggleRequired: toggleProdReq, isRequired: isProdReq } = useFormConfig('addProduct', ['itemEntranceId', 'quantity']);
+  const { fieldRoles, setFieldRole } = useFieldRoles('workActivity_jobFieldRoles');
 
-  const productFields = [
-    { name: 'itemEntranceId', label: 'Select Item' },
-    { name: 'quantity', label: 'Quantity' }
-  ];
-  const { requiredFields: reqProd, toggleRequired: toggleProdReq, isRequired: isProdReq } = useFormConfig('addProduct', ['itemEntranceId', 'quantity']);
+  const initialFormState = useMemo<JobFormData>(() => ({
+    jobOrder: authorName, madeBy: authorName, destination: '', description: '',
+    workFinish: 'NO', pendingWork: '', schedule: '', createdAt: getTodayString(),
+  }), [authorName]);
 
-  const initialFormState: ExtendedJobFormData = {
-    jobOrder: authorName, 
-    madeBy: authorName, 
-    destination: '', 
-    description: '', 
-    workFinish: 'NO', 
-    pendingWork: '', 
-    schedule: '', 
-    createdAt: getTodayString()
-  };
-  
-  const [formData, setFormData] = useState<ExtendedJobFormData>(initialFormState);
+  const [formData, setFormData] = useState<JobFormData>(initialFormState);
   const [formProducts, setFormProducts] = useState<JobProduct[]>([]);
-  
-  // 🔥 currentProduct ahora incluye entranceDetailId (campo nuevo en JobProduct)
-  const [currentProduct, setCurrentProduct] = useState<ProductFormData>({
-    itemEntranceId: '', 
-    entranceDetailId: '',
-    modelPart: '', 
-    serial: '', 
-    po: '', 
-    quantity: 1, 
-    itemName: ''
-  });
+  const [currentProduct, setCurrentProduct] = useState<ProductFormData>(emptyProduct);
+  const [selectedComposedId, setSelectedComposedId] = useState('');
 
-  // 🔥 Estado adicional: el ID compuesto usado por el SearchableSelect
-  // (no se persiste en DB; solo controla la selección visual en el dropdown).
-  const [selectedComposedId, setSelectedComposedId] = useState<string>('');
+  // La orden que se está viendo siempre sale de la lista en tiempo real (si otro usuario
+  // la edita, el modal se actualiza solo).
+  const viewingJob = useMemo(() => jobOrders.find(o => o.id === viewingJobId) ?? null, [jobOrders, viewingJobId]);
+  const viewProducts = useMemo(
+    () => (viewingJobId ? jobProducts.filter(p => p.jobOrderId === viewingJobId) : []),
+    [jobProducts, viewingJobId],
+  );
 
-  const ordersCollectionRef = collection(db, "jobOrders");
-  const productsCollectionRef = collection(db, "jobProducts");
-  const entranceCollectionRef = collection(db, "itemEntrance"); 
-
-  const fetchData = async () => {
-    try {
-      const orderData = await getDocs(ordersCollectionRef);
-      const fetchedOrders = orderData.docs.map((doc) => ({ ...doc.data(), id: doc.id } as any));
-      
-      // 🔥 Ordenamos ASCENDENTE primero (más viejo → más nuevo) para asignar visualSeq contiguo.
-      // El más viejo recibe visualSeq = 1, el siguiente = 2, etc.
-      // Esto garantiza que el display SIEMPRE sea contiguo (sin saltos ni duplicados),
-      // independientemente de si los registros antiguos tienen o no campo `seq` persistido.
-      fetchedOrders.sort((a: any, b: any) => new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime());
-
-      const mappedAsc = fetchedOrders.map((o: any, idx: number) => ({
-        ...o,
-        visualSeq: idx + 1
-      }));
-
-      // Luego invertimos para mostrar el más reciente arriba (DESC).
-      const mappedOrders = mappedAsc.slice().reverse();
-      
-      setOrders(mappedOrders as ExtendedJobOrder[]);
-
-      // 🔥 Al leer itemEntrance, normalizamos: si no tiene `details`, construimos uno
-      // a partir de los campos legacy (registros pre-migración).
-      const entranceData = await getDocs(entranceCollectionRef);
-      const normalizedEntrances = entranceData.docs.map(d => {
-        const raw = { ...d.data(), id: d.id } as any;
-        if (!Array.isArray(raw.details) || raw.details.length === 0) {
-          // Legacy: armar un detalle único usando el doc id como detailId
-          raw.details = [{
-            detailId: raw.id,
-            itemName: raw.itemName || '',
-            modelPart: raw.modelPart || '',
-            serial: raw.serial || '',
-            orderDate: raw.orderDate || '',
-            itemsArrived: raw.itemsArrived || 0,
-          } as EntranceDetail];
-        }
-        return raw as ItemEntranceRecord;
-      });
-      setEntranceList(normalizedEntrances);
-
-      const productsData = await getDocs(productsCollectionRef);
-      setAllJobProducts(productsData.docs.map(doc => ({ ...doc.data(), id: doc.id })) as JobProduct[]);
-
-      const rolesSnap = await getDocs(collection(db, 'roles'));
-      setSystemRoles(rolesSnap.docs.map(d => ({id: d.id, ...d.data()} as Role)));
-
-      const usersSnap = await getDocs(collection(db, 'users'));
-      setSystemUsers(usersSnap.docs.map(d => ({id: d.id, ...d.data()} as SystemUser)));
-
-    } catch (error) { console.error("Error", error); }
-  };
-
-  useEffect(() => { 
-    fetchData(); 
-    const savedJobFieldRoles = localStorage.getItem('workActivity_jobFieldRoles');
-    if (savedJobFieldRoles) setJobFieldRoles(JSON.parse(savedJobFieldRoles));
-  }, []);
-
-  const isJobFieldEditable = (fieldName: string) => {
+  const isJobFieldEditable = useCallback((fieldName: string) => {
     if (isProcessing) return false;
-    if (currentUser?.roleId === 'admin_role') return true; 
+    if (currentUser?.roleId === 'admin_role') return true;
+    const requiredRole = fieldRoles[fieldName];
+    return !requiredRole || currentUser?.roleId === requiredRole;
+  }, [isProcessing, currentUser, fieldRoles]);
 
-    const requiredRole = jobFieldRoles[fieldName];
-    if (requiredRole && currentUser?.roleId !== requiredRole) {
-      return false;
-    }
-    return true; 
-  };
+  const flatDetailOptions = useMemo(() => flattenEntrances(entrances), [entrances]);
 
-  // 🔥 Aplanamos todos los entrance → details a una lista de opciones para el dropdown.
-  // Cada producto del PO se vuelve una entrada seleccionable.
-  const flatDetailOptions: FlatDetailOption[] = entranceList.flatMap(entrance => {
-    const details = entrance.details || [];
-    return details.map(d => ({
-      entranceId: entrance.id,
-      detailId: d.detailId,
-      composedId: `${entrance.id}::${d.detailId}`,
-      itemName: d.itemName,
-      modelPart: d.modelPart,
-      serial: d.serial,
-      po: entrance.po || '',
-      itemsArrived: d.itemsArrived || 0,
-    }));
-  });
-
-  // 🔥 Stock disponible POR DETALLE (no por PO completo).
-  // Considera consumo histórico (DB) + consumo pendiente en el form actual.
-  const getDetailStock = (entranceId: string, detailId: string) => {
-    const option = flatDetailOptions.find(o => o.entranceId === entranceId && o.detailId === detailId);
+  // Stock por detalle = recibido - consumido en DB - consumido en el formulario actual (no guardado aún).
+  const getFormStock = useCallback((detailId: string) => {
+    const option = flatDetailOptions.find(o => o.detailId === detailId);
     if (!option) return 0;
-
-    // Consumo en DB: prefiere match exacto por entranceDetailId; fallback legacy a itemEntranceId.
-    const usedInDB = allJobProducts
-      .filter(p => {
-        if (p.entranceDetailId) return p.entranceDetailId === detailId;
-        // Legacy: si el JobProduct no tiene entranceDetailId, solo lo contamos
-        // contra el detalle si ese detalle es también legacy (detailId === entranceId).
-        return p.itemEntranceId === entranceId && detailId === entranceId;
-      })
-      .reduce((acc, p) => acc + p.quantity, 0);
-
+    const usedInDB = usage.get(detailId) || 0;
     const usedInForm = formProducts
-      .filter(p => {
-        if (p.entranceDetailId) return p.entranceDetailId === detailId;
-        return p.itemEntranceId === entranceId && detailId === entranceId;
-      })
+      .filter(p => !p.id && (p.entranceDetailId || p.itemEntranceId) === detailId)
       .reduce((acc, p) => acc + p.quantity, 0);
-
     return option.itemsArrived - usedInDB - usedInForm;
-  };
+  }, [flatDetailOptions, usage, formProducts]);
 
-  const handleViewDetails = async (job: ExtendedJobOrder) => {
-    setViewingJob(job);
-    try {
-      const q = query(productsCollectionRef, where("jobOrderId", "==", job.id));
-      const querySnapshot = await getDocs(q);
-      setViewProducts(querySnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })) as JobProduct[]);
-    } catch (error) { console.error("Error", error); }
-  };
+  const productOptions = useMemo(() => flatDetailOptions.map(opt => ({
+    id: opt.composedId,
+    label: `${opt.itemName} | Model: ${opt.modelPart || '-'} | Serial: ${opt.serial || '-'} | PO: ${opt.po || '-'} | Stock: ${getFormStock(opt.detailId)}`,
+  })), [flatDetailOptions, getFormStock]);
 
-  const handleOpenModal = async (job: ExtendedJobOrder | null = null) => {
-    setViewingJob(null); 
+  const handleOpenModal = (job: JobOrder | null) => {
+    setViewingJobId(null);
     if (job) {
-      setEditingJob(job.id!);
-      setFormData({ 
-        jobOrder: job.jobOrder, 
-        madeBy: authorName, 
-        destination: job.destination, 
-        description: job.description, 
-        workFinish: job.workFinish, 
-        pendingWork: job.pendingWork, 
-        schedule: job.schedule,
-        createdAt: job.createdAt || getTodayString()
+      setEditingJob(job.id);
+      setFormData({
+        jobOrder: job.jobOrder, madeBy: job.madeBy || authorName, destination: job.destination,
+        description: job.description, workFinish: job.workFinish, pendingWork: job.pendingWork,
+        schedule: job.schedule, createdAt: job.createdAt || getTodayString(),
       });
-      const q = query(productsCollectionRef, where("jobOrderId", "==", job.id));
-      const querySnapshot = await getDocs(q);
-      setFormProducts(querySnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })) as JobProduct[]);
+      setFormProducts(jobProducts.filter(p => p.jobOrderId === job.id));
     } else {
       setEditingJob(null);
-      setFormData({ ...initialFormState, jobOrder: authorName, madeBy: authorName, createdAt: getTodayString() });
+      setFormData(initialFormState);
       setFormProducts([]);
     }
     setIsJobModalOpen(true);
   };
 
-  const handleDelete = async (id: string, e?: React.MouseEvent) => {
-    if (e) e.stopPropagation();
-    if (window.confirm("⚠️ Delete record?")) {
-      const orderToDelete = orders.find(o => o.id === id);
-      await deleteDoc(doc(db, "jobOrders", id));
-      AuditLogger.logDelete('WorkActivity', authorName, id, orderToDelete);
-      setViewingJob(null);
-      fetchData(); 
+  const handleDelete = async (job: JobOrder, e?: MouseEvent) => {
+    e?.stopPropagation();
+    if (!window.confirm(`Delete order #${formatSeq(job.visualSeq)} (${job.destination})? Its products will be returned to stock.`)) return;
+    try {
+      // Borramos también los productos asociados: si quedaran huérfanos seguirían
+      // descontando stock de un trabajo que ya no existe.
+      const batch = writeBatch(db);
+      batch.delete(doc(db, 'jobOrders', job.id));
+      jobProducts.filter(p => p.jobOrderId === job.id && p.id).forEach(p => batch.delete(doc(db, 'jobProducts', p.id!)));
+      await batch.commit();
+      AuditLogger.logDelete('WorkActivity', authorName, job.id, job);
+      setViewingJobId(null);
+    } catch (error) {
+      console.error('Error deleting order', error);
+      alert('Error deleting the record.');
     }
   };
 
-  const handleSaveOrder = async (e: React.FormEvent<HTMLFormElement>) => {
+  const handleSaveOrder = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setIsProcessing(true);
     try {
       let savedJobId = editingJob;
-      
       if (editingJob) {
-        await updateDoc(doc(db, "jobOrders", editingJob), { ...formData });
+        await updateDoc(doc(db, 'jobOrders', editingJob), { ...formData });
         AuditLogger.logUpdate('WorkActivity', authorName, editingJob, formData);
       } else {
-        const counterRef = doc(db, 'counters', 'jobOrdersSeq');
-        const nextSeq = await runTransaction(db, async (transaction) => {
-          const counterDoc = await transaction.get(counterRef);
-          let newSeq = 1;
-          if (counterDoc.exists()) {
-            newSeq = (counterDoc.data().value || 0) + 1;
-            transaction.update(counterRef, { value: newSeq });
-          } else {
-            transaction.set(counterRef, { value: 1 });
-          }
-          return newSeq;
-        });
-
-        const docRef = await addDoc(ordersCollectionRef, { 
-          ...formData, 
-          createdBy: authorName, 
-          seq: nextSeq 
-        });
+        const seq = await nextSequence('jobOrdersSeq');
+        const docRef = await addDoc(collection(db, 'jobOrders'), { ...formData, createdBy: authorName, seq });
         savedJobId = docRef.id;
         AuditLogger.logCreate('WorkActivity', authorName, docRef.id, formData);
       }
-      
-      for (const product of formProducts) {
-        if (!product.id && savedJobId) {
-          // 🔥 Persistimos entranceDetailId para que el stock se descuente del detalle correcto.
-          await addDoc(productsCollectionRef, { ...product, jobOrderId: savedJobId });
+      const pending = formProducts.filter(p => !p.id);
+      if (pending.length && savedJobId) {
+        const batch = writeBatch(db);
+        for (const product of pending) {
+          batch.set(doc(collection(db, 'jobProducts')), { ...product, jobOrderId: savedJobId });
         }
+        await batch.commit();
       }
-      
-      await fetchData(); 
       setIsJobModalOpen(false);
-    } catch (error) { 
-      console.error("Error", error); 
-      alert("Error al guardar el registro.");
+    } catch (error) {
+      console.error('Error saving order', error);
+      alert('Error saving the record.');
     } finally {
       setIsProcessing(false);
     }
   };
 
-  const handleSaveQuickDestination = async (e: React.FormEvent) => {
+  const handleSaveQuickDestination = async (e: FormEvent) => {
     e.preventDefault();
     try {
-      const destSnap = await getDocs(collection(db, 'catalog_destinations'));
-      let maxSeq = 0;
-      destSnap.forEach(d => {
-        const data = d.data();
-        if (data.seq > maxSeq) maxSeq = data.seq;
-      });
-
-      const docRef = await addDoc(collection(db, 'catalog_destinations'), {
-        ...newDestData,
-        seq: maxSeq + 1,
-        createdAt: new Date().toISOString()
-      });
-      
-      AuditLogger.logCreate('Catalogs (Destinations)', authorName, docRef.id, newDestData);
-      
-      setFormData({ ...formData, destination: newDestData.property_name });
+      const seq = await nextSequence('seq_catalog_destinations');
+      const payload = { ...newDestData, seq, createdAt: new Date().toISOString() };
+      const docRef = await addDoc(collection(db, 'catalog_destinations'), payload);
+      AuditLogger.logCreate('Catalogs (Destinations)', authorName, docRef.id, payload);
+      // El campo `destination` de la orden guarda la dirección (description), igual que el buscador.
+      setFormData(prev => ({ ...prev, destination: newDestData.description }));
       setIsQuickDestOpen(false);
-      setNewDestData({ property_name: '', description: '', contact: '' });
+      setNewDestData({ description: '', property: '', contact: '' });
     } catch (error) {
-      console.error("Error adding quick destination", error);
-      alert("Error adding destination");
+      console.error('Error adding quick destination', error);
+      alert('Error adding destination');
     }
   };
 
-  // 🔥 Al seleccionar una opción del dropdown, parseamos el composedId y poblamos
-  // currentProduct con todos los campos derivados (header + detalle).
-  const handleItemEntranceSelection = (composedId: string) => {
+  const handleItemSelection = (composedId: string) => {
     setSelectedComposedId(composedId);
-
-    if (!composedId) {
-      setCurrentProduct({ 
-        itemEntranceId: '', 
-        entranceDetailId: '',
-        itemName: '', 
-        modelPart: '', 
-        serial: '', 
-        po: '', 
-        quantity: 1 
-      });
-      return;
-    }
-
     const option = flatDetailOptions.find(o => o.composedId === composedId);
-    if (!option) return;
-
-    const stock = getDetailStock(option.entranceId, option.detailId);
-    setCurrentProduct({ 
-      itemEntranceId: option.entranceId,
-      entranceDetailId: option.detailId,
-      itemName: option.itemName, 
-      modelPart: option.modelPart, 
-      serial: option.serial, 
-      po: option.po,
-      quantity: stock > 0 ? 1 : 0
+    if (!option) { setCurrentProduct(emptyProduct); return; }
+    const stock = getFormStock(option.detailId);
+    setCurrentProduct({
+      itemEntranceId: option.entranceId, entranceDetailId: option.detailId, itemName: option.itemName,
+      modelPart: option.modelPart, serial: option.serial, po: option.po, quantity: stock > 0 ? 1 : 0,
     });
   };
 
-  const handleAddProductSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+  const currentSelectionStock = currentProduct.entranceDetailId ? getFormStock(currentProduct.entranceDetailId) : 0;
+  const quantityDisabled = !currentProduct.entranceDetailId || currentSelectionStock <= 0;
+
+  const handleAddProductSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-
-    if (!currentProduct.itemEntranceId || !currentProduct.entranceDetailId) {
-      alert("Please select a product first.");
+    if (!currentProduct.itemEntranceId || !currentProduct.entranceDetailId) { alert('Please select a product first.'); return; }
+    if (currentSelectionStock <= 0 || currentProduct.quantity > currentSelectionStock) {
+      alert('There is no stock of this product. Please update the stock.');
       return;
     }
-
-    const availableStock = getDetailStock(currentProduct.itemEntranceId, currentProduct.entranceDetailId);
-    if (availableStock <= 0 || currentProduct.quantity > availableStock) {
-      alert("There is no stock of this product. Please update the stock.");
-      return;
-    }
-
-    if (viewingJob) {
-      const docRef = await addDoc(productsCollectionRef, { ...currentProduct, jobOrderId: viewingJob.id });
-      setViewProducts([...viewProducts, { ...currentProduct, id: docRef.id, jobOrderId: viewingJob.id }]);
-      AuditLogger.logUpdate('WorkActivity Products', authorName, viewingJob.id, { addedProduct: currentProduct });
-      fetchData();
-    } else {
-      setFormProducts([...formProducts, { ...currentProduct, jobOrderId: 'pending' }]); 
-    }
-    setCurrentProduct({ 
-      itemEntranceId: '', 
-      entranceDetailId: '',
-      modelPart: '', 
-      serial: '', 
-      po: '', 
-      quantity: 1, 
-      itemName: '' 
-    });
-    setSelectedComposedId('');
-    setIsProductModalOpen(false);
-  };
-
-  const handleRemoveProductFromDetails = async (productId: string, e?: React.MouseEvent) => {
-    if (e) e.stopPropagation();
-    if(window.confirm("Delete product?")) {
-      const prodToDelete = viewProducts.find(p => p.id === productId);
-      await deleteDoc(doc(db, "jobProducts", productId));
-      
+    try {
       if (viewingJob) {
-        AuditLogger.logUpdate('WorkActivity Products', authorName, viewingJob.id, { removedProduct: prodToDelete });
+        await addDoc(collection(db, 'jobProducts'), { ...currentProduct, jobOrderId: viewingJob.id });
+        AuditLogger.logUpdate('WorkActivity Products', authorName, viewingJob.id, { addedProduct: currentProduct });
+      } else {
+        setFormProducts(prev => [...prev, { ...currentProduct, jobOrderId: 'pending' }]);
       }
-      
-      setViewProducts(viewProducts.filter(p => p.id !== productId));
-      fetchData(); 
+      setCurrentProduct(emptyProduct);
+      setSelectedComposedId('');
+      setIsProductModalOpen(false);
+    } catch (error) {
+      console.error('Error adding product', error);
+      alert('Error adding the product.');
     }
   };
 
-  const handleRemoveProductFromForm = (index: number, e?: React.MouseEvent) => {
-    if (e) e.stopPropagation();
-    setFormProducts(formProducts.filter((_, i) => i !== index));
+  const handleRemoveProductFromDetails = async (product: JobProduct) => {
+    if (!product.id || !window.confirm(`Remove ${product.itemName} from this order?`)) return;
+    await deleteDoc(doc(db, 'jobProducts', product.id));
+    if (viewingJob) AuditLogger.logUpdate('WorkActivity Products', authorName, viewingJob.id, { removedProduct: product });
   };
 
-  const displayedOrders = (showHistoric 
-    ? orders.filter(o => o.workFinish === 'YES') 
-    : orders.filter(o => o.workFinish === 'NO')
-  ).filter(order => {
-    const searchLower = searchTerm.toLowerCase();
-    return (
-      String(order.jobOrder || '').toLowerCase().includes(searchLower) ||
-      String(order.madeBy || '').toLowerCase().includes(searchLower) ||
-      String(order.destination || '').toLowerCase().includes(searchLower) ||
-      String(order.description || '').toLowerCase().includes(searchLower) ||
-      String(order.pendingWork || '').toLowerCase().includes(searchLower) ||
-      formatDateDisplay(order.createdAt).includes(searchLower) ||
-      formatDateDisplay(order.schedule).includes(searchLower)
-    );
-  });
+  const handleRemoveProductFromForm = async (index: number) => {
+    const product = formProducts[index];
+    if (product.id) {
+      // Producto ya persistido en una orden existente: se borra de la DB.
+      if (!window.confirm(`Remove ${product.itemName} from this order?`)) return;
+      await deleteDoc(doc(db, 'jobProducts', product.id));
+      if (editingJob) AuditLogger.logUpdate('WorkActivity Products', authorName, editingJob, { removedProduct: product });
+    }
+    setFormProducts(prev => prev.filter((_, i) => i !== index));
+  };
 
-  // 🔥 Stock disponible actualmente seleccionado (helper para el JSX del modal de producto).
-  const currentSelectionStock = (currentProduct.itemEntranceId && currentProduct.entranceDetailId)
-    ? getDetailStock(currentProduct.itemEntranceId, currentProduct.entranceDetailId)
-    : 0;
+  const displayedOrders = useMemo(() => {
+    const target: WorkFinish = showHistoric ? 'YES' : 'NO';
+    return jobOrders
+      .filter(o => o.workFinish === target)
+      .filter(o => matchesSearch(
+        searchTerm, o.jobOrder, o.madeBy, o.destination, o.description, o.pendingWork,
+        formatDateDisplay(o.createdAt), formatDateDisplay(o.schedule),
+      ));
+  }, [jobOrders, showHistoric, searchTerm]);
+
+  const lockHint = (field: string) => !isJobFieldEditable(field) && <span className="lock-hint"><Lock size={12} /> Locked</span>;
+  const inputCls = (field: string) => (isJobFieldEditable(field) ? undefined : 'locked');
+
+  if (isLoading) return <LoadingScreen message="Loading work activity..." />;
 
   return (
     <div className="card">
-      <div className="card-header" style={{ flexWrap: 'wrap', gap: '15px' }}>
-        <div className="card-header-text" style={{ flex: 1, minWidth: '200px' }}>
-          <h2 style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Briefcase size={24}/> {showHistoric ? 'Historic Records' : 'Work Activity'}
-          </h2>
-          <p>{showHistoric ? 'Completed orders' : 'Active job orders'}</p>
-        </div>
-        <div style={{ flex: 2, display: 'flex', justifyContent: 'center', minWidth: '250px' }}>
-          <SearchBar value={searchTerm} onChange={setSearchTerm} />
-        </div>
-        <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flex: 1, justifyContent: 'flex-end', minWidth: '200px' }}>
-          <button className="action btn-primary" style={{ backgroundColor: showHistoric ? '#64748b' : 'var(--primary-color)', height: '42px', padding: '0 20px', whiteSpace: 'nowrap' }} onClick={() => setShowHistoric(!showHistoric)}>
-            {showHistoric ? 'View Active' : 'Record'}
-          </button>
-          
-          <RequirePermission permission="add_work_activity">
-            {!showHistoric && (
-              <button className="action btn-primary" style={{ height: '42px', padding: '0 20px', whiteSpace: 'nowrap' }} onClick={() => handleOpenModal(null)}>
-                <Plus size={18}/> New Order
-              </button>
-            )}
-          </RequirePermission>
-        </div>
-      </div>
+      <ModuleHeader
+        icon={<Briefcase size={24} />}
+        title={showHistoric ? 'Historic Records' : 'Work Activity'}
+        subtitle={showHistoric ? 'Completed orders' : 'Active job orders'}
+        searchValue={searchTerm}
+        onSearch={setSearchTerm}
+        actions={
+          <>
+            <button type="button" className={`action btn-primary btn-header${showHistoric ? ' muted' : ''}`} onClick={() => setShowHistoric(v => !v)}>
+              {showHistoric ? 'View Active' : 'Record'}
+            </button>
+            <RequirePermission permission="add_work_activity">
+              {!showHistoric && (
+                <button type="button" className="action btn-primary btn-header" onClick={() => handleOpenModal(null)}>
+                  <Plus size={18} /> New Order
+                </button>
+              )}
+            </RequirePermission>
+          </>
+        }
+      />
+
       <div className="table-container">
         <table className="responsive-table">
           <thead>
             <tr>
-              <th style={{ textAlign: 'center', width: '100px' }}>Actions</th>
+              <th className="col-actions">Actions</th>
               <th className="col-seq">#</th>
               <th>Registration Date</th>
               <th>Schedule</th>
@@ -486,236 +295,149 @@ export const WorkActivity: React.FC = () => {
               <th>Made by</th>
               <th>Address</th>
               <th>Description</th>
-              <th style={{ textAlign: 'center' }}>Work Finish</th>
+              <th className="text-center">Work Finish</th>
               <th>Pending Work</th>
             </tr>
           </thead>
           <tbody>
             {displayedOrders.length === 0 && <tr><td colSpan={10} className="empty-state">No records found.</td></tr>}
-            {displayedOrders.map(order => {
-              return (
-                <tr key={order.id} className="clickable-row" onClick={() => handleViewDetails(order)}>
-                  <td data-label="Actions" style={{ textAlign: 'center' }}>
-                    <div className="action-btns" style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
-                      <RequirePermission permission="edit_work_activity">
-                        <button 
-                          type="button" 
-                          className="icon-btn edit" 
-                          onClick={(e) => { e.stopPropagation(); handleOpenModal(order); }} 
-                          title="Edit Order"
-                        >
-                          <Edit2 size={16}/>
-                        </button>
-                      </RequirePermission>
-                      <RequirePermission permission="delete_work_activity">
-                        <button 
-                          type="button" 
-                          className="icon-btn delete" 
-                          onClick={(e) => { e.stopPropagation(); handleDelete(order.id!, e); }} 
-                          title="Delete Order"
-                        >
-                          <Trash2 size={16}/>
-                        </button>
-                      </RequirePermission>
-                    </div>
-                  </td>
-                  <td data-label="#" className="col-seq"><SeqBadge seq={order.visualSeq} /></td>
-                  <td data-label="Registration Date">{formatDateDisplay(order.createdAt)}</td>
-                  <td data-label="Schedule" style={{ fontWeight: 'bold', color: 'var(--primary-color)' }}>{formatDateDisplay(order.schedule)}</td>
-                  <td data-label="Ordered by" style={{ fontWeight: 'bold' }}>{order.jobOrder}</td>
-                  <td data-label="Made by" style={{ fontWeight: 'bold', color: '#3b82f6' }}>{order.madeBy || 'Unassigned'}</td>
-                  <td data-label="Address">{order.destination}</td>
-                  <td data-label="Description">{order.description}</td>
-                  <td data-label="Status" style={{ textAlign: 'center' }}><span style={getStatusStyles(order.workFinish)}>{order.workFinish}</span></td>
-                  <td data-label="Pending Work">{order.pendingWork || '-'}</td>
-                </tr>
-              )
-            })}
+            {displayedOrders.map(order => (
+              <tr key={order.id} className="clickable-row" onClick={() => setViewingJobId(order.id)}>
+                <td data-label="Actions" className="cell-actions">
+                  <div className="action-btns">
+                    <RequirePermission permission="edit_work_activity">
+                      <button type="button" className="icon-btn edit" onClick={(e) => { e.stopPropagation(); handleOpenModal(order); }} title="Edit Order">
+                        <Edit2 size={16} />
+                      </button>
+                    </RequirePermission>
+                    <RequirePermission permission="delete_work_activity">
+                      <button type="button" className="icon-btn delete" onClick={(e) => handleDelete(order, e)} title="Delete Order">
+                        <Trash2 size={16} />
+                      </button>
+                    </RequirePermission>
+                  </div>
+                </td>
+                <td data-label="#" className="col-seq"><SeqBadge seq={order.visualSeq} /></td>
+                <td data-label="Registration Date">{formatDateDisplay(order.createdAt)}</td>
+                <td data-label="Schedule" className="fw-bold text-primary">{formatDateDisplay(order.schedule)}</td>
+                <td data-label="Ordered by" className="fw-bold">{order.jobOrder}</td>
+                <td data-label="Made by" className="fw-bold text-accent">{order.madeBy || 'Unassigned'}</td>
+                <td data-label="Address">{order.destination}</td>
+                <td data-label="Description">{order.description}</td>
+                <td data-label="Status" className="text-center"><WorkFinishBadge value={order.workFinish} /></td>
+                <td data-label="Pending Work">{order.pendingWork || '-'}</td>
+              </tr>
+            ))}
           </tbody>
         </table>
       </div>
 
-      <FieldConfigModal isOpen={isProductConfigOpen} onClose={() => setIsProductConfigOpen(false)} fields={productFields} requiredFields={reqProd} toggleRequired={toggleProdReq} />
-
-      {isJobConfigOpen && (
-        <div className="modal-overlay active" style={{ zIndex: 2000 }}>
-          <div className="modal-content modal-large" style={{ maxWidth: '650px' }}>
-            <div className="modal-header">
-              <h3 style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><Settings size={20}/> Form Security & Fields</h3>
-              <button type="button" className="close-modal" onClick={() => setIsJobConfigOpen(false)}><X size={24}/></button>
-            </div>
-            <div style={{ padding: '15px 0' }}>
-              <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '15px' }}>
-                Set which fields are mandatory and configure Field-Level Security (which Role is allowed to edit each field).
-              </p>
-              <div className="table-container">
-                <table className="responsive-table">
-                  <thead>
-                    <tr>
-                      <th>Field Name</th>
-                      <th style={{ textAlign: 'center' }}>Required</th>
-                      <th>Allowed Role (Edit Access)</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {jobFields.map(f => (
-                      <tr key={f.name}>
-                        <td style={{ fontWeight: 'bold', color: '#334155' }}>{f.label}</td>
-                        <td style={{ textAlign: 'center' }}>
-                          <input 
-                            type="checkbox" 
-                            checked={isJobReq(f.name)} 
-                            onChange={() => toggleJobReq(f.name)} 
-                            style={{ width: '18px', height: '18px', accentColor: 'var(--primary-color)', cursor: 'pointer' }}
-                          />
-                        </td>
-                        <td>
-                          <select 
-                            value={jobFieldRoles[f.name] || ''} 
-                            onChange={e => {
-                              const updated = { ...jobFieldRoles, [f.name]: e.target.value };
-                              if (!e.target.value) delete updated[f.name];
-                              setJobFieldRoles(updated);
-                              localStorage.setItem('workActivity_jobFieldRoles', JSON.stringify(updated));
-                            }}
-                            style={{ width: '100%', padding: '6px', borderRadius: '6px', border: '1px solid #cbd5e1' }}
-                          >
-                            <option value="">All Roles (Unrestricted)</option>
-                            {systemRoles.map(r => (
-                              <option key={r.id} value={r.id}>{r.name}</option>
-                            ))}
-                          </select>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-            <div className="btn-container" style={{ marginTop: '20px' }}>
-              <button type="button" className="action btn-primary" onClick={() => setIsJobConfigOpen(false)} style={{ width: '100%' }}>Done</button>
-            </div>
-          </div>
-        </div>
-      )}
+      <FieldSecurityModal
+        isOpen={isProductConfigOpen}
+        onClose={() => setIsProductConfigOpen(false)}
+        title="Required Fields"
+        groups={[{ fields: PRODUCT_FIELDS, isRequired: isProdReq, toggleRequired: toggleProdReq }]}
+      />
+      <FieldSecurityModal
+        isOpen={isJobConfigOpen}
+        onClose={() => setIsJobConfigOpen(false)}
+        roles={roles}
+        groups={[{ fields: JOB_FIELDS, isRequired: isJobReq, toggleRequired: toggleJobReq, fieldRoles, setFieldRole }]}
+      />
 
       {viewingJob && (
-        <div className="modal-overlay active">
-          <div className="modal-content modal-large">
-            <div className="modal-header">
-              <h3 style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <SeqBadge seq={viewingJob.visualSeq} /> Order Details
-              </h3>
-              <div style={{ display: 'flex', gap: '10px' }}>
-                <RequirePermission permission="edit_work_activity">
-                  <button className="action btn-primary" onClick={() => handleOpenModal(viewingJob)}><Edit2 size={16}/> Edit</button>
-                </RequirePermission>
-                <RequirePermission permission="delete_work_activity">
-                  <button className="action btn-danger" onClick={(e) => handleDelete(viewingJob.id!, e)}><Trash2 size={16}/> Delete</button>
-                </RequirePermission>
-                <button className="close-modal" onClick={() => setViewingJob(null)}><X size={24}/></button>
-              </div>
-            </div>
-            
-            <div className="details-grid">
-              <div className="detail-item"><span>Registration Date:</span> <p>{formatDateDisplay(viewingJob.createdAt)}</p></div>
-              <div className="detail-item"><span>Address:</span> <p>{viewingJob.destination}</p></div>
-              <div className="detail-item"><span>Ordered by:</span> <p>{viewingJob.jobOrder}</p></div>
-              <div className="detail-item"><span>Made by:</span> <p style={{ fontWeight: 'bold', color: '#3b82f6' }}>{viewingJob.madeBy || 'Unassigned'}</p></div>
-              <div className="detail-item"><span>Schedule:</span> <p>{formatDateDisplay(viewingJob.schedule)}</p></div>
-              <div className="detail-item"><span>Status:</span> <p><span style={getStatusStyles(viewingJob.workFinish)}>{viewingJob.workFinish}</span></p></div>
-              <div className="detail-item"><span>Pending Work:</span> <p>{viewingJob.pendingWork || '-'}</p></div>
-              <div className="detail-item full-width"><span>Description:</span> <p>{viewingJob.description}</p></div>
-            </div>
-            
-            <div className="products-section">
-              <div className="products-header">
-                <h4 style={{ margin: 0 }}>Associated Products / Materials</h4>
-                <RequirePermission permission="edit_work_activity">
-                  <button type="button" className="action btn-secondary btn-sm" onClick={() => setIsProductModalOpen(true)}><Plus size={16}/> Add Product</button>
-                </RequirePermission>
-              </div>
-              <div className="table-container large-table">
-                <table className="responsive-table">
-                  <thead>
-                    <tr>
-                      <th style={{ textAlign: 'center', width: '80px' }}>Action</th>
-                      <th>#</th>
-                      <th>Item Name</th>
-                      <th>Model</th>
-                      <th>Serial</th>
-                      <th>PO #</th>
-                      <th>Qty</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {viewProducts.length === 0 && <tr><td colSpan={7} className="empty-state">No products attached.</td></tr>}
-                    {viewProducts.map((p, i) => (
-                      <tr key={p.id}>
-                        <td data-label="Action" style={{ textAlign: 'center' }}>
-                          <RequirePermission permission="edit_work_activity">
-                            <button type="button" className="btn-text-danger" onClick={(e) => handleRemoveProductFromDetails(p.id!, e)}>Remove</button>
-                          </RequirePermission>
-                        </td>
-                        <td data-label="#">{formatSeq(i + 1)}</td>
-                        <td data-label="Item">{p.itemName}</td>
-                        <td data-label="Model">{p.modelPart}</td>
-                        <td data-label="Serial">{p.serial || '-'}</td>
-                        <td data-label="PO" style={{ fontWeight: 'bold', color: 'var(--primary-color)' }}>{p.po || '-'}</td>
-                        <td data-label="Qty">{p.quantity}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
+        <Modal
+          size="large"
+          title={<span className="flex-row-md"><SeqBadge seq={viewingJob.visualSeq} /> Order Details</span>}
+          onClose={() => setViewingJobId(null)}
+          actions={
+            <>
+              <RequirePermission permission="edit_work_activity">
+                <button type="button" className="action btn-primary" onClick={() => handleOpenModal(viewingJob)}><Edit2 size={16} /> Edit</button>
+              </RequirePermission>
+              <RequirePermission permission="delete_work_activity">
+                <button type="button" className="action btn-danger" onClick={(e) => handleDelete(viewingJob, e)}><Trash2 size={16} /> Delete</button>
+              </RequirePermission>
+            </>
+          }
+        >
+          <dl className="details-grid">
+            <div className="detail-item"><dt>Registration Date</dt><dd>{formatDateDisplay(viewingJob.createdAt)}</dd></div>
+            <div className="detail-item"><dt>Address</dt><dd>{viewingJob.destination}</dd></div>
+            <div className="detail-item"><dt>Ordered by</dt><dd>{viewingJob.jobOrder}</dd></div>
+            <div className="detail-item"><dt>Made by</dt><dd className="fw-bold text-accent">{viewingJob.madeBy || 'Unassigned'}</dd></div>
+            <div className="detail-item"><dt>Schedule</dt><dd>{formatDateDisplay(viewingJob.schedule)}</dd></div>
+            <div className="detail-item"><dt>Status</dt><dd><WorkFinishBadge value={viewingJob.workFinish} /></dd></div>
+            <div className="detail-item"><dt>Pending Work</dt><dd>{viewingJob.pendingWork || '-'}</dd></div>
+            <div className="detail-item full-width"><dt>Description</dt><dd>{viewingJob.description}</dd></div>
+          </dl>
 
+          <div className="products-section">
+            <div className="products-header">
+              <h4>Associated Products / Materials</h4>
+              <RequirePermission permission="edit_work_activity">
+                <button type="button" className="action btn-secondary btn-sm" onClick={() => setIsProductModalOpen(true)}><Plus size={16} /> Add Product</button>
+              </RequirePermission>
+            </div>
+            <div className="table-container">
+              <table className="responsive-table">
+                <thead>
+                  <tr>
+                    <th className="col-actions narrow">Action</th>
+                    <th>#</th><th>Item Name</th><th>Model</th><th>Serial</th><th>PO #</th><th>Qty</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {viewProducts.length === 0 && <tr><td colSpan={7} className="empty-state">No products attached.</td></tr>}
+                  {viewProducts.map((p, i) => (
+                    <tr key={p.id}>
+                      <td data-label="Action" className="cell-actions">
+                        <RequirePermission permission="edit_work_activity">
+                          <button type="button" className="btn-text-danger" onClick={() => handleRemoveProductFromDetails(p)}>Remove</button>
+                        </RequirePermission>
+                      </td>
+                      <td data-label="#">{formatSeq(i + 1)}</td>
+                      <td data-label="Item">{p.itemName}</td>
+                      <td data-label="Model">{p.modelPart}</td>
+                      <td data-label="Serial">{p.serial || '-'}</td>
+                      <td data-label="PO" className="fw-bold text-primary">{p.po || '-'}</td>
+                      <td data-label="Qty">{p.quantity}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
-        </div>
+        </Modal>
       )}
 
       {isJobModalOpen && (
-        <div className="modal-overlay active">
-          <div className="modal-content modal-large">
-            <form onSubmit={handleSaveOrder}>
-              <div className="modal-header">
-                <h3>{editingJob ? "Edit Order" : "Create New Order"}</h3>
-                <div style={{ display: 'flex', gap: '10px' }}>
-                  <RequirePermission permission="manage_security">
-                    <button type="button" className="icon-btn" onClick={() => setIsJobConfigOpen(true)} title="Configure Field Security"><Settings size={20}/></button>
-                  </RequirePermission>
-                  <button type="submit" className="action btn-primary" disabled={isProcessing}>
-                    {isProcessing ? 'Saving...' : 'Save Order'}
-                  </button>
-                  <button type="button" className="close-modal" onClick={() => setIsJobModalOpen(false)}><X size={24}/></button>
-                </div>
-              </div>
+        <Modal
+          size="large"
+          title={editingJob ? 'Edit Order' : 'Create New Order'}
+          onClose={() => setIsJobModalOpen(false)}
+          onSubmit={handleSaveOrder}
+          actions={
+            <>
+              <RequirePermission permission="manage_security">
+                <button type="button" className="icon-btn" onClick={() => setIsJobConfigOpen(true)} title="Configure Field Security"><Settings size={20} /></button>
+              </RequirePermission>
+              <button type="submit" className="action btn-primary" disabled={isProcessing}>{isProcessing ? 'Saving...' : 'Save Order'}</button>
+            </>
+          }
+        >
+
               <div className="form-grid">
-                
                 <div className="form-group">
-                  <label>Registration Date {isJobReq('createdAt') && '*'} {!isJobFieldEditable('createdAt') && <span style={{fontSize:'0.75rem', color:'#ef4444'}}><Lock size={12}/> Locked</span>}</label>
-                  <input type="date" value={formData.createdAt} onChange={e => setFormData({...formData, createdAt: e.target.value})} required={isJobReq('createdAt')} disabled={!isJobFieldEditable('createdAt')} style={{ backgroundColor: !isJobFieldEditable('createdAt') ? '#f1f5f9' : 'white', cursor: !isJobFieldEditable('createdAt') ? 'not-allowed' : 'text' }}/>
+                  <label>Registration Date {isJobReq('createdAt') && '*'} {lockHint('createdAt')}</label>
+                  <input type="date" className={inputCls('createdAt')} value={formData.createdAt} onChange={e => setFormData({ ...formData, createdAt: e.target.value })} required={isJobReq('createdAt')} disabled={!isJobFieldEditable('createdAt')} />
                 </div>
-                
+
                 <div className="form-group">
-                  <label>Address {isJobReq('destination') && '*'} {!isJobFieldEditable('destination') && <span style={{fontSize:'0.75rem', color:'#ef4444'}}><Lock size={12}/> Locked</span>}</label>
-                  <div style={{ display: 'flex', gap: '8px', alignItems: 'stretch', pointerEvents: !isJobFieldEditable('destination') ? 'none' : 'auto', opacity: !isJobFieldEditable('destination') ? 0.6 : 1 }}>
-                    <div style={{ flex: 1 }}>
-                      <DestinationSearch 
-                        value={formData.destination}
-                        onSelect={(val) => setFormData({...formData, destination: val})}
-                        placeholder="Search address..."
-                        required={isJobReq('destination')}
-                      />
-                    </div>
-                    <button 
-                      type="button" 
-                      className="action btn-secondary" 
-                      style={{ padding: '0 14px', height: '46px' }}
-                      onClick={() => setIsQuickDestOpen(true)}
-                      title="Add New Destination"
-                      disabled={!isJobFieldEditable('destination')}
-                    >
+                  <label>Address {isJobReq('destination') && '*'} {lockHint('destination')}</label>
+                  <div className={`input-with-btn${isJobFieldEditable('destination') ? '' : ' field-locked-wrap'}`}>
+                    <DestinationSearch value={formData.destination} onSelect={(val) => setFormData({ ...formData, destination: val })} required={isJobReq('destination')} />
+                    <button type="button" className="action btn-secondary btn-attach" onClick={() => setIsQuickDestOpen(true)} title="Add New Destination" disabled={!isJobFieldEditable('destination')}>
                       <Plus size={20} />
                     </button>
                   </div>
@@ -723,66 +445,60 @@ export const WorkActivity: React.FC = () => {
 
                 <div className="form-group">
                   <label>Ordered by {isJobReq('jobOrder') && '*'}</label>
-                  <input 
-                    type="text" 
-                    value={formData.jobOrder} 
-                    readOnly 
-                    title="This field is auto-populated and cannot be changed for auditing purposes."
-                    style={{ backgroundColor: '#f1f5f9', color: '#64748b', cursor: 'not-allowed', fontWeight: '600', border: '1px solid #cbd5e1' }}
-                  />
+                  <input type="text" className="readonly-muted" value={formData.jobOrder} readOnly title="This field is auto-populated and cannot be changed for auditing purposes." />
                 </div>
 
                 <div className="form-group">
-                  <label>Made by {isJobReq('madeBy') && '*'} {!isJobFieldEditable('madeBy') && <span style={{fontSize:'0.75rem', color:'#ef4444'}}><Lock size={12}/> Locked</span>}</label>
-                  <select 
-                    value={formData.madeBy || ''} 
-                    onChange={e => setFormData({...formData, madeBy: e.target.value})} 
-                    required={isJobReq('madeBy')} 
-                    disabled={!isJobFieldEditable('madeBy')} 
-                    style={{ backgroundColor: !isJobFieldEditable('madeBy') ? '#f1f5f9' : 'white', cursor: !isJobFieldEditable('madeBy') ? 'not-allowed' : 'pointer' }}
-                  >
+                  <label>Made by {isJobReq('madeBy') && '*'} {lockHint('madeBy')}</label>
+                  <select className={inputCls('madeBy')} value={formData.madeBy || ''} onChange={e => setFormData({ ...formData, madeBy: e.target.value })} required={isJobReq('madeBy')} disabled={!isJobFieldEditable('madeBy')}>
                     <option value="">-- Unassigned --</option>
-                    {systemUsers.map(u => {
-                      const name = `${u.firstName || ''} ${u.lastName || ''}`.trim() || u.email;
-                      return <option key={u.id} value={name}>{name}</option>;
-                    })}
+                    {users.map(u => { const name = displayName(u, u.email); return <option key={u.id} value={name}>{name}</option>; })}
                   </select>
                 </div>
 
-                <div className="form-group"><label>Work Finish {isJobReq('workFinish') && '*'} {!isJobFieldEditable('workFinish') && <span style={{fontSize:'0.75rem', color:'#ef4444'}}><Lock size={12}/> Locked</span>}</label><select value={formData.workFinish} onChange={e => setFormData({...formData, workFinish: e.target.value as 'YES' | 'NO'})} required={isJobReq('workFinish')} disabled={!isJobFieldEditable('workFinish')} style={{ backgroundColor: !isJobFieldEditable('workFinish') ? '#f1f5f9' : 'white', cursor: !isJobFieldEditable('workFinish') ? 'not-allowed' : 'pointer' }}><option value="YES">YES</option><option value="NO">NO</option></select></div>
-                <div className="form-group" style={{ gridColumn: 'span 2' }}><label>Description {isJobReq('description') && '*'} {!isJobFieldEditable('description') && <span style={{fontSize:'0.75rem', color:'#ef4444'}}><Lock size={12}/> Locked</span>}</label><input type="text" value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} required={isJobReq('description')} disabled={!isJobFieldEditable('description')} style={{ backgroundColor: !isJobFieldEditable('description') ? '#f1f5f9' : 'white', cursor: !isJobFieldEditable('description') ? 'not-allowed' : 'text' }}/></div>
-                <div className="form-group"><label>Schedule {isJobReq('schedule') && '*'} {!isJobFieldEditable('schedule') && <span style={{fontSize:'0.75rem', color:'#ef4444'}}><Lock size={12}/> Locked</span>}</label><input type="date" value={formData.schedule} onChange={e => setFormData({...formData, schedule: e.target.value})} required={isJobReq('schedule')} disabled={!isJobFieldEditable('schedule')} style={{ backgroundColor: !isJobFieldEditable('schedule') ? '#f1f5f9' : 'white', cursor: !isJobFieldEditable('schedule') ? 'not-allowed' : 'text' }}/></div>
-                <div className="form-group"><label>Pending Work {isJobReq('pendingWork') && '*'} {!isJobFieldEditable('pendingWork') && <span style={{fontSize:'0.75rem', color:'#ef4444'}}><Lock size={12}/> Locked</span>}</label><input type="text" value={formData.pendingWork} onChange={e => setFormData({...formData, pendingWork: e.target.value})} required={isJobReq('pendingWork')} disabled={!isJobFieldEditable('pendingWork')} style={{ backgroundColor: !isJobFieldEditable('pendingWork') ? '#f1f5f9' : 'white', cursor: !isJobFieldEditable('pendingWork') ? 'not-allowed' : 'text' }}/></div>
+                <div className="form-group">
+                  <label>Work Finish {isJobReq('workFinish') && '*'} {lockHint('workFinish')}</label>
+                  <select className={inputCls('workFinish')} value={formData.workFinish} onChange={e => setFormData({ ...formData, workFinish: e.target.value as WorkFinish })} required={isJobReq('workFinish')} disabled={!isJobFieldEditable('workFinish')}>
+                    <option value="YES">YES</option>
+                    <option value="NO">NO</option>
+                  </select>
+                </div>
+
+                <div className="form-group span-2">
+                  <label>Description {isJobReq('description') && '*'} {lockHint('description')}</label>
+                  <input type="text" className={inputCls('description')} value={formData.description} onChange={e => setFormData({ ...formData, description: e.target.value })} required={isJobReq('description')} disabled={!isJobFieldEditable('description')} />
+                </div>
+                <div className="form-group">
+                  <label>Schedule {isJobReq('schedule') && '*'} {lockHint('schedule')}</label>
+                  <input type="date" className={inputCls('schedule')} value={formData.schedule} onChange={e => setFormData({ ...formData, schedule: e.target.value })} required={isJobReq('schedule')} disabled={!isJobFieldEditable('schedule')} />
+                </div>
+                <div className="form-group">
+                  <label>Pending Work {isJobReq('pendingWork') && '*'} {lockHint('pendingWork')}</label>
+                  <input type="text" className={inputCls('pendingWork')} value={formData.pendingWork} onChange={e => setFormData({ ...formData, pendingWork: e.target.value })} required={isJobReq('pendingWork')} disabled={!isJobFieldEditable('pendingWork')} />
+                </div>
               </div>
-              
+
               <div className="products-section">
                 <div className="products-header">
-                  <h4 style={{ margin: 0 }}>Products List</h4>
-                  <button type="button" className="action btn-secondary btn-sm" onClick={() => setIsProductModalOpen(true)} disabled={isProcessing}><Plus size={16}/> Add Product</button>
+                  <h4>Products List</h4>
+                  <button type="button" className="action btn-secondary btn-sm" onClick={() => setIsProductModalOpen(true)} disabled={isProcessing}><Plus size={16} /> Add Product</button>
                 </div>
-                <div className="table-container large-table">
+                <div className="table-container">
                   <table className="responsive-table">
                     <thead>
-                      <tr>
-                        <th style={{ textAlign: 'center', width: '80px' }}>Action</th>
-                        <th>#</th>
-                        <th>Item</th>
-                        <th>Model</th>
-                        <th>PO #</th>
-                        <th>Qty</th>
-                      </tr>
+                      <tr><th className="col-actions narrow">Action</th><th>#</th><th>Item</th><th>Model</th><th>PO #</th><th>Qty</th></tr>
                     </thead>
                     <tbody>
-                      {formProducts.length === 0 && <tr><td colSpan={6} className="empty-state">No products added. Click "+ Add Product".</td></tr>}
+                      {formProducts.length === 0 && <tr><td colSpan={6} className="empty-state">No products added. Click &quot;+ Add Product&quot;.</td></tr>}
                       {formProducts.map((p, index) => (
-                        <tr key={index}>
-                          <td data-label="Action" style={{ textAlign: 'center' }}>
-                            <button type="button" className="btn-text-danger" onClick={(e) => handleRemoveProductFromForm(index, e)} disabled={isProcessing}>Remove</button>
+                        <tr key={p.id ?? `pending-${index}`}>
+                          <td data-label="Action" className="cell-actions">
+                            <button type="button" className="btn-text-danger" onClick={() => handleRemoveProductFromForm(index)} disabled={isProcessing}>Remove</button>
                           </td>
                           <td data-label="#">{formatSeq(index + 1)}</td>
                           <td data-label="Item">{p.itemName}</td>
                           <td data-label="Model">{p.modelPart}</td>
-                          <td data-label="PO" style={{ fontWeight: 'bold', color: 'var(--primary-color)' }}>{p.po || '-'}</td>
+                          <td data-label="PO" className="fw-bold text-primary">{p.po || '-'}</td>
                           <td data-label="Qty">{p.quantity}</td>
                         </tr>
                       ))}
@@ -790,119 +506,74 @@ export const WorkActivity: React.FC = () => {
                   </table>
                 </div>
               </div>
-            </form>
-          </div>
-        </div>
+        </Modal>
       )}
 
       {isQuickDestOpen && (
-        <div className="modal-overlay active" style={{ zIndex: 1300 }}>
-          <div className="modal-content" style={{ maxWidth: '500px' }}>
-            <form onSubmit={handleSaveQuickDestination}>
-              <div className="modal-header">
-                <h3>Quick Add Destination</h3>
-                <button type="button" className="close-modal" onClick={() => setIsQuickDestOpen(false)}><X size={24}/></button>
+        <Modal title="Quick Add Destination" onClose={() => setIsQuickDestOpen(false)} size="md" level={3}>
+          <form onSubmit={handleSaveQuickDestination}>
+            <div className="form-grid">
+              <div className="form-group full-width">
+                <label>Address * (e.g. 12 Mystyc Ct.)</label>
+                <input type="text" required value={newDestData.description} onChange={e => setNewDestData({ ...newDestData, description: e.target.value })} />
               </div>
-              <div className="form-grid">
-                <div className="form-group full-width">
-                  <label>Property Name * (Ej. 260)</label>
-                  <input 
-                    type="text" 
-                    required 
-                    value={newDestData.property_name} 
-                    onChange={e => setNewDestData({...newDestData, property_name: e.target.value})} 
-                  />
-                </div>
-                <div className="form-group full-width">
-                  <label>Description * (Visible Name)</label>
-                  <input 
-                    type="text" 
-                    required 
-                    value={newDestData.description} 
-                    onChange={e => setNewDestData({...newDestData, description: e.target.value})} 
-                  />
-                </div>
-                <div className="form-group full-width">
-                  <label>Contact (Optional)</label>
-                  <input 
-                    type="text" 
-                    value={newDestData.contact} 
-                    onChange={e => setNewDestData({...newDestData, contact: e.target.value})} 
-                  />
-                </div>
+              <div className="form-group full-width">
+                <label>Property / Complex (e.g. Hidden Creek Apartments)</label>
+                <input type="text" value={newDestData.property} onChange={e => setNewDestData({ ...newDestData, property: e.target.value })} />
               </div>
-              <div className="modal-footer-actions" style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '20px' }}>
-                <button type="submit" className="action btn-primary">Save Destination</button>
+              <div className="form-group full-width">
+                <label>Contact (Optional)</label>
+                <input type="text" value={newDestData.contact} onChange={e => setNewDestData({ ...newDestData, contact: e.target.value })} />
               </div>
-            </form>
-          </div>
-        </div>
+            </div>
+            <div className="form-actions borderless">
+              <button type="submit" className="action btn-primary">Save Destination</button>
+            </div>
+          </form>
+        </Modal>
       )}
 
       {isProductModalOpen && (
-        <div className="modal-overlay active" style={{ zIndex: 1100 }}>
-          <div className="modal-content modal-large" style={{ maxWidth: '950px', width: '95%' }}>
-            <form onSubmit={handleAddProductSubmit}>
-              <div className="modal-header">
-                <h3>Add Product</h3>
-                <div style={{ display: 'flex', gap: '10px' }}>
-                  <button type="button" className="icon-btn" onClick={() => setIsProductConfigOpen(true)} title="Configure Required Fields"><Settings size={20}/></button>
-                  <button type="submit" className="action btn-primary">Add to List</button>
-                  <button type="button" className="close-modal" onClick={() => setIsProductModalOpen(false)}><X size={24}/></button>
-                </div>
-              </div>
-              
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '20px', marginTop: '15px' }}>
-                <div className="form-group" style={{ flex: '3 1 250px' }}>
+        <Modal
+          size="2xl"
+          level={2}
+          title="Add Product"
+          onClose={() => setIsProductModalOpen(false)}
+          onSubmit={handleAddProductSubmit}
+          actions={
+            <>
+              <button type="button" className="icon-btn" onClick={() => setIsProductConfigOpen(true)} title="Configure Required Fields"><Settings size={20} /></button>
+              <button type="submit" className="action btn-primary">Add to List</button>
+            </>
+          }
+        >
+              <div className="product-picker">
+                <div className="form-group product-picker-item">
                   <label>Select Item {isProdReq('itemEntranceId') && '*'}</label>
-                  {/* 🔥 Dropdown ahora muestra una opción por DETALLE (no por PO).
-                       Cada PO con N productos genera N entradas seleccionables. */}
-                  <SearchableSelect 
-                    options={flatDetailOptions.map(opt => {
-                      const stock = getDetailStock(opt.entranceId, opt.detailId);
-                      return {
-                        id: opt.composedId, 
-                        label: `${opt.itemName} | Model: ${opt.modelPart || '-'} | Serial: ${opt.serial || '-'} | PO: ${opt.po || '-'} | Stock: ${stock}`
-                      };
-                    })}
-                    value={selectedComposedId} 
-                    onChange={(composedId) => handleItemEntranceSelection(composedId)} 
+                  <SearchableSelect
+                    options={productOptions}
+                    value={selectedComposedId}
+                    onChange={handleItemSelection}
                     placeholder="-- Type name, model, serial, PO... --"
                     required={isProdReq('itemEntranceId')}
                   />
                 </div>
-                
-                <div className="form-group" style={{ flex: '1 1 100px' }}>
+                <div className="form-group product-picker-qty">
                   <label>Quantity {isProdReq('quantity') && '*'}</label>
-                  <input 
-                    type="number" 
-                    min="1" 
-                    max={currentSelectionStock || ''}
-                    disabled={!currentProduct.entranceDetailId || currentSelectionStock <= 0}
-                    value={currentProduct.quantity} 
-                    onChange={e => {
-                      let val = Number(e.target.value);
-                      if (val > currentSelectionStock) val = currentSelectionStock;
-                      setCurrentProduct({...currentProduct, quantity: val});
-                    }} 
-                    required={isProdReq('quantity')} 
-                    style={{
-                      backgroundColor: (!currentProduct.entranceDetailId || currentSelectionStock <= 0) ? '#f1f5f9' : 'white',
-                      cursor: (!currentProduct.entranceDetailId || currentSelectionStock <= 0) ? 'not-allowed' : 'text'
-                    }}
+                  <input
+                    type="number" min="1" max={currentSelectionStock || undefined}
+                    className={quantityDisabled ? 'locked' : undefined}
+                    disabled={quantityDisabled}
+                    value={currentProduct.quantity}
+                    onChange={e => setCurrentProduct({ ...currentProduct, quantity: Math.min(Number(e.target.value), currentSelectionStock) })}
+                    required={isProdReq('quantity')}
                   />
-                  {currentProduct.entranceDetailId && currentSelectionStock <= 0 && (
-                    <span style={{color: '#ef4444', fontSize: '0.75rem', marginTop: '4px', display: 'block', fontWeight: 'bold'}}>Out of stock</span>
-                  )}
-                  {currentProduct.entranceDetailId && currentSelectionStock > 0 && (
-                    <span style={{color: '#64748b', fontSize: '0.75rem', marginTop: '4px', display: 'block'}}>Max available: {currentSelectionStock}</span>
-                  )}
+                  {currentProduct.entranceDetailId && currentSelectionStock <= 0 && <span className="hint text-danger fw-bold">Out of stock</span>}
+                  {currentProduct.entranceDetailId && currentSelectionStock > 0 && <span className="hint">Max available: {currentSelectionStock}</span>}
                 </div>
               </div>
-            </form>
-          </div>
-        </div>
+        </Modal>
       )}
     </div>
   );
-};
+}

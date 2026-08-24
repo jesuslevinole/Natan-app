@@ -1,189 +1,203 @@
-import React, { useState, useEffect } from 'react';
-import { collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, runTransaction } from 'firebase/firestore';
-import { db } from '../firebase'; 
-import { BookOpen, ArrowLeft, Plus, Edit2, Trash2, X } from 'lucide-react';
-import { CatalogSchema } from '../types';
-import { SeqBadge, SearchBar } from '../components/SharedUI';
-import { catalogsConfig } from '../utils/helpers';
+import { useState, useMemo, type FormEvent } from 'react';
+import { collection, addDoc, updateDoc, deleteDoc, doc } from 'firebase/firestore';
+import { db } from '../firebase';
+import { BookOpen, ArrowLeft, Plus, Edit2, Trash2, FileSpreadsheet, Download } from 'lucide-react';
+import type { CatalogSchema, CatalogRecord } from '../types';
+import Modal from '../components/Modal';
+import ModuleHeader from '../components/ModuleHeader';
+import SeqBadge from '../components/SeqBadge';
+import ImportDestinationsModal from '../components/ImportDestinationsModal';
+import { catalogsConfig, matchesSearch } from '../utils/helpers';
+import { nextSequence } from '../utils/firestore';
+import { downloadWorkbook } from '../utils/excel';
+import { useAppData } from '../hooks/useAppData';
+import { useAuthorName } from '../hooks/useAuth';
+import RequirePermission from '../components/RequirePermission';
+import { AuditLogger } from '../utils/logger';
 
-// 🔥 ESTA ES LA LÍNEA CRÍTICA QUE REACT NECESITA ENCONTRAR:
-export const CatalogsModule: React.FC = () => {
+type FormValues = Record<string, string | number>;
+
+export default function CatalogsModule() {
+  const authorName = useAuthorName();
+  const { destinations, supplyCompanies, itemNames, jobOrders } = useAppData();
+
   const [selectedCatalog, setSelectedCatalog] = useState<CatalogSchema | null>(null);
-  const [records, setRecords] = useState<any[]>([]);
-  const [searchTerm, setSearchTerm] = useState(''); 
-  const [modalState, setModalState] = useState<'closed' | 'form' | 'detail'>('closed');
-  const [currentRecord, setCurrentRecord] = useState<any | null>(null);
-  const [formData, setFormData] = useState<any>({});
-  const [isProcessing, setIsProcessing] = useState<boolean>(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [propertyFilter, setPropertyFilter] = useState('');
+  const [modalState, setModalState] = useState<'closed' | 'form'>('closed');
+  const [isImportOpen, setIsImportOpen] = useState(false);
+  const [currentRecord, setCurrentRecord] = useState<CatalogRecord | null>(null);
+  const [formData, setFormData] = useState<FormValues>({});
+  const [isProcessing, setIsProcessing] = useState(false);
 
-  useEffect(() => {
-    if (!selectedCatalog) return;
-    const unsubscribe = onSnapshot(collection(db, `catalog_${selectedCatalog.id}`), (snapshot) => {
-      const fetched = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as any));
-      
-      fetched.sort((a: any, b: any) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
-      
-      const totalRecords = fetched.length;
-      const mapped = fetched.map((item: any, idx: number) => ({ 
-        ...item, 
-        visualSeq: item.seq || (totalRecords - idx) 
-      }));
-      
-      setRecords(mapped);
-    });
-    return () => unsubscribe();
-  }, [selectedCatalog]);
+  // Los catálogos ya llegan en tiempo real desde DataProvider; acá solo elegimos cuál mostrar
+  // y le asignamos el número visual (más reciente arriba).
+  const records = useMemo<CatalogRecord[]>(() => {
+    if (!selectedCatalog) return [];
+    const source: CatalogRecord[] =
+      selectedCatalog.id === 'destinations' ? destinations
+      : selectedCatalog.id === 'supply_companies' ? supplyCompanies
+      : itemNames;
+    const sorted = [...source].sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+    const total = sorted.length;
+    return sorted.map((r, idx) => ({ ...r, visualSeq: r.seq || total - idx }));
+  }, [selectedCatalog, destinations, supplyCompanies, itemNames]);
 
-  const handleSave = async (e: React.FormEvent) => {
+  const properties = useMemo(
+    () => [...new Set(destinations.map(d => d.property).filter((p): p is string => !!p))].sort(),
+    [destinations],
+  );
+
+  const visibleFields = useMemo(() => selectedCatalog?.fields.filter(f => !f.hiddenInTable) ?? [], [selectedCatalog]);
+
+  const filteredRecords = useMemo(() => records.filter(reg => {
+    if (selectedCatalog?.id === 'destinations' && propertyFilter && reg.property !== propertyFilter) return false;
+    return matchesSearch(searchTerm, ...(selectedCatalog?.fields.map(f => reg[f.name]) ?? []));
+  }), [records, selectedCatalog, searchTerm, propertyFilter]);
+
+  const openForm = (record: CatalogRecord | null) => {
+    setCurrentRecord(record);
+    if (record) {
+      const values: FormValues = {};
+      selectedCatalog?.fields.forEach(f => { const v = record[f.name]; if (v !== undefined) values[f.name] = v; });
+      setFormData(values);
+    } else {
+      setFormData(selectedCatalog?.id === 'destinations' && propertyFilter ? { property: propertyFilter } : {});
+    }
+    setModalState('form');
+  };
+
+  const handleSave = async (e: FormEvent) => {
     e.preventDefault();
     if (!selectedCatalog) return;
     setIsProcessing(true);
-    
     try {
       const colName = `catalog_${selectedCatalog.id}`;
-      
+      const payload: FormValues = {};
+      selectedCatalog.fields.forEach(f => {
+        const raw = formData[f.name];
+        if (raw === undefined || raw === '') return;
+        payload[f.name] = f.type === 'number' ? Number(raw) : String(raw).trim();
+      });
       if (currentRecord) {
-        await updateDoc(doc(db, colName, currentRecord.id), formData);
+        await updateDoc(doc(db, colName, currentRecord.id), payload);
+        AuditLogger.logUpdate(`Catalogs (${selectedCatalog.title})`, authorName, currentRecord.id, payload);
       } else {
-        const counterRef = doc(db, 'counters', `seq_${colName}`);
-        
-        const nextSeq = await runTransaction(db, async (transaction) => {
-          const counterDoc = await transaction.get(counterRef);
-          let newSeq = 1;
-          
-          if (counterDoc.exists()) {
-            newSeq = (counterDoc.data().value || 0) + 1;
-            transaction.update(counterRef, { value: newSeq });
-          } else {
-            transaction.set(counterRef, { value: 1 });
-          }
-          return newSeq;
-        });
-
-        await addDoc(collection(db, colName), { 
-          ...formData, 
-          seq: nextSeq, 
-          createdAt: new Date().toISOString() 
-        });
+        const seq = await nextSequence(`seq_${colName}`);
+        const docRef = await addDoc(collection(db, colName), { ...payload, seq, createdAt: new Date().toISOString() });
+        AuditLogger.logCreate(`Catalogs (${selectedCatalog.title})`, authorName, docRef.id, payload);
       }
       setModalState('closed');
-    } catch (error) { 
-      console.error("Error Saving Record:", error); 
-      alert('Error saving record. Check console for details.'); 
+    } catch (error) {
+      console.error('Error Saving Record:', error);
+      alert('Error saving record. Check console for details.');
     } finally {
       setIsProcessing(false);
     }
   };
 
-  const handleDelete = async (id: string, e?: React.MouseEvent) => {
-    if (e) e.stopPropagation();
-    if (window.confirm('Delete this record?')) {
-      await deleteDoc(doc(db, `catalog_${selectedCatalog!.id}`, id));
+  const handleDelete = async (record: CatalogRecord) => {
+    if (!selectedCatalog) return;
+    const label = String(record[selectedCatalog.fields[0].name] ?? record.id);
+    // Una dirección con órdenes asociadas no se borra: quedarían órdenes apuntando a nada.
+    if (selectedCatalog.id === 'destinations') {
+      const inUse = jobOrders.filter(o => o.destination === record.description).length;
+      if (inUse > 0) { alert(`"${label}" is used by ${inUse} job order(s) and cannot be deleted.`); return; }
     }
+    if (!window.confirm(`Delete "${label}"?`)) return;
+    await deleteDoc(doc(db, `catalog_${selectedCatalog.id}`, record.id));
+    AuditLogger.logDelete(`Catalogs (${selectedCatalog.title})`, authorName, record.id, record);
   };
 
-  const filteredRecords = records.filter(reg => {
-    const searchLower = searchTerm.toLowerCase();
-    return selectedCatalog?.fields.some(f => 
-      String(reg[f.name] || '').toLowerCase().includes(searchLower)
-    );
-  });
+  const handleExport = () => {
+    if (!selectedCatalog) return;
+    const rows = filteredRecords.map(r => {
+      const row: Record<string, unknown> = { '#': r.visualSeq };
+      selectedCatalog.fields.forEach(f => { row[f.label] = r[f.name] ?? ''; });
+      return row;
+    });
+    downloadWorkbook(`${selectedCatalog.id}.xlsx`, [{ name: selectedCatalog.title, rows }]);
+  };
 
   if (!selectedCatalog) {
     return (
       <div className="card">
-        <div className="card-header">
-          <div className="card-header-text">
-            <h2 style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <BookOpen size={28}/> System Catalogs
-            </h2>
-            <p>Manage system lists and dynamic parameters.</p>
-          </div>
-        </div>
-        <div className="catalog-grid">
-          {Object.values(catalogsConfig).map((cat: CatalogSchema) => (
-            <div key={cat.id} className="catalog-card" onClick={() => setSelectedCatalog(cat)}>
-              <div className="catalog-icon" style={{ color: 'var(--primary-color)' }}>{cat.icon}</div>
-              <h3>{cat.title}</h3>
-            </div>
-          ))}
-        </div>
+        <ModuleHeader icon={<BookOpen size={28} />} title="System Catalogs" subtitle="Manage system lists and dynamic parameters." />
+        <ul className="catalog-grid">
+          {Object.values(catalogsConfig).map(cat => {
+            const count = cat.id === 'destinations' ? destinations.length : cat.id === 'supply_companies' ? supplyCompanies.length : itemNames.length;
+            return (
+              <li key={cat.id} className="catalog-card" onClick={() => { setSelectedCatalog(cat); setSearchTerm(''); setPropertyFilter(''); }}>
+                <div className="catalog-icon">{cat.icon}</div>
+                <h3>{cat.title}</h3>
+                <span className="badge neutral">{count} records</span>
+              </li>
+            );
+          })}
+        </ul>
       </div>
     );
   }
 
+  const isDestinations = selectedCatalog.id === 'destinations';
+
   return (
     <div className="card catalog-manager-anim">
-      <div className="card-header" style={{ display: 'flex', flexWrap: 'wrap', gap: '15px', alignItems: 'center' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '15px', flex: '1 1 200px' }}>
-          <button className="icon-btn" onClick={() => setSelectedCatalog(null)} title="Back">
-            <ArrowLeft size={24} color="var(--text-main)"/>
+      <ModuleHeader
+        icon={
+          <button type="button" className="icon-btn" onClick={() => setSelectedCatalog(null)} title="Back to catalogs">
+            <ArrowLeft size={24} />
           </button>
-          <div className="card-header-text">
-            <h2 style={{ margin: 0 }}>{selectedCatalog.title}</h2>
-          </div>
-        </div>
-        <div style={{ flex: '2 1 250px', display: 'flex', justifyContent: 'center' }}>
-          <SearchBar value={searchTerm} onChange={setSearchTerm} />
-        </div>
-        <div style={{ display: 'flex', flex: '1 1 150px', justifyContent: 'flex-end' }}>
-          <button 
-            className="action btn-primary" 
-            style={{ height: '42px', padding: '0 20px', whiteSpace: 'nowrap' }} 
-            onClick={() => { setCurrentRecord(null); setFormData({}); setModalState('form'); }}
-          >
-            <Plus size={18}/> New Record
-          </button>
-        </div>
-      </div>
+        }
+        title={selectedCatalog.title}
+        subtitle={`${filteredRecords.length} of ${records.length} records`}
+        searchValue={searchTerm}
+        onSearch={setSearchTerm}
+        filters={isDestinations && properties.length > 0 ? (
+          <select className="dropdown-select" value={propertyFilter} onChange={e => setPropertyFilter(e.target.value)} aria-label="Filter by property">
+            <option value="">All properties</option>
+            {properties.map(p => <option key={p} value={p}>{p}</option>)}
+          </select>
+        ) : undefined}
+        actions={
+          <>
+            <button type="button" className="action btn-secondary btn-header" onClick={handleExport} title="Download as Excel"><Download size={18} /> Export</button>
+            <RequirePermission permission="manage_catalogs">
+              {selectedCatalog.importable && (
+                <button type="button" className="action btn-secondary btn-header" onClick={() => setIsImportOpen(true)}><FileSpreadsheet size={18} /> Import</button>
+              )}
+              <button type="button" className="action btn-primary btn-header" onClick={() => openForm(null)}><Plus size={18} /> New Record</button>
+            </RequirePermission>
+          </>
+        }
+      />
 
       <div className="table-container">
         <table className="responsive-table">
           <thead>
             <tr>
-              <th style={{ textAlign: 'center', width: '90px' }}>Actions</th>
-              <th>#</th>
-              {selectedCatalog.fields.map(f => (
-                <th key={f.name}>
-                  {/* 🔥 Reemplazo visual de Description a ADDRESS en la cabecera de la tabla */}
-                  {f.name === 'description' && selectedCatalog.id === 'destinations' ? 'ADDRESS' : f.label.toUpperCase()}
-                </th>
-              ))}
+              <th className="col-actions narrow">Actions</th>
+              <th className="col-seq">#</th>
+              {visibleFields.map(f => <th key={f.name}>{f.label.toUpperCase()}</th>)}
             </tr>
           </thead>
           <tbody>
             {filteredRecords.length === 0 && (
-              <tr>
-                <td colSpan={selectedCatalog.fields.length + 2} className="empty-state">
-                  No records found.
-                </td>
-              </tr>
+              <tr><td colSpan={visibleFields.length + 2} className="empty-state">No records found.</td></tr>
             )}
-            {filteredRecords.map((reg) => (
+            {filteredRecords.map(reg => (
               <tr key={reg.id}>
-                <td data-label="Actions" style={{ textAlign: 'center' }}>
-                  <div className="action-btns" style={{ display: 'flex', justifyContent: 'center', gap: '10px' }}>
-                    <button 
-                      className="icon-btn edit" 
-                      onClick={(e) => { e.stopPropagation(); setCurrentRecord(reg); setFormData(reg); setModalState('form'); }}
-                    >
-                      <Edit2 size={16}/>
-                    </button>
-                    <button 
-                      className="icon-btn delete" 
-                      onClick={(e) => handleDelete(reg.id, e)}
-                    >
-                      <Trash2 size={16}/>
-                    </button>
+                <td data-label="Actions" className="cell-actions">
+                  <div className="action-btns">
+                    <RequirePermission permission="manage_catalogs">
+                      <button type="button" className="icon-btn edit" onClick={() => openForm(reg)} title="Edit"><Edit2 size={16} /></button>
+                      <button type="button" className="icon-btn delete" onClick={() => handleDelete(reg)} title="Delete"><Trash2 size={16} /></button>
+                    </RequirePermission>
                   </div>
                 </td>
-
-                <td data-label="#"><SeqBadge seq={reg.visualSeq} /></td>
-                
-                {selectedCatalog.fields.map(f => (
-                  <td key={f.name} data-label={f.label} style={{ fontWeight: f.name === 'description' ? 'bold' : 'normal' }}>
-                    {reg[f.name] || '-'}
-                  </td>
+                <td data-label="#" className="col-seq"><SeqBadge seq={reg.visualSeq} /></td>
+                {visibleFields.map((f, idx) => (
+                  <td key={f.name} data-label={f.label} className={idx === 0 ? 'fw-bold' : undefined}>{reg[f.name] ?? '-'}</td>
                 ))}
               </tr>
             ))}
@@ -191,49 +205,43 @@ export const CatalogsModule: React.FC = () => {
         </table>
       </div>
 
-      {modalState !== 'closed' && (
-        <div className="modal-overlay active">
-          <div className="modal-content" style={{ maxWidth: '500px', width: '90%' }}>
-            <div className="modal-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h3 style={{ margin: 0 }}>{currentRecord ? 'Edit Record' : 'New Record'}</h3>
-              <div style={{ display: 'flex', gap: '10px' }}>
-                {modalState === 'form' && (
-                  <button className="action btn-primary" onClick={handleSave} disabled={isProcessing}>
-                    {isProcessing ? 'Saving...' : 'Save'}
-                  </button>
+      {modalState === 'form' && (
+        <Modal
+          size="md"
+          title={currentRecord ? 'Edit Record' : 'New Record'}
+          onClose={() => setModalState('closed')}
+          onSubmit={handleSave}
+          closeDisabled={isProcessing}
+          actions={<button type="submit" className="action btn-primary" disabled={isProcessing}>{isProcessing ? 'Saving...' : 'Save'}</button>}
+        >
+          <div className="form-grid single-col">
+            {selectedCatalog.fields.map(field => (
+              <div key={field.name} className="form-group">
+                <label htmlFor={`cat-${field.name}`}>
+                  {field.label} {field.required && <span className="required-mark">*</span>}
+                </label>
+                {field.name === 'property' && properties.length > 0 ? (
+                  <>
+                    <input id={`cat-${field.name}`} type="text" list="property-options" value={formData[field.name] ?? ''} onChange={e => setFormData({ ...formData, [field.name]: e.target.value })} disabled={isProcessing} />
+                    <datalist id="property-options">{properties.map(p => <option key={p} value={p} />)}</datalist>
+                  </>
+                ) : (
+                  <input
+                    id={`cat-${field.name}`}
+                    type={field.type === 'number' ? 'number' : 'text'}
+                    value={formData[field.name] ?? ''}
+                    onChange={e => setFormData({ ...formData, [field.name]: e.target.value })}
+                    required={field.required}
+                    disabled={isProcessing}
+                  />
                 )}
-                <button className="close-modal icon-btn" onClick={() => setModalState('closed')} disabled={isProcessing}>
-                  <X size={24}/>
-                </button>
               </div>
-            </div>
-            
-            {modalState === 'form' && (
-              <form onSubmit={handleSave} style={{ paddingTop: '20px' }}>
-                <div className="form-grid" style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '1.2rem' }}>
-                  {selectedCatalog.fields.map(field => (
-                    <div key={field.name} className="form-group" style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                      <label style={{ fontSize: '0.9rem', fontWeight: 600 }}>
-                        {/* 🔥 Reemplazo visual de Description a Address en el formulario modal */}
-                        {field.name === 'description' && selectedCatalog.id === 'destinations' ? 'Address' : field.label} {field.required && <span style={{color: 'red'}}>*</span>}
-                      </label>
-                      <input 
-                        type="text" 
-                        name={field.name} 
-                        value={formData[field.name] || ''} 
-                        onChange={(e) => setFormData({...formData, [field.name]: e.target.value})} 
-                        required={field.required}
-                        disabled={isProcessing}
-                        style={{ padding: '10px', borderRadius: '6px', border: '1px solid var(--border-color)', width: '100%' }}
-                      />
-                    </div>
-                  ))}
-                </div>
-              </form>
-            )}
+            ))}
           </div>
-        </div>
+        </Modal>
       )}
+
+      {isImportOpen && <ImportDestinationsModal onClose={() => setIsImportOpen(false)} />}
     </div>
   );
-};
+}
