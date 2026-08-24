@@ -13,6 +13,7 @@ export default defineConfig({
           firebase: ['firebase/app', 'firebase/auth', 'firebase/firestore'],
           react: ['react', 'react-dom'],
           xlsx: ['xlsx'],
+          charts: ['recharts'],
         },
       },
     },

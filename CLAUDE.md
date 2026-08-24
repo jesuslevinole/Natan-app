@@ -137,6 +137,10 @@ Si encontrás dos implementaciones distintas de la misma idea de producto (dos r
 - **Datos**: todo lo compartido (órdenes, productos, POs, usuarios, roles, catálogos) llega por `useAppData()` desde `src/context/DataProvider.tsx`. No agregues `getDocs`/`onSnapshot` en un módulo para una colección que ya está ahí. Si necesitás una colección nueva compartida, agregala al provider.
 - **Stock**: usá `src/utils/entrance.ts` (`getDetailStock`, `getEntranceStock`, `buildUsageMap`). No recalcules el consumo con `filter/reduce` en el componente.
 - **Contadores**: `nextSequence('counterId')` en `src/utils/firestore.ts`. No copies la transacción.
+- **Tablas**: siempre `src/components/DataTable.tsx` (columnas como `DataColumn<T>[]` con `value` crudo para ordenar/filtrar y `render` opcional). No escribir `<table>` a mano salvo tablas-formulario (checkboxes/selects por fila). `storageKey` único por tabla; `compact` + `hideToolbar` + `pageSize={0}` para listados dentro de modales o paneles.
+- **Textos largos en celdas**: `NotesCell` (ícono → modal) para notas/observaciones; `.cell-clamp` con `title` para descripciones.
+- **Gráficos**: `src/components/charts/` (recharts). Tooltip propio (`ChartTooltip`), nunca `contentStyle`/`wrapperStyle`. Colores de la paleta en `chartUtils.ts`. Siempre dentro de `ChartCard` (recharts necesita alto fijo).
+- **Vista previa**: `/preview.html` con `src/dev/mockData.ts` para revisar diseño sin Firebase. Si agregás un módulo, sumalo a `src/dev/Preview.tsx`.
 - **Modales**: `src/components/Modal.tsx` (`size`, `level`, `actions`, `onSubmit`). Cabeceras de módulo: `ModuleHeader`. Badges de estado: `StatusBadge.tsx`.
 - **Handlers de lista**: reciben el objeto completo (`handleDelete(order)`), nunca un id que después se busca en estado.
 - **Import/Export Excel**: `src/utils/excel.ts` (SheetJS). `xlsx` va en un chunk aparte; importalo solo desde módulos lazy, nunca desde `App.tsx`.

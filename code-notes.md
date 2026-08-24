@@ -99,3 +99,20 @@ grep -rn "style={{" src     # solo 2 (variables CSS --progress)
 - **Síntoma**: al entrar con la cuenta real no aparecían Catalogs / Account Users / Manage Roles. Causa: el menú se filtra por los permisos del rol en Firestore (igual que antes), pero antes se entraba siempre con el bypass "Acceder como Admin" que daba Super Admin; el rol real no tiene `view_catalogs` ni `manage_security`.
 - **Solución**: `VITE_OWNER_EMAILS` (`utils/auth.ts` → `isOwnerEmail`, `SUPER_ADMIN_ROLE`). `AuthProvider` asigna Super Admin a esos emails sin leer `roles`. La barra lateral muestra el rol activo (o "No role assigned") para que sea evidente por qué falta un módulo.
 - **Forgot password**: ya usaba `sendPasswordResetEmail`; ahora envía `continueUrl` a la app (con fallback si el dominio no está autorizado), distingue éxito/error (antes el error se mostraba en verde), y traduce los códigos `auth/invalid-email`, `auth/user-not-found`, `auth/too-many-requests`.
+
+## Ronda 3 — tablas profesionales, notas en modal, gráficos
+
+Referencia: patrones de Roelca (orden por columna ▲/▼, filtros por columna, columnas configurables) y Berry (DataTable/RecordDetail).
+
+- **`DataTable<T>`** (`components/DataTable.tsx` + `.css`): orden con detección de tipo (`type: 'text' | 'number' | 'date'`, vacíos al final), fila de filtros por columna, selector de columnas visibles persistido en `localStorage` (`natan_table_<storageKey>`), paginación 10/25/50/100, fila expandible (`renderExpanded`), fila clicable, columna de acciones fija a la izquierda, `rowClassName` para semáforo (`overdue`/`warn`), modo `compact`, y en móvil cada fila es una tarjeta label/valor (`data-label`). Reemplazó las 14 tablas escritas a mano.
+- **`NotesCell`**: notas/observaciones como ícono (punto ámbar cuando hay texto) que abre un modal con el texto completo. Usado en Work Activity ("Notes" = `pendingWork`), Reports y Dashboard. La descripción usa `.cell-clamp` (2 líneas + `title`).
+- **`ScheduleCell`** (vencida/hoy/futura/terminada) y **`StockLevel`** (texto + barra proporcional) en `StatusBadge.tsx`.
+- **Gráficos** con `recharts` (chunk propio `charts`): `ChartCard`, `MonthlyBars` (apiladas o agrupadas, eje X configurable), `DonutChart` (total al centro, "Other" cuando hay más de 6), `RankBars` (top N horizontal). Tooltip propio con clases CSS: recharts trae estilos inline y CLAUDE.md los prohíbe.
+- **Reports**: panel de filtros claro con chips de filtros activos (antes panel oscuro con `theme="dark"` en `SearchableSelect`, tema eliminado por quedar sin uso), 6 KPIs, 7 gráficos, tablas en pestañas (`Tabs`). Toda la lógica de datos y el export a Excel se conservaron.
+- **Dashboard**: accesos rápidos, 6 KPIs (con tendencia vs mes anterior), órdenes últimos 6 meses, estado, agenda con notas, stock bajo, direcciones más visitadas.
+- **`KpiCard`** rediseñada: fondo blanco, franja de color a la izquierda, ícono en chip, `trend` opcional.
+- **Vista previa de diseño**: `/preview.html` + `src/dev/mockData.ts` (datos con semilla fija) para renderizar los módulos sin Firebase. Se usó para verificar en Chromium headless desktop y móvil.
+- **CSS eliminado por quedar sin uso** (confirmado con grep): `.panel*`, `.h-350/400/450`, `.col-seq`, `.col-actions`, `.cell-actions`, `.nested-*`, `.clickable-row`, `.empty-state`, `.stock-cell`, `.scroll-200/60vh`, `.dark-option`, tema oscuro de `SearchableSelect`.
+- Quedan dos `<table>` a mano (`FieldSecurityModal`, `ImportDestinationsModal`): son formularios (checkbox/select por fila), no listados; `DataTable` no aplica.
+
+Verificación: `npm run check` 0/0, `npm run build` OK, `grep "style={{"` solo variables CSS (`--progress`, `--swatch`).

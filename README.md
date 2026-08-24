@@ -28,6 +28,12 @@ Login → *Forgot your password?* → email → **Send Reset Link**. Firebase en
 página de Firebase para elegir una contraseña nueva y vuelve a la app. Para personalizar el
 remitente o el texto: Firebase Console → Authentication → Templates.
 
+### Vista previa de diseño (sin Firebase)
+
+`npm run dev` y abrir `http://localhost:5173/preview.html?module=dashboard` (o `reports`, `workActivity`,
+`itemEntrance`, `catalogs`, `users`, `roles`). Renderiza los módulos con datos de ejemplo
+(`src/dev/mockData.ts`) para trabajar el diseño sin login ni conexión. No entra en el build de producción.
+
 ## Módulos
 
 | Módulo | Qué hace |
@@ -54,7 +60,10 @@ que ya contiene las 261 direcciones normalizadas).
 
 - `src/context/DataProvider.tsx` — un `onSnapshot` por colección, compartido por toda la app. Los módulos **no** hacen fetch propio.
 - `src/context/AuthProvider.tsx` — sesión persistente (`onAuthStateChanged`) + rol en tiempo real.
-- `src/components/` — componentes reutilizables, cada uno con su `.css` hermano.
+- `src/components/DataTable.tsx` — tabla estándar (orden, filtros por columna, columnas visibles, paginación, filas expandibles). Todas las tablas la usan.
+- `src/components/NotesCell.tsx` — notas/observaciones como ícono → modal.
+- `src/components/charts/` — `ChartCard`, `MonthlyBars`, `DonutChart`, `RankBars` sobre recharts.
+- `src/components/` — el resto de componentes reutilizables, cada uno con su `.css` hermano.
 - `src/utils/` — `entrance.ts` (stock), `firestore.ts` (contadores), `excel.ts` (import/export), `helpers.tsx` (fechas, catálogos).
 - `src/index.css` — utilidades globales; `src/App.css` — layout, tablas, modales.
 
