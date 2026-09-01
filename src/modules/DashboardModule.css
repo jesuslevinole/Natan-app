@@ -14,3 +14,8 @@
   .quick-actions { width: 100%; justify-content: flex-start; }
   .quick-actions .action { flex: 1 1 45%; }
 }
+.kpi-grid.cols-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); margin-bottom: 16px; }
+.kpi-grid.cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+@media (max-width: 900px) {
+  .kpi-grid.cols-4, .kpi-grid.cols-3 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}

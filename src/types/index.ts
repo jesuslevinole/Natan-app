@@ -30,7 +30,7 @@ export interface Role {
   permissions: string[];
 }
 
-export type LogAction = 'LOGIN' | 'CREATE' | 'UPDATE' | 'DELETE' | 'IMPORT';
+export type LogAction = 'LOGIN' | 'CREATE' | 'UPDATE' | 'DELETE' | 'IMPORT' | 'EXPORT';
 
 export interface LogEntry {
   id?: string;

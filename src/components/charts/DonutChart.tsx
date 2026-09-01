@@ -1,7 +1,7 @@
 import type { CSSProperties } from 'react';
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts';
 import ChartTooltip from './ChartTooltip';
-import { CHART_COLORS, truncate } from './chartUtils';
+import { donutSlices, truncate } from './chartUtils';
 
 export interface DonutSlice {
   name: string;
@@ -20,12 +20,8 @@ interface Props {
 
 /** Anillo con total al centro y leyenda a la derecha (o debajo en móvil). */
 export default function DonutChart({ data, centerLabel = 'Total', centerValue, maxSlices = 6 }: Props) {
-  const sorted = [...data].filter(d => d.value > 0).sort((a, b) => b.value - a.value);
-  const slices = sorted.length > maxSlices
-    ? [...sorted.slice(0, maxSlices - 1), { name: 'Other', value: sorted.slice(maxSlices - 1).reduce((s, d) => s + d.value, 0), color: '#cbd5e1' }]
-    : sorted;
-  const total = slices.reduce((s, d) => s + d.value, 0);
-  const colored = slices.map((d, i) => ({ ...d, color: d.color ?? CHART_COLORS[i % CHART_COLORS.length] }));
+  const colored = donutSlices(data, maxSlices);
+  const total = colored.reduce((s, d) => s + d.value, 0);
 
   return (
     <div className="donut-layout">

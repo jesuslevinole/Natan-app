@@ -63,7 +63,7 @@ idénticas se fusionan. También hay una plantilla descargable con columnas PO #
 | Work Activity | Órdenes de trabajo (activas / histórico), productos consumidos por orden |
 | Item Entrance | Entradas de inventario por PO (header + productos con categoría, precio, factura, garantía), stock y valor en tiempo real, **importación del reporte de inventario**, historial de instalación |
 | Catalogs | Destinos (direcciones/unidades), proveedores, nombres de ítem. **Importación masiva desde Excel** y exportación |
-| Reports | Filtros combinados, KPIs y tablas detalladas en pestañas (las gráficas viven en el Dashboard). **Exportación a Excel** |
+| Reports | Filtros combinados y tablas detalladas en pestañas (las gráficas y KPIs viven en el Dashboard). **Exportación a Excel y a PDF gerencial** |
 | Account Users / Roles / Activity History / Business Settings | Administración (permiso `manage_security`) |
 
 ## Importar las direcciones del cliente
@@ -96,6 +96,12 @@ Convenciones de código y CSS: ver `CLAUDE.md`. Historial de la revisión: `code
 exportar, usuarios, roles, historial, ajustes del negocio). Los roles creados antes de esta versión
 siguen funcionando: cada permiso nuevo hereda del permiso viejo equivalente (`manage_security`,
 `manage_catalogs`, etc.).
+
+### Exportar a PDF
+
+Dashboard y Reports tienen **Export PDF** (permiso `export_reports`): documento carta apaisado con el
+logo y nombre del negocio, KPIs, gráficas (en el Dashboard) y tablas completas, listo para gerencia.
+Se genera en el navegador con jsPDF; no requiere servicios externos.
 
 ### Traducir y corregir textos
 

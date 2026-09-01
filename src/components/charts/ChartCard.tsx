@@ -15,10 +15,12 @@ interface Props {
   /** Muestra un estado vacío en lugar del gráfico. */
   empty?: boolean;
   emptyMessage?: string;
+  /** Identificador para capturar el SVG al exportar a PDF (data-chart-id). */
+  chartId?: string;
 }
 
 /** Tarjeta contenedora de un gráfico: cabecera uniforme + área de alto fijo (recharts necesita alto definido). */
-export default function ChartCard({ title, subtitle, icon, actions, children, wide = false, height = 'md', empty = false, emptyMessage = 'No data for the current filters.' }: Props) {
+export default function ChartCard({ title, subtitle, icon, actions, children, wide = false, height = 'md', empty = false, emptyMessage = 'No data for the current filters.', chartId }: Props) {
   return (
     <section className={`chart-card${wide ? ' wide' : ''}`}>
       <header className="chart-card-head">
@@ -29,7 +31,7 @@ export default function ChartCard({ title, subtitle, icon, actions, children, wi
         </div>
         {actions && <div className="chart-card-actions">{actions}</div>}
       </header>
-      <div className={`chart-card-body h-${height}`}>
+      <div className={`chart-card-body h-${height}`} data-chart-id={chartId}>
         {empty ? <p className="chart-empty">{emptyMessage}</p> : children}
       </div>
     </section>

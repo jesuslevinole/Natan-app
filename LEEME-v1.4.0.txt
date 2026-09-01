@@ -1,0 +1,32 @@
+Natan-app v1.4.0 — archivos para copiar sobre el proyecto
+==========================================================
+Vi que ya subiste la v1.3.0 ("Correcciones generales") — perfecto. Este zip trae
+SOLO esta ronda: 14 archivos.
+
+IMPORTANTE: hay 2 dependencias nuevas (jspdf y jspdf-autotable), por eso van
+package.json y package-lock.json. Hay que correr npm install.
+
+Cómo aplicarlo
+--------------
+1. Extraé el zip DENTRO de la carpeta del proyecto, reemplazando los existentes.
+2. git rm LEEME-v1.2.0.txt LEEME-v1.3.0.txt     (limpieza: quedaron commiteados)
+3. npm install
+4. npm run build                                 (debe terminar sin errores)
+5. git add -A && git commit -m "v1.4.0: PDF gerencial y dashboard ordenado" && git push
+
+Qué cambia
+----------
+1. REPORTS: sin tarjetas de KPIs (quedó filtros + tablas). Los KPIs van dentro del PDF.
+2. "Export PDF" en REPORTS: PDF carta apaisado con logo y nombre del negocio, período
+   y filtros aplicados, franja de KPIs y las 5 tablas completas, pie "Confidential"
+   con numeración. Listo para alta gerencia.
+3. "Export PDF" en DASHBOARD: KPIs, las 7 gráficas como imagen con sus leyendas,
+   agenda y alertas de stock bajo.
+   Ambos botones requieren el permiso "Export reports (Excel / PDF)" y quedan
+   registrados en Activity History.
+4. DASHBOARD reordenado: KPIs en dos filas limpias (4 operativas + 3 de inventario),
+   "Today's work" (agenda + stock bajo) y luego "Trends & analytics".
+
+Adjunto en la descarga van dos PDFs de ejemplo generados con datos de prueba
+(ejemplo-dashboard.pdf y ejemplo-reporte.pdf) para que veas el resultado antes
+de aplicar nada.

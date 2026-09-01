@@ -1,7 +1,6 @@
 import { useState, useMemo, useCallback, type CSSProperties } from 'react';
-import { BarChart2, Filter, Award, Activity, Wrench, MapPin, FileBarChart, Download, RotateCcw, X, CheckCircle2, AlertTriangle, Briefcase, PackageSearch, Repeat } from 'lucide-react';
+import { BarChart2, Filter, Wrench, MapPin, FileBarChart, Download, RotateCcw, X, FileText, Briefcase, PackageSearch, Repeat } from 'lucide-react';
 import type { JobProduct, JobOrder } from '../types';
-import KpiCard from '../components/KpiCard';
 import DestinationSearch from '../components/DestinationSearch';
 import ModuleHeader from '../components/ModuleHeader';
 import LoadingScreen from '../components/LoadingScreen';
@@ -13,6 +12,9 @@ import NotesCell from '../components/NotesCell';
 import SeqBadge from '../components/SeqBadge';
 import Tabs, { type TabItem } from '../components/Tabs';
 import RequirePermission from '../components/RequirePermission';
+import { useCompany } from '../hooks/useCompany';
+import { useAuthorName } from '../hooks/useAuth';
+import { AuditLogger } from '../utils/logger';
 import { WorkFinishBadge, ScheduleCell } from '../components/StatusBadge';
 import { truncate } from '../components/charts/chartUtils';
 import ShareBar from '../components/charts/ShareBar';
@@ -111,7 +113,7 @@ export default function ReportsModule() {
       .sort((a, b) => new Date(b.orderDate).getTime() - new Date(a.orderDate).getTime());
   }, [jobProducts, filteredOrders, productMatches, supplyCompanyOf, priceByDetail]);
 
-  const { totalItemsInstalled, installedValue, aptList, mostWorkedApt, repeatedList, topWorker } = useMemo(() => {
+  const { totalItemsInstalled, installedValue, aptList, mostWorkedApt, repeatedList } = useMemo(() => {
     const count = (keys: string[]) => {
       const m = new Map<string, number>();
       keys.forEach(k => m.set(k, (m.get(k) || 0) + 1));
@@ -156,6 +158,76 @@ export default function ReportsModule() {
     })
     .filter((x): x is NonNullable<typeof x> => x !== null)
     .sort((a, b) => b.po.localeCompare(a.po)), [entrances, jobProducts, filters]);
+
+  const { company } = useCompany();
+  const authorName = useAuthorName();
+  const [isPdfBusy, setIsPdfBusy] = useState(false);
+  const handleExportPdf = async () => {
+    setIsPdfBusy(true);
+    try {
+      const pdf = await import('../utils/pdf');
+      const doc = pdf.createDoc();
+      const periodLabel = filters.startDate || filters.endDate
+        ? `${filters.startDate ? formatDateDisplay(filters.startDate) : 'Beginning'} — ${filters.endDate ? formatDateDisplay(filters.endDate) : 'Today'}`
+        : 'All time';
+      const filterText = activeFilters.length
+        ? activeFilters.map(k => `${FILTER_LABELS[k]}: ${k === 'startDate' || k === 'endDate' ? formatDateDisplay(filters[k]) : filters[k]}`).join('   ·   ')
+        : 'No filters applied (all data)';
+      let y = pdf.brandHeader(doc, company, 'Operations Report', `Period: ${periodLabel}    ·    ${filterText}`, authorName);
+
+      y = pdf.kpiStrip(doc, y, [
+        { label: 'Activities', value: String(filteredOrders.length), note: `${filteredOrders.length - completed} still open`, color: pdf.PDF_COLORS.PRIMARY },
+        { label: 'Completed', value: `${completed} (${completionRate}%)`, note: 'Work finish = YES', color: pdf.PDF_COLORS.GREEN },
+        { label: 'Overdue', value: String(overdue), note: 'Scheduled before today, not finished', color: overdue > 0 ? pdf.PDF_COLORS.RED : pdf.PDF_COLORS.SLATE },
+        { label: 'Items installed', value: String(totalItemsInstalled), note: installedValue > 0 ? `${formatCurrency(installedValue)} in materials` : `${filteredProductsDetailed.length} product lines`, color: pdf.PDF_COLORS.PURPLE },
+        { label: 'Top address', value: truncate(mostWorkedApt, 22), note: aptList[0] ? `${aptList[0].count} interventions` : undefined, color: pdf.PDF_COLORS.ORANGE },
+      ]);
+
+      y = pdf.sectionTitle(doc, y, `Work Activities (${filteredOrders.length})`);
+      y = pdf.drawTable(doc, y + 6,
+        ['#', 'Registered', 'Schedule', 'Address', 'Description', 'Ordered by', 'Status', 'Pending work'],
+        filteredOrders.map(o => [formatSeq(o.visualSeq), formatDateDisplay(o.createdAt), o.schedule ? formatDateDisplay(o.schedule) : '—', o.destination, o.description, o.jobOrder, o.workFinish === 'YES' ? 'Finished' : (o.schedule && o.schedule < today ? 'OVERDUE' : 'Open'), o.pendingWork || '—']),
+        { columnStyles: { 0: { cellWidth: 30 }, 1: { cellWidth: 56 }, 2: { cellWidth: 56 }, 3: { cellWidth: 100 }, 6: { cellWidth: 52, halign: 'center' } },
+          didParseCell: (data) => { if (data.section === 'body' && data.column.index === 6 && data.cell.raw === 'OVERDUE') data.cell.styles.textColor = pdf.PDF_COLORS.RED; } });
+
+      y = pdf.ensureSpace(doc, y, 120);
+      y = pdf.sectionTitle(doc, y, `Products Installed (${filteredProductsDetailed.length})`, pdf.PDF_COLORS.PURPLE);
+      y = pdf.drawTable(doc, y + 6,
+        ['Date', 'Address', 'Item', 'Model #', 'Serial #', 'PO #', 'Supplier', 'Qty', 'Unit price', 'Total'],
+        filteredProductsDetailed.map(p => [formatDateDisplay(p.orderDate), p.orderDestination, p.itemName, p.modelPart, p.serial || '—', p.po || '—', p.supplyCompany, p.quantity, p.unitPrice === null ? '—' : formatCurrency(p.unitPrice), p.unitPrice === null ? '—' : formatCurrency(p.unitPrice * p.quantity)]),
+        { columnStyles: { 7: { halign: 'center' }, 8: { halign: 'right' }, 9: { halign: 'right', fontStyle: 'bold' } } });
+
+      y = pdf.ensureSpace(doc, y, 120);
+      y = pdf.sectionTitle(doc, y, `Items by PO (${poAggregate.length})`, pdf.PDF_COLORS.ORANGE);
+      y = pdf.drawTable(doc, y + 6,
+        ['PO #', 'Date', 'Supplier', 'Products', 'Received', 'Installed', 'Remaining', 'Usage'],
+        poAggregate.map(r => [r.po, formatDateDisplay(r.date), r.supplyCompany, r.productsCount, r.totalArrived, r.installed, r.remaining, `${r.totalArrived > 0 ? Math.round((r.installed / r.totalArrived) * 100) : 0}%`]),
+        { columnStyles: { 3: { halign: 'center' }, 4: { halign: 'center' }, 5: { halign: 'center' }, 6: { halign: 'center' }, 7: { halign: 'center' } } });
+
+      y = pdf.ensureSpace(doc, y, 120);
+      y = pdf.sectionTitle(doc, y, `Works per Address (${aptList.length})`, pdf.PDF_COLORS.GREEN);
+      y = pdf.drawTable(doc, y + 6,
+        ['Address', 'Interventions', 'Share'],
+        aptList.map(a => [a.dest, a.count, `${filteredOrders.length ? Math.round((a.count / filteredOrders.length) * 100) : 0}%`]),
+        { columnStyles: { 1: { halign: 'center' }, 2: { halign: 'center' } }, tableWidth: 420 });
+
+      const repeated = repeatedList.filter(r => r.count > 1);
+      if (repeated.length > 0) {
+        y = pdf.ensureSpace(doc, y, 120);
+        y = pdf.sectionTitle(doc, y, `Repeated Tasks (${repeated.length})`, pdf.PDF_COLORS.RED);
+        pdf.drawTable(doc, y + 6, ['Address', 'Task', 'Times done'], repeated.map(r => [r.dest, r.desc, r.count]), { columnStyles: { 2: { halign: 'center' } } });
+      }
+
+      pdf.addFooters(doc, company, 'Operations Report');
+      doc.save(`report-${getTodayString()}.pdf`);
+      AuditLogger.log({ action: 'EXPORT', module: 'Reports (PDF)', user: authorName, details: `PDF report generated (${filteredOrders.length} orders)` });
+    } catch (err) {
+      console.error('PDF export failed', err);
+      alert('Could not generate the PDF. Please try again.');
+    } finally {
+      setIsPdfBusy(false);
+    }
+  };
 
   const handleExport = () => {
     downloadWorkbook(`natan-report-${new Date().toISOString().slice(0, 10)}.xlsx`, [
@@ -261,7 +333,10 @@ export default function ReportsModule() {
         actions={
           <RequirePermission permission="export_reports">
             <button type="button" className="action btn-secondary btn-header" onClick={handleExport} title="Download the filtered data as an Excel workbook">
-              <Download size={18} /> Export to Excel
+              <Download size={18} /> Excel
+            </button>
+            <button type="button" className="action btn-primary btn-header" onClick={handleExportPdf} disabled={isPdfBusy} title="Generate a management-ready PDF of this report">
+              <FileText size={18} /> {isPdfBusy ? 'Generating...' : 'Export PDF'}
             </button>
           </RequirePermission>
         }
@@ -310,15 +385,6 @@ export default function ReportsModule() {
           </div>
         )}
       </section>
-
-      <div className="kpi-grid">
-        <KpiCard icon={<Activity size={20} />} label="Activities" value={filteredOrders.length} tone="blue" note={`${filteredOrders.length - completed} still open`} />
-        <KpiCard icon={<CheckCircle2 size={20} />} label="Completed" value={<>{completed} <small className="kpi-sub">({completionRate}%)</small></>} tone="green" note="Work finish = YES" />
-        <KpiCard icon={<AlertTriangle size={20} />} label="Overdue" value={overdue} tone={overdue > 0 ? 'red' : 'slate'} note="Scheduled before today, not finished" />
-        <KpiCard icon={<Wrench size={20} />} label="Items Installed" value={totalItemsInstalled} tone="purple" note={installedValue > 0 ? `${formatCurrency(installedValue)} in materials` : `${filteredProductsDetailed.length} product lines`} />
-        <KpiCard icon={<MapPin size={20} />} label="Top Address" value={<span className="kpi-value small">{mostWorkedApt}</span>} tone="cyan" note={aptList[0] ? `${aptList[0].count} interventions` : undefined} />
-        <KpiCard icon={<Award size={20} />} label="Top Account User" value={<span className="kpi-value small">{topWorker}</span>} tone="orange" />
-      </div>
 
       <div className="section-head">
         <span className="section-icon"><FileBarChart size={18} /></span>

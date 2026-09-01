@@ -2,9 +2,12 @@ import { useMemo, useState } from 'react';
 import {
   LayoutDashboard, Briefcase, CalendarClock, AlertTriangle, PackageSearch, Boxes, MapPin, ArrowRight,
   Plus, FileSpreadsheet, BarChart2, TrendingUp, PieChart as PieIcon, CheckCircle2, Clock, DollarSign, Wrench, Building2, Award, FileBarChart,
+  FileText,
 } from 'lucide-react';
 import { useAppData } from '../hooks/useAppData';
-import { useAuth } from '../hooks/useAuth';
+import { useAuth, useAuthorName } from '../hooks/useAuth';
+import { useCompany } from '../hooks/useCompany';
+import { AuditLogger } from '../utils/logger';
 import { getDetailStock, getEntranceStock } from '../utils/entrance';
 import ChartTypeToggle from '../components/charts/ChartTypeToggle';
 import { useChartVariant } from '../hooks/useChartVariant';
@@ -19,7 +22,7 @@ import ChartCard from '../components/charts/ChartCard';
 import MonthlyBars, { type MonthlyPoint } from '../components/charts/MonthlyBars';
 import DonutChart from '../components/charts/DonutChart';
 import RankBars from '../components/charts/RankBars';
-import { countBy, lastMonths, monthKey, COLOR_SUCCESS, COLOR_PRIMARY, COLOR_DANGER, COLOR_WARNING } from '../components/charts/chartUtils';
+import { countBy, lastMonths, monthKey, donutSlices, COLOR_SUCCESS, COLOR_PRIMARY, COLOR_DANGER, COLOR_WARNING } from '../components/charts/chartUtils';
 import type { JobOrder } from '../types';
 import type { ModuleId } from '../App';
 import './DashboardModule.css';
@@ -48,6 +51,9 @@ interface LowStockRow {
 export default function DashboardModule({ onNavigate }: Props) {
   const { jobOrders, jobProducts, entrances, usage, destinations, isLoading } = useAppData();
   const { currentUser, hasPermission } = useAuth();
+  const { company } = useCompany();
+  const authorName = useAuthorName();
+  const [isPdfBusy, setIsPdfBusy] = useState(false);
   const today = getTodayString();
   const thisMonth = today.slice(0, 7);
   const [period, setPeriod] = useState<PeriodMonths>(6);
@@ -133,6 +139,84 @@ export default function DashboardModule({ onNavigate }: Props) {
     { id: 'stock', header: 'Stock', value: r => r.stock, type: 'number', align: 'center', render: r => <StockLevel stock={r.stock} total={r.total} /> },
   ], []);
 
+  const statusSlices = [
+    { name: 'Finished', value: jobOrders.length - stats.active.length, color: COLOR_SUCCESS },
+    { name: 'In progress', value: stats.active.length - stats.overdue.length, color: COLOR_PRIMARY },
+    { name: 'Overdue', value: stats.overdue.length, color: COLOR_DANGER },
+  ];
+
+  const handleExportPdf = async () => {
+    setIsPdfBusy(true);
+    try {
+      const pdf = await import('../utils/pdf');
+      const doc = pdf.createDoc();
+      let y = pdf.brandHeader(doc, company, 'Operations Dashboard', `Snapshot of ${formatDateDisplay(today)} — full operation, all time`, authorName);
+      y = pdf.kpiStrip(doc, y, [
+        { label: 'Active orders', value: String(stats.active.length), note: `${stats.unscheduled.length} without a schedule`, color: pdf.PDF_COLORS.PRIMARY },
+        { label: 'Due today', value: String(stats.dueToday.length), color: pdf.PDF_COLORS.PURPLE },
+        { label: 'Overdue', value: String(stats.overdue.length), color: stats.overdue.length > 0 ? pdf.PDF_COLORS.RED : pdf.PDF_COLORS.GREEN },
+        { label: 'Orders this month', value: String(stats.createdThisMonth), note: `${stats.createdThisMonth - stats.createdLastMonth >= 0 ? '+' : ''}${stats.createdThisMonth - stats.createdLastMonth} vs last month`, color: pdf.PDF_COLORS.SLATE },
+        { label: 'Units in stock', value: String(stats.stockAvailable), note: `${stats.lowStock.length} low stock`, color: pdf.PDF_COLORS.ORANGE },
+        { label: 'Inventory value', value: formatCurrency(stats.stockValue), note: `of ${formatCurrency(stats.receivedValue)} received`, color: pdf.PDF_COLORS.GREEN },
+      ]);
+
+      const captures = await Promise.all([
+        pdf.captureChart('dash_orders'), pdf.captureChart('dash_status'), pdf.captureChart('dash_items'),
+        pdf.captureChart('dash_property'), pdf.captureChart('dash_users'), pdf.captureChart('dash_po'), pdf.captureChart('dash_addresses'),
+      ]);
+      const [orders, status, items, property, users, po, addresses] = captures;
+      const total = jobOrders.length;
+      const pct = (v: number) => (total ? ` (${Math.round((v / total) * 100)}%)` : '');
+      const toLegend = (slices: { name: string; value: number; color: string }[], sum: number) =>
+        slices.map(s => ({ color: s.color, label: s.name, value: `${s.value}${sum ? ` · ${Math.round((s.value / sum) * 100)}%` : ''}` }));
+      const itemSlices = donutSlices(stats.itemsByName);
+      const propertySlices = donutSlices(stats.byProperty);
+      const charts = [
+        orders && { title: `Orders — last ${period} months`, image: orders, wide: true, legend: [
+          { color: COLOR_SUCCESS, label: 'Finished' }, { color: COLOR_PRIMARY, label: 'Open' },
+        ] },
+        status && { title: 'Order status', image: status, legend: statusSlices.map(s => ({ color: s.color, label: s.name, value: `${s.value}${pct(s.value)}` })) },
+        items && { title: 'Items installed by product', image: items, legend: toLegend(itemSlices, itemSlices.reduce((s, d) => s + d.value, 0)) },
+        property && { title: 'Work by property', image: property, legend: toLegend(propertySlices, propertySlices.reduce((s, d) => s + d.value, 0)) },
+        users && { title: 'Orders per account user', image: users },
+        po && { title: 'Received vs installed by PO', image: po, wide: true, legend: [
+          { color: COLOR_PRIMARY, label: 'Received' }, { color: COLOR_WARNING, label: 'Installed' },
+        ] },
+        addresses && { title: 'Most visited addresses', image: addresses },
+      ].filter(Boolean) as import('../utils/pdf').ChartImage[];
+      if (charts.length > 0) {
+        y = pdf.ensureSpace(doc, y, 200);
+        y = pdf.sectionTitle(doc, y, 'Trends & analytics');
+        y = pdf.chartGrid(doc, y + 4, charts);
+      }
+
+      y = pdf.ensureSpace(doc, y, 140);
+      y = pdf.sectionTitle(doc, y, `Agenda — upcoming & overdue (${stats.agenda.length})`);
+      y = pdf.drawTable(doc, y + 6,
+        ['#', 'Schedule', 'Address', 'Description', 'Ordered by', 'Pending work'],
+        stats.agenda.map(o => [formatSeq(o.visualSeq), o.schedule ? formatDateDisplay(o.schedule) : '—', o.destination, o.description, o.jobOrder || '—', o.pendingWork || '—']),
+        { didParseCell: (data) => { const row = stats.agenda[data.row.index]; if (data.section === 'body' && row && row.schedule < today) data.cell.styles.textColor = pdf.PDF_COLORS.RED; } });
+
+      if (stats.lowStock.length > 0) {
+        y = pdf.ensureSpace(doc, y, 140);
+        y = pdf.sectionTitle(doc, y, `Low stock alerts (${stats.lowStock.length})`, pdf.PDF_COLORS.ORANGE);
+        pdf.drawTable(doc, y + 6,
+          ['PO #', 'Item', 'Model', 'Supplier', 'Stock', 'Received'],
+          stats.lowStock.map(r => [r.po || '—', r.itemName, r.modelPart, r.supplyCompany, r.stock, r.total]),
+          { columnStyles: { 4: { halign: 'center', fontStyle: 'bold' }, 5: { halign: 'center' } }, tableWidth: 520 });
+      }
+
+      pdf.addFooters(doc, company, 'Operations Dashboard');
+      doc.save(`dashboard-${today}.pdf`);
+      AuditLogger.log({ action: 'EXPORT', module: 'Dashboard (PDF)', user: authorName, details: 'Dashboard PDF generated' });
+    } catch (err) {
+      console.error('PDF export failed', err);
+      alert('Could not generate the PDF. Please try again.');
+    } finally {
+      setIsPdfBusy(false);
+    }
+  };
+
   if (isLoading) return <LoadingScreen message="Loading dashboard..." />;
 
   const canWork = hasPermission('view_work_activity');
@@ -142,11 +226,6 @@ export default function DashboardModule({ onNavigate }: Props) {
   const canCatalogs = hasPermission('view_catalogs');
   const canReports = hasPermission('view_reports');
 
-  const statusSlices = [
-    { name: 'Finished', value: jobOrders.length - stats.active.length, color: COLOR_SUCCESS },
-    { name: 'In progress', value: stats.active.length - stats.overdue.length, color: COLOR_PRIMARY },
-    { name: 'Overdue', value: stats.overdue.length, color: COLOR_DANGER },
-  ];
   const stockPct = stats.stockTotal > 0 ? Math.round((stats.stockAvailable / stats.stockTotal) * 100) : 0;
 
   return (
@@ -161,57 +240,33 @@ export default function DashboardModule({ onNavigate }: Props) {
           {canAddStock && <button type="button" className="action btn-secondary btn-sm" onClick={() => onNavigate('itemEntrance')}><PackageSearch size={16} /> New PO</button>}
           {canCatalogs && <button type="button" className="action btn-secondary btn-sm" onClick={() => onNavigate('catalogs')}><FileSpreadsheet size={16} /> Import addresses</button>}
           {canReports && <button type="button" className="action btn-secondary btn-sm" onClick={() => onNavigate('reports')}><BarChart2 size={16} /> Reports</button>}
+          {hasPermission('export_reports') && (
+            <button type="button" className="action btn-secondary btn-sm" onClick={handleExportPdf} disabled={isPdfBusy} title="Download this dashboard as a management-ready PDF">
+              <FileText size={16} /> {isPdfBusy ? 'Generating...' : 'Export PDF'}
+            </button>
+          )}
         </div>
       </div>
 
-      <div className="kpi-grid">
+      <div className="kpi-grid cols-4">
         <KpiCard icon={<Briefcase size={20} />} label="Active Orders" value={stats.active.length} tone="blue" note={`${stats.unscheduled.length} without a schedule`} onClick={canWork ? () => onNavigate('workActivity') : undefined} />
         <KpiCard icon={<CalendarClock size={20} />} label="Due Today" value={stats.dueToday.length} tone="purple" note={stats.dueToday.length === 0 ? 'Nothing scheduled for today' : 'Scheduled for today'} />
         <KpiCard icon={<AlertTriangle size={20} />} label="Overdue" value={stats.overdue.length} tone={stats.overdue.length > 0 ? 'red' : 'green'} note={stats.overdue.length > 0 ? 'Scheduled before today, not finished' : 'Everything is on time'} />
         <KpiCard icon={<CheckCircle2 size={20} />} label="Orders this month" value={stats.createdThisMonth} tone="cyan" trend={{ delta: stats.createdThisMonth - stats.createdLastMonth, label: 'vs last month' }} />
+      </div>
+      <div className="kpi-grid cols-3">
         <KpiCard icon={<Boxes size={20} />} label="Units in Stock" value={stats.stockAvailable} tone={stats.lowStock.length > 0 ? 'orange' : 'green'} note={`${stockPct}% of received · ${stats.lowStock.length} low`} onClick={canStock ? () => onNavigate('itemEntrance') : undefined} />
         <KpiCard icon={<DollarSign size={20} />} label="Inventory value" value={formatCurrency(stats.stockValue)} tone="green" note={stats.receivedValue > 0 ? `of ${formatCurrency(stats.receivedValue)} received` : 'Add unit prices to POs to track value'} onClick={canStock ? () => onNavigate('itemEntrance') : undefined} />
         <KpiCard icon={<MapPin size={20} />} label="Addresses" value={destinations.length} tone="slate" note={`${stats.properties} propert${stats.properties === 1 ? 'y' : 'ies'}`} onClick={canCatalogs ? () => onNavigate('catalogs') : undefined} />
       </div>
 
-      <div className="chart-grid">
-        <ChartCard
-          title={`Orders — last ${period} months`}
-          subtitle={`${stats.periodOrders} orders registered in the period, by status`}
-          icon={<TrendingUp size={16} />}
-          wide
-          empty={jobOrders.length === 0}
-          actions={
-            <>
-              <div className="chip-group compact" role="group" aria-label="Period">
-                {PERIODS.map(p => <button key={p.id} type="button" className={`chip${period === p.id ? ' active' : ''}`} onClick={() => setPeriod(p.id)} aria-pressed={period === p.id}>{p.label}</button>)}
-              </div>
-              <ChartTypeToggle value={variant} onChange={setVariant} />
-            </>
-          }
-        >
-          <MonthlyBars data={stats.monthly} variant={variant} series={[{ key: 'finished', name: 'Finished', color: COLOR_SUCCESS }, { key: 'open', name: 'Open', color: COLOR_PRIMARY }]} />
-        </ChartCard>
-        <ChartCard title="Order status" subtitle={`${stats.finishedThisMonth} finished this month`} icon={<PieIcon size={16} />} empty={jobOrders.length === 0}>
-          <DonutChart data={statusSlices} centerLabel="Orders" />
-        </ChartCard>
-        <ChartCard title="Items installed by product" subtitle="Units consumed per item name" icon={<Wrench size={16} />} empty={stats.itemsByName.length === 0}>
-          <DonutChart data={stats.itemsByName} centerLabel="Units" />
-        </ChartCard>
-        <ChartCard title="Work by property" subtitle="Orders per apartment complex" icon={<Building2 size={16} />} empty={stats.byProperty.length === 0}>
-          <DonutChart data={stats.byProperty} centerLabel="Orders" />
-        </ChartCard>
-        <ChartCard title="Orders per account user" subtitle="Who ordered the work" icon={<Award size={16} />} empty={stats.byUser.length === 0}>
-          <RankBars data={stats.byUser} valueName="Orders" multicolor />
-        </ChartCard>
-        <ChartCard title="Received vs installed by PO" subtitle="Latest purchase orders" icon={<FileBarChart size={16} />} wide empty={stats.poChart.length === 0}>
-          <MonthlyBars data={stats.poChart} stacked={false} xFormatter={v => v} series={[{ key: 'received', name: 'Received', color: COLOR_PRIMARY }, { key: 'installed', name: 'Installed', color: COLOR_WARNING }]} />
-        </ChartCard>
-        <ChartCard title="Most visited addresses" subtitle="All-time interventions" icon={<MapPin size={16} />} empty={stats.topAddresses.length === 0}>
-          <RankBars data={stats.topAddresses} valueName="Orders" max={8} />
-        </ChartCard>
+      <div className="section-head">
+        <span className="section-icon"><Clock size={18} /></span>
+        <div>
+          <h3>Today&apos;s work</h3>
+          <p>Upcoming and overdue orders, and products running low.</p>
+        </div>
       </div>
-
       <div className="dash-grid">
         <section className="dash-panel">
           <header className="dash-panel-head">
@@ -264,6 +319,53 @@ export default function DashboardModule({ onNavigate }: Props) {
         </section>
 
       </div>
+
+      <div className="section-head">
+        <span className="section-icon"><BarChart2 size={18} /></span>
+        <div>
+          <h3>Trends &amp; analytics</h3>
+          <p>Full operation, all time. Use Reports to filter by date, address or user.</p>
+        </div>
+      </div>
+      <div className="chart-grid">
+        <ChartCard
+          title={`Orders — last ${period} months`}
+          chartId="dash_orders"
+          subtitle={`${stats.periodOrders} orders registered in the period, by status`}
+          icon={<TrendingUp size={16} />}
+          wide
+          empty={jobOrders.length === 0}
+          actions={
+            <>
+              <div className="chip-group compact" role="group" aria-label="Period">
+                {PERIODS.map(p => <button key={p.id} type="button" className={`chip${period === p.id ? ' active' : ''}`} onClick={() => setPeriod(p.id)} aria-pressed={period === p.id}>{p.label}</button>)}
+              </div>
+              <ChartTypeToggle value={variant} onChange={setVariant} />
+            </>
+          }
+        >
+          <MonthlyBars data={stats.monthly} variant={variant} series={[{ key: 'finished', name: 'Finished', color: COLOR_SUCCESS }, { key: 'open', name: 'Open', color: COLOR_PRIMARY }]} />
+        </ChartCard>
+        <ChartCard chartId="dash_status" title="Order status" subtitle={`${stats.finishedThisMonth} finished this month`} icon={<PieIcon size={16} />} empty={jobOrders.length === 0}>
+          <DonutChart data={statusSlices} centerLabel="Orders" />
+        </ChartCard>
+        <ChartCard chartId="dash_items" title="Items installed by product" subtitle="Units consumed per item name" icon={<Wrench size={16} />} empty={stats.itemsByName.length === 0}>
+          <DonutChart data={stats.itemsByName} centerLabel="Units" />
+        </ChartCard>
+        <ChartCard chartId="dash_property" title="Work by property" subtitle="Orders per apartment complex" icon={<Building2 size={16} />} empty={stats.byProperty.length === 0}>
+          <DonutChart data={stats.byProperty} centerLabel="Orders" />
+        </ChartCard>
+        <ChartCard chartId="dash_users" title="Orders per account user" subtitle="Who ordered the work" icon={<Award size={16} />} empty={stats.byUser.length === 0}>
+          <RankBars data={stats.byUser} valueName="Orders" multicolor />
+        </ChartCard>
+        <ChartCard chartId="dash_po" title="Received vs installed by PO" subtitle="Latest purchase orders" icon={<FileBarChart size={16} />} wide empty={stats.poChart.length === 0}>
+          <MonthlyBars data={stats.poChart} stacked={false} xFormatter={v => v} series={[{ key: 'received', name: 'Received', color: COLOR_PRIMARY }, { key: 'installed', name: 'Installed', color: COLOR_WARNING }]} />
+        </ChartCard>
+        <ChartCard chartId="dash_addresses" title="Most visited addresses" subtitle="All-time interventions" icon={<MapPin size={16} />} empty={stats.topAddresses.length === 0}>
+          <RankBars data={stats.topAddresses} valueName="Orders" max={8} />
+        </ChartCard>
+      </div>
+
     </div>
   );
 }

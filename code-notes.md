@@ -136,3 +136,14 @@ Verificación: `npm run check` 0/0, `npm run build` OK, render en Chromium claro
 - **TextAssist** (`components/TextAssist.tsx` + `utils/textAssist.ts`): botones ES→EN, EN→ES y "Fix writing" bajo Description y Pending Work, con Undo. Traducción vía MyMemory (api.mymemory.translated.net, sin key, ~5.000 palabras/día por IP) y corrección vía LanguageTool (api.languagetool.org, idioma autodetectado, aplica la primera sugerencia de cada error). Si el servicio no responde, avisa y no toca el texto. Máx. 500 caracteres por llamada.
 
 Verificación: `npm run check` 0/0, `npm run build` OK, render en Chromium (Dashboard con todas las gráficas, Reports sin gráficas, modal de roles completo, formulario nuevo con TextAssist).
+
+## Ronda 6 — Reports sin KPIs y exportación a PDF (Reports y Dashboard)
+
+- **Reports**: se quitó la fila de KPIs; la vista queda filtros + tablas en pestañas. Los KPIs se siguen calculando porque van dentro del PDF.
+- **PDF** (`utils/pdf.ts`, jsPDF + jspdf-autotable en chunk propio cargado con `import()` al hacer clic): carta apaisada, encabezado con logo y nombre del negocio, franja de KPIs con acento de color, títulos de sección, tablas con cabecera oscura y zebra, "OVERDUE" en rojo, pie con "Confidential" y numeración en todas las páginas.
+  - **Reports → Export PDF**: período + filtros activos en el subtítulo, KPIs y las 5 tablas completas (activities, products installed con precios y totales, items by PO con % de uso, works per address con participación, repeated tasks).
+  - **Dashboard → Export PDF**: KPIs, las 7 gráficas como imagen y las tablas de agenda y stock bajo. Las gráficas se capturan del DOM (`ChartCard` acepta `chartId` → `data-chart-id`); `svgToPngDataUrl` clona el SVG de recharts copiando los estilos calculados (los ejes se pintan por CSS y no viajan en el serializado). Las leyendas de recharts son HTML, así que el PDF dibuja su propia leyenda (puntos de color + valores) con `donutSlices` compartido entre `DonutChart` y el export.
+  - Ambos botones requieren el permiso `export_reports` y registran `EXPORT` en Activity History (nuevo `LogAction`).
+- **Dashboard reordenado**: KPIs en dos filas fijas (4 operativas + 3 de inventario), sección "Today's work" (agenda + stock bajo) antes de "Trends & analytics" (las 7 gráficas), accesos rápidos + Export PDF en la cabecera.
+
+Verificación: `npm run check` 0/0, `npm run build` OK (chunk `pdf` ~137 KB gz solo bajo demanda), PDFs generados en Chromium y revisados página por página (dashboard 4 págs con leyendas, reporte 6 págs).

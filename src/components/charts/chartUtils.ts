@@ -41,3 +41,13 @@ export const countBy = <T,>(items: T[], key: (item: T) => string, weight: (item:
 
 /** Recorta un texto largo para ejes/leyendas. */
 export const truncate = (text: string, max = 22): string => (text.length > max ? `${text.slice(0, max - 1)}…` : text);
+
+export interface NamedSlice { name: string; value: number; color?: string }
+/** Misma agrupación que DonutChart: top N + "Other", con colores de la paleta. */
+export const donutSlices = (data: NamedSlice[], maxSlices = 6): Required<NamedSlice>[] => {
+  const sorted = [...data].filter(d => d.value > 0).sort((a, b) => b.value - a.value);
+  const slices = sorted.length > maxSlices
+    ? [...sorted.slice(0, maxSlices - 1), { name: 'Other', value: sorted.slice(maxSlices - 1).reduce((s, d) => s + d.value, 0), color: '#cbd5e1' }]
+    : sorted;
+  return slices.map((d, i) => ({ ...d, color: d.color ?? CHART_COLORS[i % CHART_COLORS.length] }));
+};
