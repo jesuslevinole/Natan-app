@@ -173,11 +173,15 @@ export default function CatalogsModule() {
         ) : undefined}
         actions={
           <>
-            <button type="button" className="action btn-secondary btn-header" onClick={handleExport} title="Download as Excel"><Download size={18} /> Export</button>
-            <RequirePermission permission="manage_catalogs">
-              {selectedCatalog.importable && (
+            <RequirePermission permission="export_catalogs">
+              <button type="button" className="action btn-secondary btn-header" onClick={handleExport} title="Download as Excel"><Download size={18} /> Export</button>
+            </RequirePermission>
+            {selectedCatalog.importable && (
+              <RequirePermission permission="import_catalogs">
                 <button type="button" className="action btn-secondary btn-header" onClick={() => setIsImportOpen(true)}><FileSpreadsheet size={18} /> Import</button>
-              )}
+              </RequirePermission>
+            )}
+            <RequirePermission permission="add_catalogs">
               <button type="button" className="action btn-primary btn-header" onClick={() => openForm(null)}><Plus size={18} /> New Record</button>
             </RequirePermission>
           </>
@@ -192,10 +196,14 @@ export default function CatalogsModule() {
         initialSort={{ id: 'seq', dir: 'asc' }}
         emptyMessage="No records in this catalog yet."
         actions={reg => (
-          <RequirePermission permission="manage_catalogs">
-            <button type="button" className="icon-btn edit" onClick={() => openForm(reg)} title="Edit"><Edit2 size={16} /></button>
-            <button type="button" className="icon-btn delete" onClick={() => handleDelete(reg)} title="Delete"><Trash2 size={16} /></button>
-          </RequirePermission>
+          <>
+            <RequirePermission permission="edit_catalogs">
+              <button type="button" className="icon-btn edit" onClick={() => openForm(reg)} title="Edit"><Edit2 size={16} /></button>
+            </RequirePermission>
+            <RequirePermission permission="delete_catalogs">
+              <button type="button" className="icon-btn delete" onClick={() => handleDelete(reg)} title="Delete"><Trash2 size={16} /></button>
+            </RequirePermission>
+          </>
         )}
       />
 

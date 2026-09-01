@@ -127,3 +127,12 @@ Verificación: `npm run check` 0/0, `npm run build` OK, `grep "style={{"` solo v
 - Pendiente de reglas de Firestore: `settings/company` con lectura pública y escritura autenticada (ver README).
 
 Verificación: `npm run check` 0/0, `npm run build` OK, render en Chromium claro y oscuro (Dashboard, Reports, Item Entrance con importación, Settings).
+
+## Ronda 5 — gráficas al Dashboard, roles granulares, formulario de orden, traducción
+
+- **Gráficas**: se quitaron las 7 tarjetas de gráficos de Reports (queda: filtros + KPIs + tablas en pestañas) y el Dashboard concentra todas: órdenes por período (3M/6M/12M, barras/línea/área), estado, ítems instalados por producto, trabajo por propiedad, órdenes por usuario (`jobOrder`), recibido vs instalado por PO y direcciones más visitadas.
+- **Permisos**: `utils/permissions.ts` es la única fuente (grupos por módulo + `permissionSatisfied`). Nuevos: `view_dashboard` (todos), `import_item_entrance`, `add/edit/delete/import/export_catalogs`, `export_reports` (Excel/PDF futuro), `view/manage_users`, `view/manage_roles`, `view_logs`, `manage_settings`. **Compatibilidad**: cada permiso nuevo declara `legacy` (qué permiso viejo lo implica), así los roles guardados no pierden acceso — p. ej. `manage_security` sigue abriendo Users/Roles/Logs/Settings y `manage_catalogs` implica add/edit/delete/import de catálogos. `manage_security` queda como "Field security & form configuration".
+- **Formulario de orden**: se eliminó el campo "Made by" (el dato legacy se conserva; la columna queda oculta por defecto y el detalle solo lo muestra si existe). Nuevo orden: Work Finish · Description (ancho) · Pending Work (ancho) · Schedule al lado de Pending Work. La agenda del Dashboard ahora muestra "Ordered by".
+- **TextAssist** (`components/TextAssist.tsx` + `utils/textAssist.ts`): botones ES→EN, EN→ES y "Fix writing" bajo Description y Pending Work, con Undo. Traducción vía MyMemory (api.mymemory.translated.net, sin key, ~5.000 palabras/día por IP) y corrección vía LanguageTool (api.languagetool.org, idioma autodetectado, aplica la primera sugerencia de cada error). Si el servicio no responde, avisa y no toca el texto. Máx. 500 caracteres por llamada.
+
+Verificación: `npm run check` 0/0, `npm run build` OK, render en Chromium (Dashboard con todas las gráficas, Reports sin gráficas, modal de roles completo, formulario nuevo con TextAssist).

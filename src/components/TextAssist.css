@@ -1,0 +1,13 @@
+.text-assist { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+.text-assist-btn {
+  display: inline-flex; align-items: center; gap: 5px; padding: 4px 9px; border-radius: 7px;
+  border: 1px solid var(--border-color); background: var(--surface-2); color: var(--text-body);
+  font-size: 0.72rem; font-weight: 600; cursor: pointer; transition: all 0.15s;
+}
+.text-assist-btn:hover:not(:disabled) { border-color: var(--primary-soft-border); background: var(--primary-soft); color: var(--primary-color); }
+.text-assist-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.text-assist-btn.undo { border-color: var(--warning-soft-border); background: var(--warning-soft); color: #b45309; }
+.text-assist-note { font-size: 0.72rem; color: var(--text-muted); font-style: italic; }
+.text-assist .spin { animation: ta-spin 0.8s linear infinite; }
+@keyframes ta-spin { to { transform: rotate(360deg); } }
+[data-theme="dark"] .text-assist-btn.undo { color: #fbbf24; }

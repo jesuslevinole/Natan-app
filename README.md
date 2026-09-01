@@ -59,11 +59,11 @@ idénticas se fusionan. También hay una plantilla descargable con columnas PO #
 
 | Módulo | Qué hace |
 |---|---|
-| Dashboard | KPIs del día: órdenes activas, vencidas, para hoy, stock disponible, alertas de stock bajo |
+| Dashboard | KPIs del día + **todas las gráficas** (órdenes por período, estado, ítems por producto, por propiedad, por usuario, recibido vs instalado, top direcciones), agenda y stock bajo |
 | Work Activity | Órdenes de trabajo (activas / histórico), productos consumidos por orden |
 | Item Entrance | Entradas de inventario por PO (header + productos con categoría, precio, factura, garantía), stock y valor en tiempo real, **importación del reporte de inventario**, historial de instalación |
 | Catalogs | Destinos (direcciones/unidades), proveedores, nombres de ítem. **Importación masiva desde Excel** y exportación |
-| Reports | Filtros combinados, KPIs, consumo por PO, log de productos instalados. **Exportación a Excel** |
+| Reports | Filtros combinados, KPIs y tablas detalladas en pestañas (las gráficas viven en el Dashboard). **Exportación a Excel** |
 | Account Users / Roles / Activity History / Business Settings | Administración (permiso `manage_security`) |
 
 ## Importar las direcciones del cliente
@@ -89,6 +89,20 @@ que ya contiene las 261 direcciones normalizadas).
 - `src/index.css` — utilidades globales; `src/App.css` — layout, tablas, modales.
 
 Convenciones de código y CSS: ver `CLAUDE.md`. Historial de la revisión: `code-notes.md`.
+
+### Roles y permisos
+
+`src/utils/permissions.ts` define todos los permisos por módulo (ver/crear/editar/borrar, importar,
+exportar, usuarios, roles, historial, ajustes del negocio). Los roles creados antes de esta versión
+siguen funcionando: cada permiso nuevo hereda del permiso viejo equivalente (`manage_security`,
+`manage_catalogs`, etc.).
+
+### Traducir y corregir textos
+
+En el formulario de órdenes, *Description* y *Pending Work* tienen botones **ES → EN**, **EN → ES** y
+**Fix writing**. Usan servicios públicos gratuitos (MyMemory para traducir, LanguageTool para
+ortografía) directamente desde el navegador, sin API key; si no hay internet o se agotó el cupo diario,
+avisan y no cambian el texto.
 
 ## Colecciones de Firestore
 

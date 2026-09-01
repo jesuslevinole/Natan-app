@@ -11,11 +11,12 @@ import DestinationSearch from '../components/DestinationSearch';
 import FieldSecurityModal from '../components/FieldSecurityModal';
 import LoadingScreen from '../components/LoadingScreen';
 import { WorkFinishBadge, ScheduleCell } from '../components/StatusBadge';
+import TextAssist from '../components/TextAssist';
 import DataTable, { type DataColumn } from '../components/DataTable';
 import NotesCell from '../components/NotesCell';
 import { useFormConfig, useFieldRoles } from '../hooks/useAppHooks';
 import { useAppData } from '../hooks/useAppData';
-import { getTodayString, formatDateDisplay, formatSeq, displayName, matchesSearch } from '../utils/helpers';
+import { getTodayString, formatDateDisplay, formatSeq, matchesSearch } from '../utils/helpers';
 import { flattenEntrances } from '../utils/entrance';
 import { nextSequence } from '../utils/firestore';
 import { AuditLogger } from '../utils/logger';
@@ -26,7 +27,6 @@ const JOB_FIELDS = [
   { name: 'createdAt', label: 'Registration Date' },
   { name: 'destination', label: 'Address' },
   { name: 'jobOrder', label: 'Ordered by' },
-  { name: 'madeBy', label: 'Made by' },
   { name: 'workFinish', label: 'Work Finish' },
   { name: 'description', label: 'Description' },
   { name: 'pendingWork', label: 'Pending Work' },
@@ -44,7 +44,7 @@ const emptyProduct: ProductFormData = {
 export default function WorkActivityModule() {
   const { currentUser } = useAuth();
   const authorName = useAuthorName();
-  const { jobOrders, jobProducts, entrances, usage, roles, users, isLoading } = useAppData();
+  const { jobOrders, jobProducts, entrances, usage, roles, isLoading } = useAppData();
 
   const [searchTerm, setSearchTerm] = useState('');
   const [showHistoric, setShowHistoric] = useState(false);
@@ -66,7 +66,7 @@ export default function WorkActivityModule() {
   const { fieldRoles, setFieldRole } = useFieldRoles('workActivity_jobFieldRoles');
 
   const initialFormState = useMemo<JobFormData>(() => ({
-    jobOrder: authorName, madeBy: authorName, destination: '', description: '',
+    jobOrder: authorName, madeBy: '', destination: '', description: '',
     workFinish: 'NO', pendingWork: '', schedule: '', createdAt: getTodayString(),
   }), [authorName]);
 
@@ -113,7 +113,7 @@ export default function WorkActivityModule() {
     if (job) {
       setEditingJob(job.id);
       setFormData({
-        jobOrder: job.jobOrder, madeBy: job.madeBy || authorName, destination: job.destination,
+        jobOrder: job.jobOrder, madeBy: job.madeBy || '', destination: job.destination,
         description: job.description, workFinish: job.workFinish, pendingWork: job.pendingWork,
         schedule: job.schedule, createdAt: job.createdAt || getTodayString(),
       });
@@ -284,7 +284,7 @@ export default function WorkActivityModule() {
     { id: 'createdAt', header: 'Registration', value: o => o.createdAt, type: 'date', nowrap: true, render: o => formatDateDisplay(o.createdAt) },
     { id: 'schedule', header: 'Schedule', value: o => o.schedule, type: 'date', nowrap: true, render: o => <ScheduleCell date={o.schedule} finished={o.workFinish === 'YES'} /> },
     { id: 'jobOrder', header: 'Ordered by', value: o => o.jobOrder, nowrap: true, render: o => <span className="cell-strong">{o.jobOrder}</span> },
-    { id: 'madeBy', header: 'Made by', value: o => o.madeBy || '', nowrap: true, render: o => o.madeBy ? <span className="cell-strong text-accent">{o.madeBy}</span> : <span className="badge neutral">Unassigned</span> },
+    { id: 'madeBy', header: 'Made by', value: o => o.madeBy || '', nowrap: true, defaultHidden: true, render: o => o.madeBy ? <span className="cell-strong text-accent">{o.madeBy}</span> : <span className="badge neutral">Unassigned</span> },
     { id: 'destination', header: 'Address', value: o => o.destination, nowrap: true, render: o => <span className="cell-strong">{o.destination}</span> },
     { id: 'description', header: 'Description', value: o => o.description, render: o => <span className="cell-clamp" title={o.description}>{o.description}</span> },
     { id: 'workFinish', header: 'Status', value: o => o.workFinish, align: 'center', render: o => <WorkFinishBadge value={o.workFinish} /> },
@@ -379,7 +379,7 @@ export default function WorkActivityModule() {
             <div className="detail-item"><dt>Registration Date</dt><dd>{formatDateDisplay(viewingJob.createdAt)}</dd></div>
             <div className="detail-item"><dt>Address</dt><dd>{viewingJob.destination}</dd></div>
             <div className="detail-item"><dt>Ordered by</dt><dd>{viewingJob.jobOrder}</dd></div>
-            <div className="detail-item"><dt>Made by</dt><dd className="fw-bold text-accent">{viewingJob.madeBy || 'Unassigned'}</dd></div>
+            {viewingJob.madeBy && <div className="detail-item"><dt>Made by</dt><dd className="fw-bold text-accent">{viewingJob.madeBy}</dd></div>}
             <div className="detail-item"><dt>Schedule</dt><dd>{formatDateDisplay(viewingJob.schedule)}</dd></div>
             <div className="detail-item"><dt>Status</dt><dd><WorkFinishBadge value={viewingJob.workFinish} /></dd></div>
             <div className="detail-item"><dt>Pending Work</dt><dd>{viewingJob.pendingWork || '-'}</dd></div>
@@ -449,14 +449,6 @@ export default function WorkActivityModule() {
                 </div>
 
                 <div className="form-group">
-                  <label>Made by {isJobReq('madeBy') && '*'} {lockHint('madeBy')}</label>
-                  <select className={inputCls('madeBy')} value={formData.madeBy || ''} onChange={e => setFormData({ ...formData, madeBy: e.target.value })} required={isJobReq('madeBy')} disabled={!isJobFieldEditable('madeBy')}>
-                    <option value="">-- Unassigned --</option>
-                    {users.map(u => { const name = displayName(u, u.email); return <option key={u.id} value={name}>{name}</option>; })}
-                  </select>
-                </div>
-
-                <div className="form-group">
                   <label>Work Finish {isJobReq('workFinish') && '*'} {lockHint('workFinish')}</label>
                   <select className={inputCls('workFinish')} value={formData.workFinish} onChange={e => setFormData({ ...formData, workFinish: e.target.value as WorkFinish })} required={isJobReq('workFinish')} disabled={!isJobFieldEditable('workFinish')}>
                     <option value="YES">YES</option>
@@ -467,14 +459,16 @@ export default function WorkActivityModule() {
                 <div className="form-group span-2">
                   <label>Description {isJobReq('description') && '*'} {lockHint('description')}</label>
                   <input type="text" className={inputCls('description')} value={formData.description} onChange={e => setFormData({ ...formData, description: e.target.value })} required={isJobReq('description')} disabled={!isJobFieldEditable('description')} />
+                  <TextAssist value={formData.description} onChange={v => setFormData({ ...formData, description: v })} disabled={!isJobFieldEditable('description')} />
+                </div>
+                <div className="form-group span-2">
+                  <label>Pending Work {isJobReq('pendingWork') && '*'} {lockHint('pendingWork')}</label>
+                  <input type="text" className={inputCls('pendingWork')} value={formData.pendingWork} onChange={e => setFormData({ ...formData, pendingWork: e.target.value })} required={isJobReq('pendingWork')} disabled={!isJobFieldEditable('pendingWork')} />
+                  <TextAssist value={formData.pendingWork} onChange={v => setFormData({ ...formData, pendingWork: v })} disabled={!isJobFieldEditable('pendingWork')} />
                 </div>
                 <div className="form-group">
                   <label>Schedule {isJobReq('schedule') && '*'} {lockHint('schedule')}</label>
                   <input type="date" className={inputCls('schedule')} value={formData.schedule} onChange={e => setFormData({ ...formData, schedule: e.target.value })} required={isJobReq('schedule')} disabled={!isJobFieldEditable('schedule')} />
-                </div>
-                <div className="form-group">
-                  <label>Pending Work {isJobReq('pendingWork') && '*'} {lockHint('pendingWork')}</label>
-                  <input type="text" className={inputCls('pendingWork')} value={formData.pendingWork} onChange={e => setFormData({ ...formData, pendingWork: e.target.value })} required={isJobReq('pendingWork')} disabled={!isJobFieldEditable('pendingWork')} />
                 </div>
               </div>
 

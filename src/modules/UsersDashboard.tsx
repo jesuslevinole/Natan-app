@@ -136,7 +136,7 @@ export default function UsersDashboard() {
         searchValue={searchTerm}
         onSearch={setSearchTerm}
         actions={
-          <RequirePermission permission="manage_security">
+          <RequirePermission permission="manage_users">
             <button type="button" className="action btn-primary btn-header" onClick={handleOpenAdd}><Plus size={18} /> Invite User</button>
           </RequirePermission>
         }
@@ -150,7 +150,7 @@ export default function UsersDashboard() {
         onRowClick={u => { setSelectedUserId(u.id ?? null); setModalState('detail'); }}
         emptyMessage="No users found."
         actions={user => (
-          <RequirePermission permission="manage_security">
+          <RequirePermission permission="manage_users">
             <button type="button" className="icon-btn edit" onClick={(e) => { e.stopPropagation(); handleOpenEdit(user); }} title="Edit User"><Edit2 size={16} /></button>
             <button type="button" className="icon-btn delete" onClick={(e) => { e.stopPropagation(); handleDeleteUser(user); }} title="Revoke Access"><Trash2 size={16} /></button>
           </RequirePermission>
@@ -162,7 +162,7 @@ export default function UsersDashboard() {
           title={modalTitle}
           onClose={() => setModalState('closed')}
           actions={
-            <RequirePermission permission="manage_security">
+            <RequirePermission permission="manage_users">
               <button type="button" className="action btn-primary" onClick={() => handleOpenEdit(selectedUser)}><Edit2 size={16} /> Edit</button>
             </RequirePermission>
           }

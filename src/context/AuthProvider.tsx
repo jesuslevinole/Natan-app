@@ -5,6 +5,7 @@ import { auth, db } from '../firebase';
 import type { User, Role } from '../types';
 import { AuthContext } from './authContext';
 import { resolveSystemUser, isOwnerEmail, SUPER_ADMIN_ROLE } from '../utils/auth';
+import { permissionSatisfied } from '../utils/permissions';
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -83,7 +84,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const hasPermission = useCallback((permission: string) => {
     if (!userRole) return false;
     if (userRole.name === 'Super Admin') return true;
-    return userRole.permissions.includes(permission);
+    return permissionSatisfied(permission, userRole.permissions);
   }, [userRole]);
 
   const value = useMemo(

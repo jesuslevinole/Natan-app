@@ -1,0 +1,29 @@
+Natan-app v1.3.0 — archivos para copiar sobre el proyecto
+==========================================================
+Contiene SOLO los 16 archivos nuevos o modificados respecto a tu GitHub actual
+(commit b6d15f1 "Correcciones de claude"). Sin dependencias nuevas.
+
+Cómo aplicarlo
+--------------
+1. Extraé el zip DENTRO de la carpeta del proyecto, reemplazando los existentes.
+2. (Opcional, limpieza) El LEEME anterior quedó commiteado en el repo: git rm LEEME-v1.2.0.txt
+3. npm run build
+4. git add -A && git commit -m "v1.3.0: graficas al dashboard, roles completos, formulario y traduccion" && git push
+
+Qué cambia
+----------
+1. REPORTS ya no tiene gráficas: quedó con filtros + KPIs + tablas en pestañas.
+   El DASHBOARD ahora tiene TODAS las gráficas (período 3M/6M/12M, estado,
+   ítems por producto, por propiedad, por usuario, recibido vs instalado por PO,
+   direcciones más visitadas).
+2. ROLES completos: cada módulo con sus acciones (ver/crear/editar/borrar,
+   importar inventario, importar/exportar catálogos, exportar reportes,
+   usuarios, roles, historial, ajustes del negocio). Los roles que ya creaste
+   NO pierden acceso: los permisos nuevos heredan de los viejos. Sugerencia:
+   abrí cada rol, revisá los checkboxes nuevos y guardá.
+3. Formulario de orden: se quitó "Made by" (los datos viejos se conservan,
+   la columna queda oculta por defecto). Schedule quedó al lado de Pending Work.
+4. Description y Pending Work tienen botones ES→EN, EN→ES y "Fix writing"
+   (corrige ortografía/gramática, detecta el idioma). Usan servicios gratuitos
+   por internet (MyMemory y LanguageTool), sin API key; si no hay conexión
+   avisan y no tocan el texto. Máximo 500 caracteres por uso.

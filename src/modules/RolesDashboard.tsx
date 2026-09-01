@@ -5,38 +5,16 @@ import { ShieldCheck, Plus, Edit2, Trash2, Save } from 'lucide-react';
 import type { Role } from '../types';
 import Modal from '../components/Modal';
 import DataTable, { type DataColumn } from '../components/DataTable';
+import { PERMISSION_GROUPS } from '../utils/permissions';
 import ModuleHeader from '../components/ModuleHeader';
 import LoadingScreen from '../components/LoadingScreen';
 import { AuditLogger } from '../utils/logger';
 import { useAuthorName } from '../hooks/useAuth';
+import RequirePermission from '../components/RequirePermission';
 import { useAppData } from '../hooks/useAppData';
 import { matchesSearch } from '../utils/helpers';
 
 const SUPER_ADMIN = 'Super Admin';
-
-// Diccionario de permisos agrupados para renderizar la UI dinámicamente
-const PERMISSION_GROUPS = [
-  { module: 'Work Activity', permissions: [
-    { id: 'view_work_activity', label: 'View Activities' },
-    { id: 'add_work_activity', label: 'Add Activity' },
-    { id: 'edit_work_activity', label: 'Edit Activity' },
-    { id: 'delete_work_activity', label: 'Delete Activity' },
-  ] },
-  { module: 'Item Entrance', permissions: [
-    { id: 'view_item_entrance', label: 'View Items' },
-    { id: 'add_item_entrance', label: 'Add Item' },
-    { id: 'edit_item_entrance', label: 'Edit Item' },
-    { id: 'delete_item_entrance', label: 'Delete Item' },
-  ] },
-  { module: 'Catalogs', permissions: [
-    { id: 'view_catalogs', label: 'View Catalogs' },
-    { id: 'manage_catalogs', label: 'Add/Edit/Delete/Import Catalogs' },
-  ] },
-  { module: 'System & Security', permissions: [
-    { id: 'view_reports', label: 'View Reports' },
-    { id: 'manage_security', label: 'Manage Users & Roles (Admin)' },
-  ] },
-];
 
 export default function RolesDashboard() {
   const authorName = useAuthorName();
@@ -124,12 +102,12 @@ export default function RolesDashboard() {
         onRowClick={role => handleOpenModal(role)}
         emptyMessage="No roles found."
         actions={role => (
-          <>
+          <RequirePermission permission="manage_roles">
             <button type="button" className="icon-btn edit" onClick={(e) => { e.stopPropagation(); handleOpenModal(role); }} title="Edit role"><Edit2 size={16} /></button>
             {role.name !== SUPER_ADMIN && (
               <button type="button" className="icon-btn delete" onClick={(e) => { e.stopPropagation(); handleDelete(role); }} title="Delete role"><Trash2 size={16} /></button>
             )}
-          </>
+          </RequirePermission>
         )}
       />
 

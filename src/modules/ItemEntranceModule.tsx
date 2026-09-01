@@ -316,14 +316,18 @@ export default function ItemEntranceModule() {
           </div>
         }
         actions={
-          <RequirePermission permission="add_item_entrance">
-            <button type="button" className="action btn-secondary btn-header" onClick={() => setIsImportOpen(true)} title="Import the client's inventory report (Excel/CSV)">
-              <FileSpreadsheet size={18} /> Import
-            </button>
-            <button type="button" className="action btn-primary btn-header" onClick={() => handleOpenModal(null)}>
-              <Plus size={18} /> New Entrance
-            </button>
-          </RequirePermission>
+          <>
+            <RequirePermission permission="import_item_entrance">
+              <button type="button" className="action btn-secondary btn-header" onClick={() => setIsImportOpen(true)} title="Import the client's inventory report (Excel/CSV)">
+                <FileSpreadsheet size={18} /> Import
+              </button>
+            </RequirePermission>
+            <RequirePermission permission="add_item_entrance">
+              <button type="button" className="action btn-primary btn-header" onClick={() => handleOpenModal(null)}>
+                <Plus size={18} /> New Entrance
+              </button>
+            </RequirePermission>
+          </>
         }
       />
 

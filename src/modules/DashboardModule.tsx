@@ -1,11 +1,11 @@
 import { useMemo, useState } from 'react';
 import {
   LayoutDashboard, Briefcase, CalendarClock, AlertTriangle, PackageSearch, Boxes, MapPin, ArrowRight,
-  Plus, FileSpreadsheet, BarChart2, TrendingUp, PieChart as PieIcon, CheckCircle2, Clock, DollarSign,
+  Plus, FileSpreadsheet, BarChart2, TrendingUp, PieChart as PieIcon, CheckCircle2, Clock, DollarSign, Wrench, Building2, Award, FileBarChart,
 } from 'lucide-react';
 import { useAppData } from '../hooks/useAppData';
 import { useAuth } from '../hooks/useAuth';
-import { getDetailStock } from '../utils/entrance';
+import { getDetailStock, getEntranceStock } from '../utils/entrance';
 import ChartTypeToggle from '../components/charts/ChartTypeToggle';
 import { useChartVariant } from '../hooks/useChartVariant';
 import { formatDateDisplay, getTodayString, formatSeq, formatCurrency } from '../utils/helpers';
@@ -19,7 +19,7 @@ import ChartCard from '../components/charts/ChartCard';
 import MonthlyBars, { type MonthlyPoint } from '../components/charts/MonthlyBars';
 import DonutChart from '../components/charts/DonutChart';
 import RankBars from '../components/charts/RankBars';
-import { countBy, lastMonths, monthKey, COLOR_SUCCESS, COLOR_PRIMARY, COLOR_DANGER } from '../components/charts/chartUtils';
+import { countBy, lastMonths, monthKey, COLOR_SUCCESS, COLOR_PRIMARY, COLOR_DANGER, COLOR_WARNING } from '../components/charts/chartUtils';
 import type { JobOrder } from '../types';
 import type { ModuleId } from '../App';
 import './DashboardModule.css';
@@ -46,7 +46,7 @@ interface LowStockRow {
  * Pantalla de inicio: resumen operativo del día. Todo sale de DataProvider (sin fetch propio).
  */
 export default function DashboardModule({ onNavigate }: Props) {
-  const { jobOrders, entrances, usage, destinations, isLoading } = useAppData();
+  const { jobOrders, jobProducts, entrances, usage, destinations, isLoading } = useAppData();
   const { currentUser, hasPermission } = useAuth();
   const today = getTodayString();
   const thisMonth = today.slice(0, 7);
@@ -97,19 +97,31 @@ export default function DashboardModule({ onNavigate }: Props) {
     const properties = new Set(destinations.map(d => d.property).filter(Boolean)).size;
     const topAddresses = countBy(jobOrders, o => o.destination || '(no address)').map(([name, value]) => ({ name, value }));
 
+    // Gráficas movidas desde Reports (sin filtros: totales de toda la operación)
+    const propertyOf = new Map(destinations.map(d => [d.description, d.property || '']));
+    const byProperty = countBy(jobOrders, o => propertyOf.get(o.destination) || 'Other / unknown').map(([name, value]) => ({ name, value }));
+    const byUser = countBy(jobOrders, o => o.jobOrder || 'Unassigned').map(([name, value]) => ({ name, value }));
+    const itemsByName = countBy(jobProducts, pr => pr.itemName || '(no name)', pr => pr.quantity).map(([name, value]) => ({ name, value }));
+    const poChart = [...entrances]
+      .sort((a, b) => (b.po || '').localeCompare(a.po || ''))
+      .slice(0, 8)
+      .reverse()
+      .map(e => { const { total, stock } = getEntranceStock(e, usage); return { month: e.po || '(no PO)', received: total, installed: total - stock }; });
+
     return {
       active, overdue, dueToday, unscheduled, agenda, monthly: [...perMonth.values()],
       createdThisMonth, createdLastMonth, finishedThisMonth, stockAvailable, stockTotal, stockValue, receivedValue, lowStock, properties, topAddresses,
+      byProperty, byUser, itemsByName, poChart,
       periodOrders: jobOrders.filter(o => months.includes(monthKey(o.createdAt))).length,
     };
-  }, [jobOrders, entrances, usage, destinations, today, thisMonth, period]);
+  }, [jobOrders, jobProducts, entrances, usage, destinations, today, thisMonth, period]);
 
   const agendaColumns = useMemo<DataColumn<JobOrder>[]>(() => [
     { id: 'seq', header: '#', value: o => o.visualSeq ?? null, type: 'number', align: 'center', width: '60px', hideable: false, render: o => <SeqBadge seq={o.visualSeq} /> },
     { id: 'schedule', header: 'Schedule', value: o => o.schedule, type: 'date', nowrap: true, render: o => <ScheduleCell date={o.schedule} /> },
     { id: 'destination', header: 'Address', value: o => o.destination, render: o => <span className="cell-strong">{o.destination}</span> },
     { id: 'description', header: 'Description', value: o => o.description, render: o => <span className="cell-clamp" title={o.description}>{o.description}</span> },
-    { id: 'madeBy', header: 'Made by', value: o => o.madeBy || '', render: o => o.madeBy || <span className="badge neutral">Unassigned</span> },
+    { id: 'jobOrder', header: 'Ordered by', value: o => o.jobOrder || '', render: o => o.jobOrder || <span className="badge neutral">—</span> },
     { id: 'pendingWork', header: 'Notes', value: o => o.pendingWork || '', align: 'center', sortable: false, render: o => <NotesCell text={o.pendingWork} title={`Pending work — Order ${formatSeq(o.visualSeq)}`} subtitle={`${o.destination} · ${o.description}`} /> },
   ], []);
 
@@ -183,6 +195,21 @@ export default function DashboardModule({ onNavigate }: Props) {
         <ChartCard title="Order status" subtitle={`${stats.finishedThisMonth} finished this month`} icon={<PieIcon size={16} />} empty={jobOrders.length === 0}>
           <DonutChart data={statusSlices} centerLabel="Orders" />
         </ChartCard>
+        <ChartCard title="Items installed by product" subtitle="Units consumed per item name" icon={<Wrench size={16} />} empty={stats.itemsByName.length === 0}>
+          <DonutChart data={stats.itemsByName} centerLabel="Units" />
+        </ChartCard>
+        <ChartCard title="Work by property" subtitle="Orders per apartment complex" icon={<Building2 size={16} />} empty={stats.byProperty.length === 0}>
+          <DonutChart data={stats.byProperty} centerLabel="Orders" />
+        </ChartCard>
+        <ChartCard title="Orders per account user" subtitle="Who ordered the work" icon={<Award size={16} />} empty={stats.byUser.length === 0}>
+          <RankBars data={stats.byUser} valueName="Orders" multicolor />
+        </ChartCard>
+        <ChartCard title="Received vs installed by PO" subtitle="Latest purchase orders" icon={<FileBarChart size={16} />} wide empty={stats.poChart.length === 0}>
+          <MonthlyBars data={stats.poChart} stacked={false} xFormatter={v => v} series={[{ key: 'received', name: 'Received', color: COLOR_PRIMARY }, { key: 'installed', name: 'Installed', color: COLOR_WARNING }]} />
+        </ChartCard>
+        <ChartCard title="Most visited addresses" subtitle="All-time interventions" icon={<MapPin size={16} />} empty={stats.topAddresses.length === 0}>
+          <RankBars data={stats.topAddresses} valueName="Orders" max={8} />
+        </ChartCard>
       </div>
 
       <div className="dash-grid">
@@ -236,9 +263,6 @@ export default function DashboardModule({ onNavigate }: Props) {
           />
         </section>
 
-        <ChartCard title="Most visited addresses" subtitle="All-time interventions" icon={<MapPin size={16} />} empty={stats.topAddresses.length === 0} height="lg">
-          <RankBars data={stats.topAddresses} valueName="Orders" max={8} />
-        </ChartCard>
       </div>
     </div>
   );

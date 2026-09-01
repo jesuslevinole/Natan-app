@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback, type CSSProperties } from 'react';
-import { BarChart2, Filter, Award, Activity, Wrench, MapPin, FileBarChart, Download, RotateCcw, X, CheckCircle2, AlertTriangle, Briefcase, PackageSearch, Repeat, TrendingUp, PieChart as PieIcon, Building2 } from 'lucide-react';
+import { BarChart2, Filter, Award, Activity, Wrench, MapPin, FileBarChart, Download, RotateCcw, X, CheckCircle2, AlertTriangle, Briefcase, PackageSearch, Repeat } from 'lucide-react';
 import type { JobProduct, JobOrder } from '../types';
 import KpiCard from '../components/KpiCard';
 import DestinationSearch from '../components/DestinationSearch';
@@ -12,14 +12,9 @@ import DataTable, { type DataColumn } from '../components/DataTable';
 import NotesCell from '../components/NotesCell';
 import SeqBadge from '../components/SeqBadge';
 import Tabs, { type TabItem } from '../components/Tabs';
+import RequirePermission from '../components/RequirePermission';
 import { WorkFinishBadge, ScheduleCell } from '../components/StatusBadge';
-import ChartCard from '../components/charts/ChartCard';
-import MonthlyBars, { type MonthlyPoint } from '../components/charts/MonthlyBars';
-import DonutChart from '../components/charts/DonutChart';
-import RankBars from '../components/charts/RankBars';
-import { countBy, lastMonths, monthKey, COLOR_SUCCESS, COLOR_PRIMARY, COLOR_DANGER, COLOR_WARNING, truncate } from '../components/charts/chartUtils';
-import ChartTypeToggle from '../components/charts/ChartTypeToggle';
-import { useChartVariant } from '../hooks/useChartVariant';
+import { truncate } from '../components/charts/chartUtils';
 import ShareBar from '../components/charts/ShareBar';
 import './ReportsModule.css';
 
@@ -36,10 +31,9 @@ const FILTER_LABELS: Record<FilterKey, string> = {
 };
 
 export default function ReportsModule() {
-  const { jobOrders, jobProducts, entrances, users, destinations, isLoading } = useAppData();
+  const { jobOrders, jobProducts, entrances, users, isLoading } = useAppData();
   const [filters, setFilters] = useState(EMPTY_FILTERS);
   const [tab, setTab] = useState<ReportTab>('activities');
-  const [trendVariant, setTrendVariant] = useChartVariant('report_trend');
   const set = (key: FilterKey) => (value: string) => setFilters(prev => ({ ...prev, [key]: value }));
   const today = getTodayString();
   const activeFilters = (Object.keys(filters) as FilterKey[]).filter(k => filters[k] !== '');
@@ -183,46 +177,12 @@ export default function ReportsModule() {
 
 
   // ---- Datos para gráficos ----
-  const { monthly, statusSlices, completed, overdue, byProperty, byTechnician, itemsByName } = useMemo(() => {
+  const { completed, overdue } = useMemo(() => {
     const finished = filteredOrders.filter(o => o.workFinish === 'YES');
     const open = filteredOrders.filter(o => o.workFinish === 'NO');
     const late = open.filter(o => o.schedule && o.schedule < today);
-
-    // Meses: rango de los filtros si existe; si no, últimos 6 meses (o todo el histórico si es más corto).
-    let monthKeys: string[];
-    if (filters.startDate || filters.endDate) {
-      const keys = new Set(filteredOrders.map(o => monthKey(o.createdAt)).filter(Boolean));
-      monthKeys = [...keys].sort();
-    } else {
-      monthKeys = lastMonths(today, 6);
-    }
-    const perMonth = new Map<string, MonthlyPoint>(monthKeys.map(k => [k, { month: k, finished: 0, open: 0 }]));
-    for (const o of filteredOrders) {
-      const point = perMonth.get(monthKey(o.createdAt));
-      if (!point) continue;
-      if (o.workFinish === 'YES') point.finished = Number(point.finished) + 1;
-      else point.open = Number(point.open) + 1;
-    }
-
-    const propertyOf = new Map(destinations.map(d => [d.description, d.property || '']));
-    const propCounts = countBy(filteredOrders, o => propertyOf.get(o.destination) || 'Other / unknown');
-
-    return {
-      monthly: [...perMonth.values()],
-      statusSlices: [
-        { name: 'Finished', value: finished.length, color: COLOR_SUCCESS },
-        { name: 'In progress', value: open.length - late.length, color: COLOR_PRIMARY },
-        { name: 'Overdue', value: late.length, color: COLOR_DANGER },
-      ],
-      completed: finished.length,
-      overdue: late.length,
-      byProperty: propCounts.map(([name, value]) => ({ name, value })),
-      byTechnician: countBy(filteredOrders, o => o.madeBy || 'Unassigned').map(([name, value]) => ({ name, value })),
-      itemsByName: countBy(filteredProductsDetailed, p => p.itemName || '(no name)', p => p.quantity).map(([name, value]) => ({ name, value })),
-    };
-  }, [filteredOrders, filteredProductsDetailed, destinations, filters.startDate, filters.endDate, today]);
-
-  const poChart = useMemo(() => poAggregate.slice(0, 8).map(r => ({ month: r.po, received: r.totalArrived, installed: r.installed })), [poAggregate]);
+    return { completed: finished.length, overdue: late.length };
+  }, [filteredOrders, today]);
 
   // ---- Columnas de las tablas ----
   const activityColumns = useMemo<DataColumn<JobOrder>[]>(() => [
@@ -297,11 +257,13 @@ export default function ReportsModule() {
       <ModuleHeader
         icon={<BarChart2 size={28} />}
         title="Analytics & Reports"
-        subtitle="Work activity, locations and inventory consumption. Every table and chart follows the filters below."
+        subtitle="Work activity, locations and inventory consumption. Every KPI and table follows the filters below. Charts live on the Dashboard."
         actions={
-          <button type="button" className="action btn-secondary btn-header" onClick={handleExport} title="Download the filtered data as an Excel workbook">
-            <Download size={18} /> Export to Excel
-          </button>
+          <RequirePermission permission="export_reports">
+            <button type="button" className="action btn-secondary btn-header" onClick={handleExport} title="Download the filtered data as an Excel workbook">
+              <Download size={18} /> Export to Excel
+            </button>
+          </RequirePermission>
         }
       />
 
@@ -356,30 +318,6 @@ export default function ReportsModule() {
         <KpiCard icon={<Wrench size={20} />} label="Items Installed" value={totalItemsInstalled} tone="purple" note={installedValue > 0 ? `${formatCurrency(installedValue)} in materials` : `${filteredProductsDetailed.length} product lines`} />
         <KpiCard icon={<MapPin size={20} />} label="Top Address" value={<span className="kpi-value small">{mostWorkedApt}</span>} tone="cyan" note={aptList[0] ? `${aptList[0].count} interventions` : undefined} />
         <KpiCard icon={<Award size={20} />} label="Top Account User" value={<span className="kpi-value small">{topWorker}</span>} tone="orange" />
-      </div>
-
-      <div className="chart-grid">
-        <ChartCard title="Activity over time" subtitle="Orders registered per month, by status" icon={<TrendingUp size={16} />} wide empty={filteredOrders.length === 0} actions={<ChartTypeToggle value={trendVariant} onChange={setTrendVariant} />}>
-          <MonthlyBars data={monthly} variant={trendVariant} series={[{ key: 'finished', name: 'Finished', color: COLOR_SUCCESS }, { key: 'open', name: 'Open', color: COLOR_PRIMARY }]} />
-        </ChartCard>
-        <ChartCard title="Completion status" subtitle="Finished vs in progress vs overdue" icon={<PieIcon size={16} />} empty={filteredOrders.length === 0}>
-          <DonutChart data={statusSlices} centerLabel="Orders" />
-        </ChartCard>
-        <ChartCard title="Top addresses" subtitle="Most interventions" icon={<MapPin size={16} />} empty={aptList.length === 0}>
-          <RankBars data={aptList.map(a => ({ name: a.dest, value: a.count }))} valueName="Interventions" />
-        </ChartCard>
-        <ChartCard title="Items installed by product" subtitle="Units consumed per item name" icon={<Wrench size={16} />} empty={itemsByName.length === 0}>
-          <DonutChart data={itemsByName} centerLabel="Units" />
-        </ChartCard>
-        <ChartCard title="Work by property" subtitle="Orders per apartment complex" icon={<Building2 size={16} />} empty={byProperty.length === 0}>
-          <DonutChart data={byProperty} centerLabel="Orders" />
-        </ChartCard>
-        <ChartCard title="Received vs installed by PO" subtitle="Latest purchase orders" icon={<FileBarChart size={16} />} wide empty={poChart.length === 0}>
-          <MonthlyBars data={poChart} stacked={false} xFormatter={v => v} series={[{ key: 'received', name: 'Received', color: COLOR_PRIMARY }, { key: 'installed', name: 'Installed', color: COLOR_WARNING }]} />
-        </ChartCard>
-        <ChartCard title="Work by technician" subtitle="Orders per 'Made by'" icon={<Award size={16} />} empty={byTechnician.length === 0}>
-          <RankBars data={byTechnician} valueName="Orders" multicolor />
-        </ChartCard>
       </div>
 
       <div className="section-head">

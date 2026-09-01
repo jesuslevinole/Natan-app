@@ -42,10 +42,10 @@ const NAV_ITEMS: NavItem[] = [
   { id: 'itemEntrance', label: 'Item Entrance', icon: <PackageSearch size={20} />, permission: 'view_item_entrance' },
   { id: 'catalogs', label: 'Catalogs', icon: <BookOpen size={20} />, permission: 'view_catalogs' },
   { id: 'reports', label: 'Reports', icon: <BarChart2 size={20} />, permission: 'view_reports' },
-  { id: 'users', label: 'Account Users', icon: <UsersIcon size={20} />, permission: 'manage_security', section: 'admin' },
-  { id: 'roles', label: 'Manage Roles', icon: <ShieldCheck size={20} />, permission: 'manage_security', section: 'admin' },
-  { id: 'audit_logs', label: 'Activity History', icon: <ShieldAlert size={20} />, permission: 'manage_security', section: 'admin' },
-  { id: 'settings', label: 'Business Settings', icon: <Settings size={20} />, permission: 'manage_security', section: 'admin' },
+  { id: 'users', label: 'Account Users', icon: <UsersIcon size={20} />, permission: 'view_users', section: 'admin' },
+  { id: 'roles', label: 'Manage Roles', icon: <ShieldCheck size={20} />, permission: 'view_roles', section: 'admin' },
+  { id: 'audit_logs', label: 'Activity History', icon: <ShieldAlert size={20} />, permission: 'view_logs', section: 'admin' },
+  { id: 'settings', label: 'Business Settings', icon: <Settings size={20} />, permission: 'manage_settings', section: 'admin' },
 ];
 
 function AppShell() {
