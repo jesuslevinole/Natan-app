@@ -28,6 +28,8 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
     { id: 'add_work_activity', label: 'Create work orders' },
     { id: 'edit_work_activity', label: 'Edit work orders' },
     { id: 'delete_work_activity', label: 'Delete work orders' },
+    { id: 'set_made_by', label: "Assign 'Made by' (only once, when empty)", legacy: ['edit_work_activity'] },
+    { id: 'edit_made_by', label: "Change 'Made by' after it was assigned (admin)", legacy: ['manage_security'] },
   ] },
   { module: 'Item Entrance (Inventory)', permissions: [
     { id: 'view_item_entrance', label: 'View POs & stock' },

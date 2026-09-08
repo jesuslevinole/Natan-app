@@ -150,7 +150,7 @@ export default function SettingsModule() {
             </div>
           </div>
           {company.updatedAt && (
-            <p className="hint mt-3">Last saved {new Date(company.updatedAt).toLocaleString()}{company.updatedBy ? ` by ${company.updatedBy}` : ''}.</p>
+            <p className="hint mt-3">Last saved {new Date(company.updatedAt).toLocaleString('en-US')}{company.updatedBy ? ` by ${company.updatedBy}` : ''}.</p>
           )}
           <div className="btn-container">
             <button type="button" className="action btn-secondary" onClick={() => { setForm(company); setDirty(false); setMessage(null); }} disabled={isSaving || !dirty}>Discard changes</button>

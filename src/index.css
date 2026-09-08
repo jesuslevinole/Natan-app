@@ -219,3 +219,7 @@ fieldset.group-box { border: 1px solid var(--border-color); min-width: 0; }
 .section-head h3 { margin: 0; font-size: 1.05rem; font-weight: 700; color: var(--text-strong); }
 .section-head p { margin: 2px 0 0; font-size: 0.8rem; color: var(--text-muted); }
 .section-head .section-icon { display: flex; padding: 8px; border-radius: 10px; background: var(--primary-soft); color: var(--primary-color); }
+.assign-btn { display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px; border-radius: 999px; border: 1px dashed var(--primary-soft-border); background: var(--primary-soft); color: var(--primary-color); font-size: 0.72rem; font-weight: 700; cursor: pointer; transition: all 0.15s; white-space: nowrap; }
+.assign-btn:hover { border-style: solid; background: var(--primary-color); color: #fff; }
+.text-success-strong { color: #16a34a; }
+[data-theme="dark"] .text-success-strong { color: #4ade80; }

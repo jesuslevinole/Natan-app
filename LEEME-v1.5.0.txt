@@ -1,0 +1,28 @@
+Natan-app v1.5.0 — archivos para copiar sobre el proyecto
+==========================================================
+9 archivos nuevos o modificados sobre tu GitHub actual. Sin dependencias nuevas
+(no hace falta npm install).
+
+Cómo aplicarlo
+--------------
+1. Extraé el zip DENTRO de la carpeta del proyecto, reemplazando los existentes.
+2. npm run build
+3. git add -A && git commit -m "v1.5.0: made by asignable, finished by y fechas US" && git push
+
+Qué cambia
+----------
+1. MADE BY asignable después de crear la orden:
+   - En la tabla, las órdenes sin asignar muestran un chip azul "Assign".
+   - En el detalle de la orden hay un botón "Made by".
+   - Se asigna UNA SOLA VEZ. Después, solo un administrador puede cambiarlo.
+   - Permisos nuevos en Manage Roles → Work Activity:
+       "Assign 'Made by' (only once, when empty)"  → quién puede asignar
+       "Change 'Made by' after it was assigned"    → quién puede corregirlo (admin)
+     Tus roles actuales heredan: quien edita órdenes puede asignar; solo quien
+     tiene el permiso de admin puede cambiar. Revisá cada rol y guardá.
+2. FECHAS: toda la app en MM/DD/YYYY (formato de EE. UU.) sin importar el idioma
+   del navegador, y la interfaz 100 % en inglés.
+3. FINISHED BY: al pasar una orden a Work Finish = YES queda registrado quién la
+   terminó y cuándo (automático, no se pregunta nada). Se ve en Historic Records
+   (columna "Finished by"), en el detalle de la orden (con fecha), en Reports y
+   en los exports a Excel y PDF. Si la orden se reabre, se limpia.

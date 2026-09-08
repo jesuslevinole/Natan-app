@@ -185,10 +185,10 @@ export default function ReportsModule() {
 
       y = pdf.sectionTitle(doc, y, `Work Activities (${filteredOrders.length})`);
       y = pdf.drawTable(doc, y + 6,
-        ['#', 'Registered', 'Schedule', 'Address', 'Description', 'Ordered by', 'Status', 'Pending work'],
-        filteredOrders.map(o => [formatSeq(o.visualSeq), formatDateDisplay(o.createdAt), o.schedule ? formatDateDisplay(o.schedule) : '—', o.destination, o.description, o.jobOrder, o.workFinish === 'YES' ? 'Finished' : (o.schedule && o.schedule < today ? 'OVERDUE' : 'Open'), o.pendingWork || '—']),
-        { columnStyles: { 0: { cellWidth: 30 }, 1: { cellWidth: 56 }, 2: { cellWidth: 56 }, 3: { cellWidth: 100 }, 6: { cellWidth: 52, halign: 'center' } },
-          didParseCell: (data) => { if (data.section === 'body' && data.column.index === 6 && data.cell.raw === 'OVERDUE') data.cell.styles.textColor = pdf.PDF_COLORS.RED; } });
+        ['#', 'Registered', 'Schedule', 'Address', 'Description', 'Ordered by', 'Made by', 'Finished by', 'Status', 'Pending work'],
+        filteredOrders.map(o => [formatSeq(o.visualSeq), formatDateDisplay(o.createdAt), o.schedule ? formatDateDisplay(o.schedule) : '—', o.destination, o.description, o.jobOrder, o.madeBy || '—', o.finishedBy || '—', o.workFinish === 'YES' ? 'Finished' : (o.schedule && o.schedule < today ? 'OVERDUE' : 'Open'), o.pendingWork || '—']),
+        { columnStyles: { 0: { cellWidth: 28 }, 1: { cellWidth: 52 }, 2: { cellWidth: 52 }, 3: { cellWidth: 92 }, 8: { cellWidth: 48, halign: 'center' } },
+          didParseCell: (data) => { if (data.section === 'body' && data.column.index === 8 && data.cell.raw === 'OVERDUE') data.cell.styles.textColor = pdf.PDF_COLORS.RED; } });
 
       y = pdf.ensureSpace(doc, y, 120);
       y = pdf.sectionTitle(doc, y, `Products Installed (${filteredProductsDetailed.length})`, pdf.PDF_COLORS.PURPLE);
@@ -233,7 +233,7 @@ export default function ReportsModule() {
     downloadWorkbook(`natan-report-${new Date().toISOString().slice(0, 10)}.xlsx`, [
       { name: 'Work Activities', rows: filteredOrders.map(o => ({
         '#': o.visualSeq, 'Registration Date': o.createdAt, Schedule: o.schedule, 'Ordered by': o.jobOrder,
-        'Made by': o.madeBy || '', Address: o.destination, Description: o.description, 'Work Finish': o.workFinish, 'Pending Work': o.pendingWork,
+        'Made by': o.madeBy || '', 'Finished by': o.finishedBy || '', 'Finished on': o.finishedAt || '', Address: o.destination, Description: o.description, 'Work Finish': o.workFinish, 'Pending Work': o.pendingWork,
       })) },
       { name: 'Products Installed', rows: filteredProductsDetailed.map(p => ({
         Date: p.orderDate, Address: p.orderDestination, 'Ordered by': p.orderWorker, 'Made by': p.orderMadeBy,
@@ -265,6 +265,7 @@ export default function ReportsModule() {
     { id: 'description', header: 'Description', value: o => o.description, render: o => <span className="cell-clamp" title={o.description}>{o.description}</span> },
     { id: 'jobOrder', header: 'Ordered by', value: o => o.jobOrder },
     { id: 'madeBy', header: 'Made by', value: o => o.madeBy || '', render: o => o.madeBy || <span className="badge neutral">Unassigned</span> },
+    { id: 'finishedBy', header: 'Finished by', value: o => o.finishedBy || '', nowrap: true, render: o => o.finishedBy || <span className="dt-dash">—</span> },
     { id: 'workFinish', header: 'Status', value: o => o.workFinish, align: 'center', render: o => <WorkFinishBadge value={o.workFinish} /> },
     { id: 'pendingWork', header: 'Notes', value: o => o.pendingWork || '', align: 'center', render: o => <NotesCell text={o.pendingWork} title={`Pending work — Order ${formatSeq(o.visualSeq)}`} subtitle={`${o.destination} · ${o.description}`} /> },
   ], []);

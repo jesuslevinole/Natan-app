@@ -1,7 +1,7 @@
 import { useState, useMemo, useCallback, type FormEvent, type MouseEvent } from 'react';
 import { collection, addDoc, updateDoc, deleteDoc, doc, writeBatch } from 'firebase/firestore';
 import { db } from '../firebase';
-import { Briefcase, Plus, Settings, Edit2, Trash2, Lock } from 'lucide-react';
+import { Briefcase, Plus, Settings, Edit2, Trash2, Lock, UserPlus, UserCheck } from 'lucide-react';
 import type { JobOrder, JobProduct, JobFormData, ProductFormData, WorkFinish } from '../types';
 import Modal from '../components/Modal';
 import ModuleHeader from '../components/ModuleHeader';
@@ -16,7 +16,7 @@ import DataTable, { type DataColumn } from '../components/DataTable';
 import NotesCell from '../components/NotesCell';
 import { useFormConfig, useFieldRoles } from '../hooks/useAppHooks';
 import { useAppData } from '../hooks/useAppData';
-import { getTodayString, formatDateDisplay, formatSeq, matchesSearch } from '../utils/helpers';
+import { getTodayString, formatDateDisplay, formatSeq, matchesSearch, displayName } from '../utils/helpers';
 import { flattenEntrances } from '../utils/entrance';
 import { nextSequence } from '../utils/firestore';
 import { AuditLogger } from '../utils/logger';
@@ -42,9 +42,9 @@ const emptyProduct: ProductFormData = {
 };
 
 export default function WorkActivityModule() {
-  const { currentUser } = useAuth();
+  const { currentUser, hasPermission } = useAuth();
   const authorName = useAuthorName();
-  const { jobOrders, jobProducts, entrances, usage, roles, isLoading } = useAppData();
+  const { jobOrders, jobProducts, entrances, usage, roles, users, isLoading } = useAppData();
 
   const [searchTerm, setSearchTerm] = useState('');
   const [showHistoric, setShowHistoric] = useState(false);
@@ -57,6 +57,9 @@ export default function WorkActivityModule() {
 
   const [editingJob, setEditingJob] = useState<string | null>(null);
   const [viewingJobId, setViewingJobId] = useState<string | null>(null);
+  const [madeByJobId, setMadeByJobId] = useState<string | null>(null);
+  const [madeByDraft, setMadeByDraft] = useState('');
+  const [isSavingMadeBy, setIsSavingMadeBy] = useState(false);
   const [newDestData, setNewDestData] = useState({ description: '', property: '', contact: '' });
 
   const { toggleRequired: toggleJobReq, isRequired: isJobReq } = useFormConfig(
@@ -149,14 +152,22 @@ export default function WorkActivityModule() {
     setIsProcessing(true);
     try {
       let savedJobId = editingJob;
+      // "Finished by": queda registrado quien pasa Work Finish a YES; al reabrir se limpia.
+      const previous = editingJob ? jobOrders.find(o => o.id === editingJob) : undefined;
+      const finishStamp = formData.workFinish === 'YES'
+        ? (previous?.workFinish === 'YES' && previous.finishedBy
+            ? { finishedBy: previous.finishedBy, finishedAt: previous.finishedAt ?? '' }
+            : { finishedBy: authorName, finishedAt: getTodayString() })
+        : { finishedBy: '', finishedAt: '' };
+      const payload = { ...formData, ...finishStamp };
       if (editingJob) {
-        await updateDoc(doc(db, 'jobOrders', editingJob), { ...formData });
-        AuditLogger.logUpdate('WorkActivity', authorName, editingJob, formData);
+        await updateDoc(doc(db, 'jobOrders', editingJob), payload);
+        AuditLogger.logUpdate('WorkActivity', authorName, editingJob, payload);
       } else {
         const seq = await nextSequence('jobOrdersSeq');
-        const docRef = await addDoc(collection(db, 'jobOrders'), { ...formData, createdBy: authorName, seq });
+        const docRef = await addDoc(collection(db, 'jobOrders'), { ...payload, createdBy: authorName, seq });
         savedJobId = docRef.id;
-        AuditLogger.logCreate('WorkActivity', authorName, docRef.id, formData);
+        AuditLogger.logCreate('WorkActivity', authorName, docRef.id, payload);
       }
       const pending = formProducts.filter(p => !p.id);
       if (pending.length && savedJobId) {
@@ -172,6 +183,33 @@ export default function WorkActivityModule() {
       alert('Error saving the record.');
     } finally {
       setIsProcessing(false);
+    }
+  };
+
+  const madeByJob = useMemo(() => jobOrders.find(o => o.id === madeByJobId) ?? null, [jobOrders, madeByJobId]);
+  const canAssignMadeBy = hasPermission('set_made_by');
+  const canEditMadeBy = hasPermission('edit_made_by');
+
+  const openMadeBy = useCallback((job: JobOrder) => {
+    // Se asigna una sola vez; después solo un admin (edit_made_by) puede cambiarlo.
+    if (job.madeBy ? !canEditMadeBy : !canAssignMadeBy) return;
+    setMadeByDraft(job.madeBy || '');
+    setMadeByJobId(job.id);
+  }, [canAssignMadeBy, canEditMadeBy]);
+
+  const handleSaveMadeBy = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!madeByJob || !madeByDraft) return;
+    setIsSavingMadeBy(true);
+    try {
+      await updateDoc(doc(db, 'jobOrders', madeByJob.id), { madeBy: madeByDraft });
+      AuditLogger.logUpdate('WorkActivity (Made by)', authorName, madeByJob.id, { madeBy: madeByDraft, previous: madeByJob.madeBy || null });
+      setMadeByJobId(null);
+    } catch (error) {
+      console.error('Error assigning Made by', error);
+      alert('Could not save. Please try again.');
+    } finally {
+      setIsSavingMadeBy(false);
     }
   };
 
@@ -284,13 +322,18 @@ export default function WorkActivityModule() {
     { id: 'createdAt', header: 'Registration', value: o => o.createdAt, type: 'date', nowrap: true, render: o => formatDateDisplay(o.createdAt) },
     { id: 'schedule', header: 'Schedule', value: o => o.schedule, type: 'date', nowrap: true, render: o => <ScheduleCell date={o.schedule} finished={o.workFinish === 'YES'} /> },
     { id: 'jobOrder', header: 'Ordered by', value: o => o.jobOrder, nowrap: true, render: o => <span className="cell-strong">{o.jobOrder}</span> },
-    { id: 'madeBy', header: 'Made by', value: o => o.madeBy || '', nowrap: true, defaultHidden: true, render: o => o.madeBy ? <span className="cell-strong text-accent">{o.madeBy}</span> : <span className="badge neutral">Unassigned</span> },
+    { id: 'madeBy', header: 'Made by', value: o => o.madeBy || '', nowrap: true, render: o => o.madeBy
+      ? <span className="cell-strong text-accent">{o.madeBy}</span>
+      : (canAssignMadeBy
+        ? <button type="button" className="assign-btn" onClick={(e) => { e.stopPropagation(); openMadeBy(o); }} title="Assign who does this work (can only be set once)"><UserPlus size={13} /> Assign</button>
+        : <span className="badge neutral">Unassigned</span>) },
+    { id: 'finishedBy', header: 'Finished by', value: o => o.finishedBy || '', nowrap: true, defaultHidden: !showHistoric, render: o => o.finishedBy ? <span className="cell-strong text-success-strong">{o.finishedBy}</span> : <span className="dt-dash">—</span> },
     { id: 'destination', header: 'Address', value: o => o.destination, nowrap: true, render: o => <span className="cell-strong">{o.destination}</span> },
     { id: 'description', header: 'Description', value: o => o.description, render: o => <span className="cell-clamp" title={o.description}>{o.description}</span> },
     { id: 'workFinish', header: 'Status', value: o => o.workFinish, align: 'center', render: o => <WorkFinishBadge value={o.workFinish} /> },
     { id: 'pendingWork', header: 'Notes', value: o => o.pendingWork || '', align: 'center', filterable: true,
       render: o => <NotesCell text={o.pendingWork} title={`Pending work — Order ${formatSeq(o.visualSeq)}`} subtitle={`${o.destination} · ${o.description}`} /> },
-  ], []);
+  ], [canAssignMadeBy, showHistoric, openMadeBy]);
 
   const lockHint = (field: string) => !isJobFieldEditable(field) && <span className="lock-hint"><Lock size={12} /> Locked</span>;
   const inputCls = (field: string) => (isJobFieldEditable(field) ? undefined : 'locked');
@@ -322,6 +365,7 @@ export default function WorkActivityModule() {
       />
 
       <DataTable<JobOrder>
+        key={showHistoric ? 'history' : 'active'}
         columns={orderColumns}
         rows={displayedOrders}
         rowKey={o => o.id}
@@ -359,6 +403,37 @@ export default function WorkActivityModule() {
         groups={[{ fields: JOB_FIELDS, isRequired: isJobReq, toggleRequired: toggleJobReq, fieldRoles, setFieldRole }]}
       />
 
+      {madeByJob && (
+        <Modal
+          title={<span className="flex-row-md"><UserCheck size={20} /> {madeByJob.madeBy ? 'Change Made by' : 'Assign Made by'}</span>}
+          onClose={() => setMadeByJobId(null)}
+          size="md"
+          level={3}
+          closeDisabled={isSavingMadeBy}
+        >
+          <form onSubmit={handleSaveMadeBy}>
+            <p className="hint mb-3">
+              Order <b>{formatSeq(madeByJob.visualSeq)}</b> — {madeByJob.destination} · {madeByJob.description}
+            </p>
+            {madeByJob.madeBy && (
+              <p className="alert info">Currently assigned to <b>{madeByJob.madeBy}</b>. Only administrators can change it.</p>
+            )}
+            <div className="form-group">
+              <label htmlFor="made-by-select">Who did / will do this work? *</label>
+              <select id="made-by-select" value={madeByDraft} onChange={e => setMadeByDraft(e.target.value)} required>
+                <option value="">-- Select an account user --</option>
+                {users.map(u => { const name = displayName(u, u.email); return <option key={u.id} value={name}>{name}</option>; })}
+              </select>
+              {!madeByJob.madeBy && <span className="hint">It can only be assigned once. After saving, only an administrator can change it.</span>}
+            </div>
+            <div className="form-actions">
+              <button type="button" className="action btn-secondary" onClick={() => setMadeByJobId(null)} disabled={isSavingMadeBy}>Cancel</button>
+              <button type="submit" className="action btn-primary" disabled={isSavingMadeBy || !madeByDraft}><UserCheck size={16} /> {isSavingMadeBy ? 'Saving...' : 'Save'}</button>
+            </div>
+          </form>
+        </Modal>
+      )}
+
       {viewingJob && (
         <Modal
           size="large"
@@ -366,6 +441,11 @@ export default function WorkActivityModule() {
           onClose={() => setViewingJobId(null)}
           actions={
             <>
+              {(viewingJob.madeBy ? canEditMadeBy : canAssignMadeBy) && (
+                <button type="button" className="action btn-secondary" onClick={() => openMadeBy(viewingJob)} title={viewingJob.madeBy ? "Change who did this work (admin only)" : "Assign who does this work (can only be set once)"}>
+                  <UserPlus size={16} /> Made by
+                </button>
+              )}
               <RequirePermission permission="edit_work_activity">
                 <button type="button" className="action btn-primary" onClick={() => handleOpenModal(viewingJob)}><Edit2 size={16} /> Edit</button>
               </RequirePermission>
@@ -379,7 +459,10 @@ export default function WorkActivityModule() {
             <div className="detail-item"><dt>Registration Date</dt><dd>{formatDateDisplay(viewingJob.createdAt)}</dd></div>
             <div className="detail-item"><dt>Address</dt><dd>{viewingJob.destination}</dd></div>
             <div className="detail-item"><dt>Ordered by</dt><dd>{viewingJob.jobOrder}</dd></div>
-            {viewingJob.madeBy && <div className="detail-item"><dt>Made by</dt><dd className="fw-bold text-accent">{viewingJob.madeBy}</dd></div>}
+            <div className="detail-item"><dt>Made by</dt><dd className="fw-bold text-accent">{viewingJob.madeBy || <span className="badge neutral">Unassigned</span>}</dd></div>
+            {viewingJob.finishedBy && (
+              <div className="detail-item"><dt>Finished by</dt><dd className="fw-bold text-success-strong">{viewingJob.finishedBy}{viewingJob.finishedAt ? ` — ${formatDateDisplay(viewingJob.finishedAt)}` : ''}</dd></div>
+            )}
             <div className="detail-item"><dt>Schedule</dt><dd>{formatDateDisplay(viewingJob.schedule)}</dd></div>
             <div className="detail-item"><dt>Status</dt><dd><WorkFinishBadge value={viewingJob.workFinish} /></dd></div>
             <div className="detail-item"><dt>Pending Work</dt><dd>{viewingJob.pendingWork || '-'}</dd></div>

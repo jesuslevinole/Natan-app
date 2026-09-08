@@ -147,3 +147,12 @@ Verificación: `npm run check` 0/0, `npm run build` OK, render en Chromium (Dash
 - **Dashboard reordenado**: KPIs en dos filas fijas (4 operativas + 3 de inventario), sección "Today's work" (agenda + stock bajo) antes de "Trends & analytics" (las 7 gráficas), accesos rápidos + Export PDF en la cabecera.
 
 Verificación: `npm run check` 0/0, `npm run build` OK (chunk `pdf` ~137 KB gz solo bajo demanda), PDFs generados en Chromium y revisados página por página (dashboard 4 págs con leyendas, reporte 6 págs).
+
+## Ronda 7 — Made by asignable, Finished by y formato de fechas US
+
+- **Made by**: ya no se escribe al crear. Se asigna después, una sola vez: chip "Assign" en la columna de la tabla y botón "Made by" en el detalle de la orden, ambos abren un modal con el selector de usuarios (`updateDoc` solo de `madeBy`, con log en Activity History). Permisos nuevos en Work Activity: `set_made_by` (asignar cuando está vacío; hereda de `edit_work_activity`) y `edit_made_by` (cambiarlo ya asignado; hereda de `manage_security`, o sea solo admin salvo que se otorgue explícito).
+- **Finished by**: `JobOrder.finishedBy/finishedAt`. Se estampa automáticamente al guardar con Work Finish = YES (quien hace el cambio); si estaba YES se conserva el sello original; al reabrir (NO) se limpia. Visible en Historic Records (columna propia), en el detalle (con fecha), en Reports (tabla, Excel y PDF).
+- **Tabla activa vs histórico**: `key={view}` en la DataTable para que cada vista monte su propio set de columnas (`work_activity` / `work_activity_history`); "Finished by" viene visible por defecto solo en el histórico.
+- **Fechas US**: `dateFormatter`/`dateTimeFormatter` de `helpers.tsx` pasaron de `es-ES` a `en-US` con `MM/DD/YYYY` fijo (y hora 12h AM/PM). Toda la app (tablas, agenda, PDFs, detalles) usa `formatDateDisplay`, así que el cambio es global. Revisado con grep: no quedan strings en español de cara al usuario (solo comentarios de código y alias de encabezados de importación).
+
+Verificación: `npm run check` 0/0, `npm run build` OK, render en Chromium (fechas MM/DD/YYYY, chip Assign, modal de asignación, columna Finished by en histórico). Nota dev: la vista previa ahora necesita un `.env` con valores dummy (el `getAuth` de Firebase valida el formato del API key al cargar).

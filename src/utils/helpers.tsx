@@ -44,12 +44,13 @@ export const getTodayString = (): string => {
   return `${year}-${month}-${day}`;
 };
 
-const dateFormatter = new Intl.DateTimeFormat('es-ES', { day: '2-digit', month: 'short', year: 'numeric' });
-const dateTimeFormatter = new Intl.DateTimeFormat('es-ES', {
-  day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit',
+// App para EE. UU.: fechas siempre MM/DD/YYYY (en-US), sin depender del idioma del navegador.
+const dateFormatter = new Intl.DateTimeFormat('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' });
+const dateTimeFormatter = new Intl.DateTimeFormat('en-US', {
+  month: '2-digit', day: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true,
 });
 
-/** Formatea fechas (YYYY-MM-DD o ISO) en formato corto en español: "15 abr 2026". */
+/** Formatea fechas (YYYY-MM-DD o ISO) como MM/DD/YYYY: "04/28/2026". */
 export const formatDateDisplay = (dateStr?: string): string => {
   if (!dateStr) return '-';
   // Normalización para prevenir desajustes de zona horaria en fechas sin hora.
@@ -58,7 +59,7 @@ export const formatDateDisplay = (dateStr?: string): string => {
   return isNaN(dateObj.getTime()) ? dateStr : dateFormatter.format(dateObj);
 };
 
-/** Formatea un ISO string con fecha y hora: "15/04/2026, 14:30". */
+/** Formatea un ISO string con fecha y hora en formato US: "04/28/2026, 02:30 PM". */
 export const formatDateTimeDisplay = (isoString: string): string => {
   const d = new Date(isoString);
   return isNaN(d.getTime()) ? isoString : dateTimeFormatter.format(d);

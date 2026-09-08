@@ -60,7 +60,10 @@ export interface JobOrder {
   description: string;
   workFinish: WorkFinish;
   pendingWork: string;
-  schedule: string;      // YYYY-MM-DD
+  schedule: string;
+  /** Quién terminó el trabajo (se registra al pasar Work Finish a YES) y cuándo. */
+  finishedBy?: string;
+  finishedAt?: string;      // YYYY-MM-DD
   createdBy: string;
   createdAt: string;     // YYYY-MM-DD (Registration Date)
 }

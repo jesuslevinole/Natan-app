@@ -35,6 +35,8 @@ export const mockOrders: JobOrder[] = Array.from({ length: 64 }, (_, i) => {
     destination: pick(mockDestinations).description,
     description: pick(tasks),
     workFinish: (finished ? 'YES' : 'NO') as JobOrder['workFinish'],
+    finishedBy: finished ? pick(orderedBy) : '',
+    finishedAt: finished ? created : '',
     pendingWork: finished ? '' : pick(notes),
     schedule: rand() < 0.85 ? iso(sched) : '',
     createdBy: 'seed', createdAt: created,
