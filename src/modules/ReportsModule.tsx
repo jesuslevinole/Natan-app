@@ -387,6 +387,15 @@ export default function ReportsModule() {
         )}
       </section>
 
+      <div className="insight-strip" aria-label="Summary of the filtered data">
+        <span className="insight"><Briefcase size={14} /> <b>{filteredOrders.length}</b> activities</span>
+        <span className="insight good"><b>{completed}</b> completed ({completionRate}%)</span>
+        <span className={`insight${overdue > 0 ? ' bad' : ''}`}><b>{overdue}</b> overdue</span>
+        <span className="insight"><Wrench size={14} /> <b>{totalItemsInstalled}</b> items installed</span>
+        {installedValue > 0 && <span className="insight"><b>{formatCurrency(installedValue)}</b> in materials</span>}
+        <span className="insight"><MapPin size={14} /> Top: <b>{truncate(mostWorkedApt, 24)}</b></span>
+      </div>
+
       <div className="section-head">
         <span className="section-icon"><FileBarChart size={18} /></span>
         <div>

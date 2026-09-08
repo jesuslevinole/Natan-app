@@ -1,11 +1,13 @@
 import { useState, useMemo, type FormEvent } from 'react';
-import { collection, addDoc, updateDoc, deleteDoc, doc } from 'firebase/firestore';
+import { collection, addDoc, updateDoc, doc } from 'firebase/firestore';
 import { db } from '../firebase';
 import { ShieldCheck, Plus, Edit2, Trash2, Save } from 'lucide-react';
 import type { Role } from '../types';
 import Modal from '../components/Modal';
 import DataTable, { type DataColumn } from '../components/DataTable';
 import { PERMISSION_GROUPS } from '../utils/permissions';
+import DeleteReasonModal from '../components/DeleteReasonModal';
+import { moveToTrash } from '../utils/trash';
 import ModuleHeader from '../components/ModuleHeader';
 import LoadingScreen from '../components/LoadingScreen';
 import { AuditLogger } from '../utils/logger';
@@ -73,12 +75,21 @@ export default function RolesDashboard() {
     }
   };
 
-  const handleDelete = async (role: Role) => {
+  const [deleting, setDeleting] = useState<Role | null>(null);
+  const handleDelete = (role: Role) => {
     const inUse = usersPerRole.get(role.id) || 0;
     if (inUse > 0) { alert(`"${role.name}" is assigned to ${inUse} user(s). Reassign them before deleting the role.`); return; }
-    if (!window.confirm(`Are you sure you want to delete the role "${role.name}"?`)) return;
-    await deleteDoc(doc(db, 'roles', role.id));
-    AuditLogger.logDelete('Roles', authorName, role.id, { name: role.name });
+    setDeleting(role);
+  };
+  const confirmDelete = async (reason: string) => {
+    if (!deleting) return;
+    const { id, ...data } = deleting;
+    await moveToTrash({
+      sourceCollection: 'roles', sourceId: id, module: 'Roles',
+      label: `Role "${deleting.name}"`,
+      data: data as Record<string, unknown>,
+    }, reason, authorName);
+    setDeleting(null);
   };
 
   if (isLoading) return <LoadingScreen message="Loading roles..." />;
@@ -144,6 +155,10 @@ export default function RolesDashboard() {
           </div>
         </Modal>
       )}
+      {deleting && (
+        <DeleteReasonModal label={`Role "${deleting.name}"`} onCancel={() => setDeleting(null)} onConfirm={confirmDelete} />
+      )}
+
     </div>
   );
 }

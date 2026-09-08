@@ -1,3 +1,17 @@
+/* Hero del Dashboard: banda con degradado de marca */
+.dash-hero { display: flex; align-items: center; justify-content: space-between; gap: 20px; flex-wrap: wrap; margin: -25px -25px 24px; padding: 26px 28px; border-radius: 16px 16px 0 0; background: linear-gradient(120deg, #1d4ed8 0%, #2563eb 45%, #4f46e5 100%); color: #fff; }
+[data-theme="dark"] .dash-hero { background: linear-gradient(120deg, #1e3a8a 0%, #1d4ed8 55%, #4338ca 100%); }
+.dash-hero-kicker { display: inline-flex; align-items: center; gap: 6px; font-size: 0.7rem; font-weight: 800; letter-spacing: 1px; text-transform: uppercase; color: rgba(255, 255, 255, 0.75); }
+.dash-hero-text h2 { margin: 6px 0 4px; font-size: 1.7rem; letter-spacing: -0.02em; color: #fff; }
+.dash-hero-text p { margin: 0; font-size: 0.85rem; color: rgba(255, 255, 255, 0.8); }
+.dash-hero .quick-actions .action.btn-primary { background: #fff; color: #1d4ed8; border: none; }
+.dash-hero .quick-actions .action.btn-primary:hover { background: #eff6ff; }
+.dash-hero .quick-actions .action.btn-secondary { background: rgba(255, 255, 255, 0.14); color: #fff; border: 1px solid rgba(255, 255, 255, 0.35); }
+.dash-hero .quick-actions .action.btn-secondary:hover { background: rgba(255, 255, 255, 0.24); }
+@media (max-width: 768px) {
+  .dash-hero { margin: -15px -15px 18px; padding: 20px 16px; border-radius: 0; }
+}
+
 .quick-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
 .dash-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; }
 .dash-panel { grid-column: span 1; background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 14px; padding: 16px 18px; display: flex; flex-direction: column; gap: 12px; min-width: 0; box-shadow: var(--shadow-card); }

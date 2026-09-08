@@ -12,6 +12,8 @@ interface Props {
   level?: ModalLevel;
   /** Muestra un extracto corto junto al ícono (solo desktop). */
   preview?: boolean;
+  /** Muestra el texto en fuente monoespaciada (para JSON/datos). */
+  mono?: boolean;
 }
 
 /**
@@ -19,7 +21,7 @@ interface Props {
  * contenido) y al hacer clic se abre un modal con el texto completo. Evita que un
  * comentario largo rompa el alto de la fila.
  */
-export default function NotesCell({ text, title, subtitle, level = 2, preview = false }: Props) {
+export default function NotesCell({ text, title, subtitle, level = 2, preview = false, mono = false }: Props) {
   const [open, setOpen] = useState(false);
   const value = (text ?? '').trim();
   const hasText = value.length > 0;
@@ -49,7 +51,7 @@ export default function NotesCell({ text, title, subtitle, level = 2, preview = 
         <Modal title={title} onClose={() => setOpen(false)} size="md" level={level}>
           <div className="modal-body">
             {subtitle && <p className="modal-intro">{subtitle}</p>}
-            <p className="notes-body">{value}</p>
+            <p className={`notes-body${mono ? ' mono' : ''}`}>{value}</p>
           </div>
         </Modal>
       )}

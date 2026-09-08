@@ -1,11 +1,13 @@
 import { useState, useMemo, useCallback, type FormEvent } from 'react';
-import { collection, addDoc, updateDoc, deleteDoc, doc } from 'firebase/firestore';
+import { collection, addDoc, updateDoc, doc } from 'firebase/firestore';
 import { initializeApp, getApp, deleteApp } from 'firebase/app';
 import { getAuth, createUserWithEmailAndPassword, sendPasswordResetEmail, signOut } from 'firebase/auth';
 import { db } from '../firebase';
 import { Users, Plus, Trash2, User as UserIcon, Edit2, ShieldAlert } from 'lucide-react';
 import type { SystemUser, UserStatus } from '../types';
 import Modal from '../components/Modal';
+import DeleteReasonModal from '../components/DeleteReasonModal';
+import { moveToTrash } from '../utils/trash';
 import DataTable, { type DataColumn } from '../components/DataTable';
 import ModuleHeader from '../components/ModuleHeader';
 import LoadingScreen from '../components/LoadingScreen';
@@ -114,13 +116,22 @@ export default function UsersDashboard() {
     }
   };
 
-  const handleDeleteUser = async (user: SystemUser) => {
+  const [deleting, setDeleting] = useState<SystemUser | null>(null);
+  const handleDeleteUser = (user: SystemUser) => {
     if (!user.id) return;
     if (user.email.toLowerCase() === currentUser?.email.toLowerCase()) { alert('You cannot revoke your own access.'); return; }
-    if (!window.confirm(`Are you sure you want to revoke access for ${user.email}?`)) return;
-    await deleteDoc(doc(db, 'users', user.id));
-    AuditLogger.logDelete('Account Users', authorName, user.id, { email: user.email });
-    if (selectedUserId === user.id) setModalState('closed');
+    setDeleting(user);
+  };
+  const confirmDelete = async (reason: string) => {
+    if (!deleting?.id) return;
+    const { id, ...data } = deleting;
+    await moveToTrash({
+      sourceCollection: 'users', sourceId: id!, module: 'Account Users',
+      label: `User ${deleting.email}`,
+      data: data as Record<string, unknown>,
+    }, reason, authorName);
+    if (selectedUserId === id) setModalState('closed');
+    setDeleting(null);
   };
 
   if (isLoading) return <LoadingScreen message="Loading users..." />;
@@ -224,6 +235,10 @@ export default function UsersDashboard() {
           </div>
         </Modal>
       )}
+      {deleting && (
+        <DeleteReasonModal label={`User ${deleting.email}`} onCancel={() => setDeleting(null)} onConfirm={confirmDelete} />
+      )}
+
     </div>
   );
 }

@@ -30,7 +30,7 @@ export interface Role {
   permissions: string[];
 }
 
-export type LogAction = 'LOGIN' | 'CREATE' | 'UPDATE' | 'DELETE' | 'IMPORT' | 'EXPORT';
+export type LogAction = 'LOGIN' | 'LOGOUT' | 'CREATE' | 'UPDATE' | 'DELETE' | 'IMPORT' | 'EXPORT' | 'RESTORE' | 'PURGE';
 
 export interface LogEntry {
   id?: string;
@@ -188,4 +188,22 @@ export interface ItemName extends CatalogRecord {
 export interface SelectOption {
   id: string;
   label: string;
+}
+
+/** Registro en la papelera de reciclaje (colección `recycle_bin`). */
+export interface TrashRecord {
+  id: string;
+  /** Colección de origen y el id original del documento. */
+  sourceCollection: string;
+  sourceId: string;
+  /** Texto corto para listar ("Order 014 — 12 Galleon Ct.") y el módulo de origen. */
+  label: string;
+  module: string;
+  /** Documento completo tal como estaba al borrarse. */
+  data: Record<string, unknown>;
+  /** Documentos relacionados que se borraron junto al principal (ej. productos de una orden). */
+  related?: Array<{ collection: string; id: string; data: Record<string, unknown> }>;
+  deletedBy: string;
+  deletedAt: string;
+  reason: string;
 }

@@ -6,6 +6,7 @@ import { auth } from '../firebase';
 import { AuditLogger } from '../utils/logger';
 import { resolveSystemUser } from '../utils/auth';
 import { useCompany } from '../hooks/useCompany';
+import { APP_VERSION } from '../version';
 import type { User } from '../types';
 import './AuthScreen.css';
 
@@ -157,6 +158,7 @@ export default function AuthScreen({ onDevLogin }: Props) {
           </>
         )}
       </div>
+      <p className="auth-version">{company.name} App · {APP_VERSION}</p>
     </div>
   );
 }

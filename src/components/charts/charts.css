@@ -3,7 +3,7 @@
    ========================================= */
 .chart-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; margin-bottom: 28px; }
 .chart-grid.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-.chart-card { background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 14px; display: flex; flex-direction: column; min-width: 0; box-shadow: var(--shadow-card); }
+.chart-card { transition: box-shadow 0.2s, transform 0.2s; background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 14px; display: flex; flex-direction: column; min-width: 0; box-shadow: var(--shadow-card); }
 .chart-card.wide { grid-column: span 2; }
 .chart-card-head { display: flex; align-items: flex-start; gap: 12px; padding: 16px 18px 6px; }
 .chart-card-icon { display: flex; padding: 8px; border-radius: 10px; background: var(--primary-soft); color: var(--primary-color); flex-shrink: 0; }
@@ -68,3 +68,5 @@
 .share-bar-pct { font-size: 0.75rem; color: var(--text-muted); font-variant-numeric: tabular-nums; min-width: 34px; text-align: right; }
 .chip-group.compact { gap: 2px; padding: 2px; }
 .chip-group.compact .chip { padding: 4px 8px; display: inline-flex; align-items: center; }
+
+.chart-card:hover { box-shadow: 0 12px 28px -14px rgba(15, 23, 42, 0.22); transform: translateY(-2px); }

@@ -64,7 +64,7 @@ idénticas se fusionan. También hay una plantilla descargable con columnas PO #
 | Item Entrance | Entradas de inventario por PO (header + productos con categoría, precio, factura, garantía), stock y valor en tiempo real, **importación del reporte de inventario**, historial de instalación |
 | Catalogs | Destinos (direcciones/unidades), proveedores, nombres de ítem. **Importación masiva desde Excel** y exportación |
 | Reports | Filtros combinados y tablas detalladas en pestañas (las gráficas y KPIs viven en el Dashboard). **Exportación a Excel y a PDF gerencial** |
-| Account Users / Roles / Activity History / Business Settings | Administración (permiso `manage_security`) |
+| Account Users / Roles / Activity History / Recycle Bin / Business Settings | Administración (permisos granulares por módulo) |
 
 ## Importar las direcciones del cliente
 
@@ -96,6 +96,19 @@ Convenciones de código y CSS: ver `CLAUDE.md`. Historial de la revisión: `code
 exportar, usuarios, roles, historial, ajustes del negocio). Los roles creados antes de esta versión
 siguen funcionando: cada permiso nuevo hereda del permiso viejo equivalente (`manage_security`,
 `manage_catalogs`, etc.).
+
+### Versión y notificaciones
+
+La versión de la app vive en `src/version.ts` (V####, +1 por entrega) con su changelog. La campana
+de la barra superior muestra las novedades de cada versión (con aviso hasta abrirlas) y alertas en
+vivo de órdenes vencidas y stock bajo.
+
+### Papelera de reciclaje
+
+Nada se borra directo: al eliminar cualquier registro se pide el **motivo** y el documento completo va
+a la colección `recycle_bin` (una orden se lleva sus productos). Desde el módulo Recycle Bin (admin) se
+restaura con su id original o se elimina para siempre. **Regla de Firestore necesaria**:
+`match /recycle_bin/{docId} { allow read, write: if request.auth != null; }`
 
 ### Exportar a PDF
 

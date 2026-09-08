@@ -6,6 +6,7 @@ import type { User, Role } from '../types';
 import { AuthContext } from './authContext';
 import { resolveSystemUser, isOwnerEmail, SUPER_ADMIN_ROLE } from '../utils/auth';
 import { permissionSatisfied } from '../utils/permissions';
+import { AuditLogger } from '../utils/logger';
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -72,6 +73,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = useCallback((user: User) => setCurrentUser(user), []);
 
   const logout = useCallback(async () => {
+    if (currentUser) AuditLogger.log({ action: 'LOGOUT', module: 'Auth', user: currentUser.username, details: 'User signed out' });
     setCurrentUser(null);
     setUserRole(null);
     try {
@@ -79,7 +81,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch (error) {
       console.error('Error signing out:', error);
     }
-  }, []);
+  }, [currentUser]);
 
   const hasPermission = useCallback((permission: string) => {
     if (!userRole) return false;

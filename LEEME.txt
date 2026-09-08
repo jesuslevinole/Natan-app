@@ -1,0 +1,41 @@
+Natan-app V0036 — archivos para copiar sobre el proyecto
+=========================================================
+Archivos nuevos o modificados sobre tu GitHub actual. Sin dependencias nuevas
+(no hace falta npm install).
+
+Cómo aplicarlo
+--------------
+1. Extraé el zip DENTRO de la carpeta del proyecto, reemplazando los existentes.
+   (Este archivo ahora se llama siempre LEEME.txt: se pisa en cada entrega y no
+   se acumulan; si querés, borrá los LEEME-v1.x.0.txt viejos con git rm.)
+2. npm run build
+3. git add -A && git commit -m "V0036" && git push
+
+IMPORTANTE — Firebase Console → Firestore → Reglas, agregar:
+      match /recycle_bin/{docId} {
+        allow read, write: if request.auth != null;
+      }
+(sin esto la Papelera no puede guardar ni listar).
+
+Qué trae V0036
+--------------
+1. VERSIÓN DEL APP: V0036 visible en la barra lateral y el login (convención de
+   Roelca/Berry; sube 1 con cada entrega). El changelog vive en src/version.ts.
+2. CAMPANA DE NOTIFICACIONES (barra superior en desktop, cabecera en el teléfono):
+   - "What's new": las novedades de cada versión; marca un punto rojo hasta que
+     el usuario las abre (se marca sola con cada versión nueva).
+   - Alertas en vivo: órdenes vencidas y productos con stock bajo (clic navega).
+3. PAPELERA DE RECICLAJE (menú de administración):
+   - Al borrar CUALQUIER registro (órdenes, POs, catálogos, usuarios, roles) se
+     pregunta el MOTIVO y el registro va a la papelera con quién y cuándo.
+   - Una orden se lleva sus productos y se restaura completa.
+   - Desde la papelera: ver los datos, Restaurar o Eliminar para siempre.
+   - Permisos nuevos en Roles: View / Restore / Delete forever.
+4. LOGS COMPLETOS: Activity History ahora registra también logout, restauraciones,
+   purgas y el motivo de cada borrado. Todo lo que pasa en el app queda asentado.
+5. FINISHED BY: al marcar Work Finish = YES el formulario pide quién lo terminó
+   (viene precargado con el Made by). Se ve en histórico, detalle y reportes.
+6. MENÚ HAMBURGUESA: en escritorio ahora está en la barra blanca superior (junto
+   al título del módulo y la campana); en el teléfono, arriba a la izquierda.
+7. MEJORA VISUAL: Dashboard con banda de bienvenida con degradado (saludo según
+   la hora, fecha y accesos rápidos) y Reports con una tira de resumen elegante.

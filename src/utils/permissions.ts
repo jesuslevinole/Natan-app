@@ -61,6 +61,11 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
   { module: 'Activity History', permissions: [
     { id: 'view_logs', label: 'View activity history', legacy: ['manage_security'] },
   ] },
+  { module: 'Recycle Bin', permissions: [
+    { id: 'view_trash', label: 'View deleted records', legacy: ['manage_security'] },
+    { id: 'restore_trash', label: 'Restore deleted records', legacy: ['manage_security'] },
+    { id: 'purge_trash', label: 'Delete forever (empty trash)', legacy: ['manage_security'] },
+  ] },
   { module: 'Business Settings', permissions: [
     { id: 'manage_settings', label: 'Edit business name, contact info & logo', legacy: ['manage_security'] },
   ] },

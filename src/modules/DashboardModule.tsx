@@ -219,6 +219,10 @@ export default function DashboardModule({ onNavigate }: Props) {
 
   if (isLoading) return <LoadingScreen message="Loading dashboard..." />;
 
+  const hour = new Date().getHours();
+  const greeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
+  const longToday = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+
   const canWork = hasPermission('view_work_activity');
   const canAddWork = hasPermission('add_work_activity');
   const canStock = hasPermission('view_item_entrance');
@@ -230,10 +234,11 @@ export default function DashboardModule({ onNavigate }: Props) {
 
   return (
     <div className="card max-1400 catalog-manager-anim">
-      <div className="card-header wrap">
-        <div className="card-header-text module-header-title">
-          <h2><LayoutDashboard size={28} /> Dashboard</h2>
-          <p>Welcome back, {currentUser?.firstName || currentUser?.username}. Here is today&apos;s overview ({formatDateDisplay(today)}).</p>
+      <div className="dash-hero">
+        <div className="dash-hero-text">
+          <span className="dash-hero-kicker"><LayoutDashboard size={15} /> Operations Dashboard</span>
+          <h2>{greeting}, {currentUser?.firstName || currentUser?.username}</h2>
+          <p>{longToday} · {stats.active.length} active order{stats.active.length === 1 ? '' : 's'}{stats.overdue.length > 0 ? ` · ${stats.overdue.length} overdue` : ' · everything on time'}</p>
         </div>
         <div className="quick-actions">
           {canAddWork && <button type="button" className="action btn-primary btn-sm" onClick={() => onNavigate('workActivity')}><Plus size={16} /> New Order</button>}

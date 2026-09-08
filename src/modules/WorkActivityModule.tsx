@@ -12,6 +12,8 @@ import FieldSecurityModal from '../components/FieldSecurityModal';
 import LoadingScreen from '../components/LoadingScreen';
 import { WorkFinishBadge, ScheduleCell } from '../components/StatusBadge';
 import TextAssist from '../components/TextAssist';
+import DeleteReasonModal from '../components/DeleteReasonModal';
+import { moveToTrash } from '../utils/trash';
 import DataTable, { type DataColumn } from '../components/DataTable';
 import NotesCell from '../components/NotesCell';
 import { useFormConfig, useFieldRoles } from '../hooks/useAppHooks';
@@ -119,6 +121,7 @@ export default function WorkActivityModule() {
         jobOrder: job.jobOrder, madeBy: job.madeBy || '', destination: job.destination,
         description: job.description, workFinish: job.workFinish, pendingWork: job.pendingWork,
         schedule: job.schedule, createdAt: job.createdAt || getTodayString(),
+        finishedBy: job.finishedBy || job.madeBy || '',
       });
       setFormProducts(jobProducts.filter(p => p.jobOrderId === job.id));
     } else {
@@ -129,22 +132,26 @@ export default function WorkActivityModule() {
     setIsJobModalOpen(true);
   };
 
-  const handleDelete = async (job: JobOrder, e?: MouseEvent) => {
+  const [deleting, setDeleting] = useState<JobOrder | null>(null);
+  const handleDelete = (job: JobOrder, e?: MouseEvent) => {
     e?.stopPropagation();
-    if (!window.confirm(`Delete order #${formatSeq(job.visualSeq)} (${job.destination})? Its products will be returned to stock.`)) return;
-    try {
-      // Borramos también los productos asociados: si quedaran huérfanos seguirían
-      // descontando stock de un trabajo que ya no existe.
-      const batch = writeBatch(db);
-      batch.delete(doc(db, 'jobOrders', job.id));
-      jobProducts.filter(p => p.jobOrderId === job.id && p.id).forEach(p => batch.delete(doc(db, 'jobProducts', p.id!)));
-      await batch.commit();
-      AuditLogger.logDelete('WorkActivity', authorName, job.id, job);
-      setViewingJobId(null);
-    } catch (error) {
-      console.error('Error deleting order', error);
-      alert('Error deleting the record.');
-    }
+    setDeleting(job);
+  };
+  // Al confirmar: la orden y sus productos van juntos a la papelera (los huérfanos
+  // seguirían descontando stock) y se pueden restaurar en bloque.
+  const confirmDelete = async (reason: string) => {
+    if (!deleting) return;
+    const { id, ...data } = deleting;
+    const related = jobProducts
+      .filter(p => p.jobOrderId === id && p.id)
+      .map(p => { const { id: pid, ...pdata } = p; return { collection: 'jobProducts', id: pid!, data: pdata as Record<string, unknown> }; });
+    await moveToTrash({
+      sourceCollection: 'jobOrders', sourceId: id, module: 'Work Activity',
+      label: `Order ${formatSeq(deleting.visualSeq)} — ${deleting.destination} · ${deleting.description}`,
+      data: data as Record<string, unknown>, related,
+    }, reason, authorName);
+    setDeleting(null);
+    setViewingJobId(null);
   };
 
   const handleSaveOrder = async (e: FormEvent<HTMLFormElement>) => {
@@ -155,9 +162,10 @@ export default function WorkActivityModule() {
       // "Finished by": queda registrado quien pasa Work Finish a YES; al reabrir se limpia.
       const previous = editingJob ? jobOrders.find(o => o.id === editingJob) : undefined;
       const finishStamp = formData.workFinish === 'YES'
-        ? (previous?.workFinish === 'YES' && previous.finishedBy
-            ? { finishedBy: previous.finishedBy, finishedAt: previous.finishedAt ?? '' }
-            : { finishedBy: authorName, finishedAt: getTodayString() })
+        ? {
+            finishedBy: formData.finishedBy || previous?.finishedBy || authorName,
+            finishedAt: previous?.workFinish === 'YES' && previous.finishedAt ? previous.finishedAt : getTodayString(),
+          }
         : { finishedBy: '', finishedAt: '' };
       const payload = { ...formData, ...finishStamp };
       if (editingJob) {
@@ -403,6 +411,15 @@ export default function WorkActivityModule() {
         groups={[{ fields: JOB_FIELDS, isRequired: isJobReq, toggleRequired: toggleJobReq, fieldRoles, setFieldRole }]}
       />
 
+      {deleting && (
+        <DeleteReasonModal
+          label={`Order ${formatSeq(deleting.visualSeq)} — ${deleting.destination}`}
+          onCancel={() => setDeleting(null)}
+          onConfirm={confirmDelete}
+          level={3}
+        />
+      )}
+
       {madeByJob && (
         <Modal
           title={<span className="flex-row-md"><UserCheck size={20} /> {madeByJob.madeBy ? 'Change Made by' : 'Assign Made by'}</span>}
@@ -538,6 +555,15 @@ export default function WorkActivityModule() {
                     <option value="NO">NO</option>
                   </select>
                 </div>
+                {formData.workFinish === 'YES' && (
+                  <div className="form-group">
+                    <label>Finished by *</label>
+                    <select value={formData.finishedBy || ''} onChange={e => setFormData({ ...formData, finishedBy: e.target.value })} required>
+                      <option value="">-- Who finished this work? --</option>
+                      {users.map(u => { const name = displayName(u, u.email); return <option key={u.id} value={name}>{name}</option>; })}
+                    </select>
+                  </div>
+                )}
 
                 <div className="form-group span-2">
                   <label>Description {isJobReq('description') && '*'} {lockHint('description')}</label>

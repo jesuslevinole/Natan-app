@@ -1,7 +1,7 @@
 import { useState, lazy, Suspense, type ReactNode } from 'react';
 import {
-  PackageSearch, Briefcase, LogOut, BookOpen, BarChart2, Menu, ChevronRight, ChevronLeft,
-  ShieldAlert, Users as UsersIcon, ShieldCheck, LayoutDashboard, Settings, Sun, Moon,
+  PackageSearch, Briefcase, LogOut, BookOpen, BarChart2, Menu,
+  ShieldAlert, Users as UsersIcon, ShieldCheck, LayoutDashboard, Settings, Sun, Moon, Trash2,
 } from 'lucide-react';
 import AuthScreen from './components/AuthScreen';
 import LoadingScreen from './components/LoadingScreen';
@@ -12,6 +12,8 @@ import { CompanyProvider } from './context/CompanyProvider';
 import { useCompany } from './hooks/useCompany';
 import { useTheme } from './hooks/useTheme';
 import BrandMark from './components/BrandMark';
+import NotificationsBell from './components/NotificationsBell';
+import { APP_VERSION } from './version';
 import './App.css';
 
 // Code-splitting: cada módulo se descarga la primera vez que se abre, no todo en el login.
@@ -24,8 +26,9 @@ const UsersDashboard = lazy(() => import('./modules/UsersDashboard'));
 const RolesDashboard = lazy(() => import('./modules/RolesDashboard'));
 const LogsDashboard = lazy(() => import('./modules/LogsDashboard'));
 const SettingsModule = lazy(() => import('./modules/SettingsModule'));
+const TrashModule = lazy(() => import('./modules/TrashModule'));
 
-export type ModuleId = 'dashboard' | 'workActivity' | 'itemEntrance' | 'catalogs' | 'reports' | 'users' | 'roles' | 'audit_logs' | 'settings';
+export type ModuleId = 'dashboard' | 'workActivity' | 'itemEntrance' | 'catalogs' | 'reports' | 'users' | 'roles' | 'audit_logs' | 'settings' | 'trash';
 
 interface NavItem {
   id: ModuleId;
@@ -45,6 +48,7 @@ const NAV_ITEMS: NavItem[] = [
   { id: 'users', label: 'Account Users', icon: <UsersIcon size={20} />, permission: 'view_users', section: 'admin' },
   { id: 'roles', label: 'Manage Roles', icon: <ShieldCheck size={20} />, permission: 'view_roles', section: 'admin' },
   { id: 'audit_logs', label: 'Activity History', icon: <ShieldAlert size={20} />, permission: 'view_logs', section: 'admin' },
+  { id: 'trash', label: 'Recycle Bin', icon: <Trash2 size={20} />, permission: 'view_trash', section: 'admin' },
   { id: 'settings', label: 'Business Settings', icon: <Settings size={20} />, permission: 'manage_settings', section: 'admin' },
 ];
 
@@ -74,6 +78,7 @@ function AppShell() {
       case 'roles': return <RolesDashboard />;
       case 'audit_logs': return <LogsDashboard />;
       case 'settings': return <SettingsModule />;
+      case 'trash': return <TrashModule />;
     }
   };
 
@@ -87,9 +92,6 @@ function AppShell() {
             <BrandMark size={36} />
             <span className="logo-text">{company.name}</span>
           </div>
-          <button type="button" className="collapse-btn desktop-only" onClick={() => setIsSidebarCollapsed(v => !v)} title="Toggle sidebar">
-            {isSidebarCollapsed ? <ChevronRight size={20} /> : <ChevronLeft size={20} />}
-          </button>
         </div>
 
         <ul className="nav-links">
@@ -112,6 +114,7 @@ function AppShell() {
           <div className="sidebar-user">
             Logged in as <b>{currentUser?.username}</b>
             <span className={`sidebar-role ${userRole ? '' : 'missing'}`}>{userRole ? userRole.name : 'No role assigned'}</span>
+            <span className="sidebar-version" title={`App version ${APP_VERSION}`}>{APP_VERSION}</span>
           </div>
           <button type="button" className="action logout-btn" onClick={logout}>
             <LogOut size={20} /> <span>Log Out</span>
@@ -120,17 +123,31 @@ function AppShell() {
       </aside>
 
       <div className="main-wrapper">
+        {/* Barra superior (desktop): hamburguesa en la zona blanca + campana de notificaciones */}
+        <div className="topbar desktop-only-flex">
+          <button type="button" className="hamburger-btn" onClick={() => setIsSidebarCollapsed(v => !v)} title={isSidebarCollapsed ? 'Expand menu' : 'Collapse menu'} aria-label="Toggle sidebar">
+            <Menu size={20} />
+          </button>
+          <span className="topbar-title">{visibleItems.find(i => i.id === activeModule)?.label}</span>
+          <div className="topbar-actions">
+            <NotificationsBell onNavigate={handleModuleChange} />
+          </div>
+        </div>
+
         <div className="mobile-header">
-          <div className="mobile-brand">
-            <BrandMark size={28} /> <h2>{company.name}</h2>
+          <div className="flex-row">
+            <button type="button" className="icon-btn" onClick={() => setIsMobileMenuOpen(true)} title="Open menu" aria-label="Open menu">
+              <Menu size={26} />
+            </button>
+            <div className="mobile-brand">
+              <BrandMark size={28} /> <h2>{company.name}</h2>
+            </div>
           </div>
           <div className="flex-row">
             <button type="button" className="theme-toggle" onClick={toggleTheme} title="Toggle dark mode">
               {theme === 'dark' ? <Sun size={22} /> : <Moon size={22} />}
             </button>
-            <button type="button" className="icon-btn" onClick={() => setIsMobileMenuOpen(true)} title="Open menu">
-              <Menu size={28} />
-            </button>
+            <NotificationsBell onNavigate={handleModuleChange} />
           </div>
         </div>
 

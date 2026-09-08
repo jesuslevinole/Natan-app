@@ -156,3 +156,16 @@ Verificación: `npm run check` 0/0, `npm run build` OK (chunk `pdf` ~137 KB gz s
 - **Fechas US**: `dateFormatter`/`dateTimeFormatter` de `helpers.tsx` pasaron de `es-ES` a `en-US` con `MM/DD/YYYY` fijo (y hora 12h AM/PM). Toda la app (tablas, agenda, PDFs, detalles) usa `formatDateDisplay`, así que el cambio es global. Revisado con grep: no quedan strings en español de cara al usuario (solo comentarios de código y alias de encabezados de importación).
 
 Verificación: `npm run check` 0/0, `npm run build` OK, render en Chromium (fechas MM/DD/YYYY, chip Assign, modal de asignación, columna Finished by en histórico). Nota dev: la vista previa ahora necesita un `.env` con valores dummy (el `getAuth` de Firebase valida el formato del API key al cargar).
+
+## Ronda 8 (V0036) — versión, notificaciones, papelera, logs completos, hamburguesa y pulido visual
+
+- **Versión**: `src/version.ts` (`APP_VERSION = 'V0036'`, convención de Roelca/Berry: +1 por entrega) + `CHANGELOG` con las novedades de cada versión. Visible en el pie de la barra lateral y en el login. Al publicar: sumar 1 y agregar la entrada al CHANGELOG.
+- **Notificaciones** (`components/NotificationsBell`): campana en la barra superior (desktop) y en la cabecera móvil. Muestra alertas en vivo (órdenes vencidas → Work Activity, stock bajo → Item Entrance) y "What's new" con el changelog; marca punto rojo hasta que el usuario abre la versión nueva (`localStorage natan_seen_version`).
+- **Papelera** (`utils/trash.ts`, `modules/TrashModule`, colección `recycle_bin`): todo borrado pasa por `DeleteReasonModal` (motivo obligatorio) y `moveToTrash` guarda el doc completo + relacionados (una orden lleva sus `jobProducts`) + quién/cuándo/por qué, antes de borrar el original. El módulo Recycle Bin (admin) lista, muestra el JSON, restaura con el id original o purga con confirmación. Integrado en Work Activity, Item Entrance, Catalogs, Users y Roles. Permisos: `view/restore/purge_trash` (heredan de `manage_security`). Requiere regla de Firestore para `recycle_bin` (auth != null).
+- **Logs**: acciones nuevas `LOGOUT`, `RESTORE`, `PURGE` (badges en Activity History); logout registrado; los borrados registran el motivo. Con esto queda cubierto: login/logout, create/update/delete (+motivo), import, export (Excel/PDF), restore y purge en todos los módulos.
+- **Finished by en el formulario**: al poner Work Finish = YES aparece el selector "Finished by" (obligatorio, precargado con Made by o el usuario actual). El sello automático sigue como respaldo.
+- **Hamburguesa**: nueva barra superior blanca en desktop (`.topbar`: hamburguesa + título del módulo + campana); en móvil la hamburguesa pasó a la izquierda de la cabecera. Se eliminó el chevron del sidebar.
+- **Visual**: hero con degradado en el Dashboard (saludo por hora, fecha larga, resumen y accesos rápidos en blanco), tira de resumen (`insight-strip`) en Reports en lugar de las tarjetas KPI, hover con elevación en las chart cards.
+- Nota dev: la vista previa necesita `.env` con valores dummy (Firebase valida el formato del API key al cargar `getAuth`).
+
+Verificación: `npm run check` 0/0, `npm run build` OK, render en Chromium (hero, insight strip, campana con badge y panel, modal de borrado con motivo, Finished by en el formulario).

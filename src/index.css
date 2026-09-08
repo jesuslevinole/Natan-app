@@ -78,6 +78,9 @@
 .badge.login   { background: #e0e7ff; color: #2563eb; }
 .badge.import  { background: #ede9fe; color: #7c3aed; }
 .badge.export { background: var(--cyan-soft); color: #0891b2; }
+.badge.logout  { background: var(--surface-3); color: var(--text-muted); }
+.badge.restore { background: var(--success-soft); color: #16a34a; }
+.badge.purge   { background: var(--danger-soft); color: #b91c1c; }
 
 /* Estado sólido (Available / Unavailable) */
 .badge.solid { color: #fff; box-shadow: 0 2px 4px rgba(0,0,0,0.1); font-size: 0.7rem; letter-spacing: 0.5px; }

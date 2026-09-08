@@ -5,6 +5,7 @@ import { mockAppData } from './mockData';
 import LoadingScreen from '../components/LoadingScreen';
 import { useTheme } from '../hooks/useTheme';
 import { Sun, Moon } from 'lucide-react';
+import NotificationsBell from '../components/NotificationsBell';
 import '../index.css';
 import '../App.css';
 
@@ -42,6 +43,7 @@ export default function Preview() {
               <button key={k} type="button" className={`chip${k === active ? ' active' : ''}`} onClick={() => setActive(k)}>{k}</button>
             ))}
             <button type="button" className="chip" onClick={toggle} title="Toggle theme">{theme === 'dark' ? <Sun size={14} /> : <Moon size={14} />}</button>
+            <NotificationsBell onNavigate={m => setActive((m in modules ? m : 'dashboard') as Key)} />
           </nav>
           <main className="preview-main">
             <Suspense fallback={<LoadingScreen message="Loading preview..." />}>

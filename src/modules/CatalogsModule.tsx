@@ -1,5 +1,5 @@
 import { useState, useMemo, type FormEvent } from 'react';
-import { collection, addDoc, updateDoc, deleteDoc, doc } from 'firebase/firestore';
+import { collection, addDoc, updateDoc, doc } from 'firebase/firestore';
 import { db } from '../firebase';
 import { BookOpen, ArrowLeft, Plus, Edit2, Trash2, FileSpreadsheet, Download } from 'lucide-react';
 import type { CatalogSchema, CatalogRecord } from '../types';
@@ -8,6 +8,8 @@ import ModuleHeader from '../components/ModuleHeader';
 import SeqBadge from '../components/SeqBadge';
 import DataTable, { type DataColumn } from '../components/DataTable';
 import ImportDestinationsModal from '../components/ImportDestinationsModal';
+import DeleteReasonModal from '../components/DeleteReasonModal';
+import { moveToTrash } from '../utils/trash';
 import { catalogsConfig, matchesSearch } from '../utils/helpers';
 import { nextSequence } from '../utils/firestore';
 import { downloadWorkbook } from '../utils/excel';
@@ -108,17 +110,26 @@ export default function CatalogsModule() {
     }
   };
 
-  const handleDelete = async (record: CatalogRecord) => {
+  const [deleting, setDeleting] = useState<CatalogRecord | null>(null);
+  const recordLabel = (record: CatalogRecord) => (selectedCatalog ? String(record[selectedCatalog.fields[0].name] ?? record.id) : record.id);
+  const handleDelete = (record: CatalogRecord) => {
     if (!selectedCatalog) return;
-    const label = String(record[selectedCatalog.fields[0].name] ?? record.id);
     // Una dirección con órdenes asociadas no se borra: quedarían órdenes apuntando a nada.
     if (selectedCatalog.id === 'destinations') {
       const inUse = jobOrders.filter(o => o.destination === record.description).length;
-      if (inUse > 0) { alert(`"${label}" is used by ${inUse} job order(s) and cannot be deleted.`); return; }
+      if (inUse > 0) { alert(`"${recordLabel(record)}" is used by ${inUse} job order(s) and cannot be deleted.`); return; }
     }
-    if (!window.confirm(`Delete "${label}"?`)) return;
-    await deleteDoc(doc(db, `catalog_${selectedCatalog.id}`, record.id));
-    AuditLogger.logDelete(`Catalogs (${selectedCatalog.title})`, authorName, record.id, record);
+    setDeleting(record);
+  };
+  const confirmDelete = async (reason: string) => {
+    if (!deleting || !selectedCatalog) return;
+    const { id, ...data } = deleting;
+    await moveToTrash({
+      sourceCollection: `catalog_${selectedCatalog.id}`, sourceId: id, module: `Catalogs (${selectedCatalog.title})`,
+      label: recordLabel(deleting),
+      data: data as Record<string, unknown>,
+    }, reason, authorName);
+    setDeleting(null);
   };
 
   const handleExport = () => {
@@ -244,6 +255,10 @@ export default function CatalogsModule() {
       )}
 
       {isImportOpen && <ImportDestinationsModal onClose={() => setIsImportOpen(false)} />}
+
+      {deleting && selectedCatalog && (
+        <DeleteReasonModal label={`${selectedCatalog.title}: ${recordLabel(deleting)}`} onCancel={() => setDeleting(null)} onConfirm={confirmDelete} />
+      )}
     </div>
   );
 }

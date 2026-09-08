@@ -1,2 +1,10 @@
 /* Reports: el panel de filtros y las tarjetas usan clases globales (index.css, KpiCard.css, charts.css). */
 .kpi-sub { font-size: 0.9rem; font-weight: 600; color: var(--text-muted); }
+
+/* Tira de resumen (reemplaza a las tarjetas KPI que se quitaron de esta vista) */
+.insight-strip { display: flex; flex-wrap: wrap; gap: 8px 10px; align-items: center; margin: 4px 0 20px; padding: 12px 14px; border: 1px solid var(--border-color); border-left: 4px solid var(--primary-color); border-radius: 12px; background: var(--surface-2); }
+.insight { display: inline-flex; align-items: center; gap: 6px; font-size: 0.8rem; color: var(--text-body); padding: 4px 10px; border-radius: 999px; background: var(--card-bg); border: 1px solid var(--border-color); }
+.insight b { color: var(--text-strong); }
+.insight.good b { color: #16a34a; }
+.insight.bad { border-color: var(--danger-soft-border); background: var(--danger-soft); }
+.insight.bad b { color: var(--danger-color); }

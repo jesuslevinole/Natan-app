@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback, type FormEvent, type MouseEvent } from 'react';
-import { collection, addDoc, updateDoc, deleteDoc, doc } from 'firebase/firestore';
+import { collection, addDoc, updateDoc, doc } from 'firebase/firestore';
 import { db } from '../firebase';
 import { PackageSearch, Plus, X, Settings, Edit2, Trash2, Maximize2, Lock, FileSpreadsheet } from 'lucide-react';
 import type { NormalizedEntrance, ItemEntranceFormData, EntranceDetail } from '../types';
@@ -12,6 +12,8 @@ import FieldSecurityModal from '../components/FieldSecurityModal';
 import LoadingScreen from '../components/LoadingScreen';
 import { StockBadge, StockLevel } from '../components/StatusBadge';
 import ImportInventoryModal from '../components/ImportInventoryModal';
+import DeleteReasonModal from '../components/DeleteReasonModal';
+import { moveToTrash } from '../utils/trash';
 import NotesCell from '../components/NotesCell';
 import DataTable, { type DataColumn } from '../components/DataTable';
 import { useFormConfig, useFieldRoles } from '../hooks/useAppHooks';
@@ -221,16 +223,25 @@ export default function ItemEntranceModule() {
     }
   };
 
-  const handleDeleteEntrance = async (item: NormalizedEntrance, e?: MouseEvent) => {
+  const [deleting, setDeleting] = useState<NormalizedEntrance | null>(null);
+  const handleDeleteEntrance = (item: NormalizedEntrance, e?: MouseEvent) => {
     e?.stopPropagation();
     const { total, stock } = getEntranceStock(item, usage);
     if (stock < total) {
       alert('This PO has products already installed in job orders and cannot be deleted.');
       return;
     }
-    if (!window.confirm(`Delete PO ${item.po} permanently?`)) return;
-    await deleteDoc(doc(db, 'itemEntrance', item.id));
-    AuditLogger.logDelete('Item Entrance', authorName, item.id, item);
+    setDeleting(item);
+  };
+  const confirmDelete = async (reason: string) => {
+    if (!deleting) return;
+    const { id, ...data } = deleting;
+    await moveToTrash({
+      sourceCollection: 'itemEntrance', sourceId: id, module: 'Item Entrance',
+      label: `PO ${deleting.po || '(no PO)'} — ${deleting.supplyCompany} · ${deleting.details.length} product(s)`,
+      data: data as Record<string, unknown>,
+    }, reason, authorName);
+    setDeleting(null);
   };
 
   const filteredItems = useMemo(() => entrances.filter(item => {
@@ -363,6 +374,10 @@ export default function ItemEntranceModule() {
       />
 
       {isImportOpen && <ImportInventoryModal onClose={() => setIsImportOpen(false)} />}
+
+      {deleting && (
+        <DeleteReasonModal label={`PO ${deleting.po || '(no PO)'} — ${deleting.supplyCompany}`} onCancel={() => setDeleting(null)} onConfirm={confirmDelete} />
+      )}
 
       <FieldSecurityModal
         isOpen={isConfigOpen}
