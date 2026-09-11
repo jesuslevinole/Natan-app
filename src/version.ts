@@ -3,8 +3,8 @@
  * Al publicar una versión nueva: sumar 1 aquí y agregar su entrada al inicio de CHANGELOG.
  * La campana de notificaciones marca "nuevo" cuando el usuario aún no vio la versión actual.
  */
-export const APP_VERSION = 'V0036';
-export const APP_VERSION_DATE = '2026-09-08';
+export const APP_VERSION = 'V0038';
+export const APP_VERSION_DATE = '2026-09-11';
 
 export interface ChangelogEntry {
   version: string;
@@ -13,6 +13,22 @@ export interface ChangelogEntry {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: 'V0038',
+    date: '2026-09-11',
+    items: [
+      '"Finished by" is now recorded automatically with the user who marks the work as finished — it can no longer be chosen from a list.',
+      'If an order was already finished, editing it keeps the original "Finished by" and date; reopening it clears them.',
+    ],
+  },
+  {
+    version: 'V0037',
+    date: '2026-09-08',
+    items: [
+      'Dark mode fixes: sidebar labels are readable again and badges, chips and alerts use their light accent colors.',
+      'Scrollbars now follow the app color palette in both themes (thin, rounded; subtle light bar on the dark sidebar).',
+    ],
+  },
   {
     version: 'V0036',
     date: '2026-09-08',

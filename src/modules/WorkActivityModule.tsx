@@ -121,7 +121,6 @@ export default function WorkActivityModule() {
         jobOrder: job.jobOrder, madeBy: job.madeBy || '', destination: job.destination,
         description: job.description, workFinish: job.workFinish, pendingWork: job.pendingWork,
         schedule: job.schedule, createdAt: job.createdAt || getTodayString(),
-        finishedBy: job.finishedBy || job.madeBy || '',
       });
       setFormProducts(jobProducts.filter(p => p.jobOrderId === job.id));
     } else {
@@ -161,11 +160,12 @@ export default function WorkActivityModule() {
       let savedJobId = editingJob;
       // "Finished by": queda registrado quien pasa Work Finish a YES; al reabrir se limpia.
       const previous = editingJob ? jobOrders.find(o => o.id === editingJob) : undefined;
+      // Quien marca YES queda registrado automáticamente; si la orden ya estaba
+      // finalizada se conserva el sello original (quién y cuándo la terminó).
       const finishStamp = formData.workFinish === 'YES'
-        ? {
-            finishedBy: formData.finishedBy || previous?.finishedBy || authorName,
-            finishedAt: previous?.workFinish === 'YES' && previous.finishedAt ? previous.finishedAt : getTodayString(),
-          }
+        ? (previous?.workFinish === 'YES' && previous.finishedBy
+            ? { finishedBy: previous.finishedBy, finishedAt: previous.finishedAt ?? getTodayString() }
+            : { finishedBy: authorName, finishedAt: getTodayString() })
         : { finishedBy: '', finishedAt: '' };
       const payload = { ...formData, ...finishStamp };
       if (editingJob) {
@@ -193,6 +193,10 @@ export default function WorkActivityModule() {
       setIsProcessing(false);
     }
   };
+
+  // Valor mostrado en el campo de solo lectura "Finished by" del formulario.
+  const editingOrder = editingJob ? jobOrders.find(o => o.id === editingJob) : undefined;
+  const finishedByStamp = editingOrder?.workFinish === 'YES' && editingOrder.finishedBy ? editingOrder.finishedBy : authorName;
 
   const madeByJob = useMemo(() => jobOrders.find(o => o.id === madeByJobId) ?? null, [jobOrders, madeByJobId]);
   const canAssignMadeBy = hasPermission('set_made_by');
@@ -557,11 +561,8 @@ export default function WorkActivityModule() {
                 </div>
                 {formData.workFinish === 'YES' && (
                   <div className="form-group">
-                    <label>Finished by *</label>
-                    <select value={formData.finishedBy || ''} onChange={e => setFormData({ ...formData, finishedBy: e.target.value })} required>
-                      <option value="">-- Who finished this work? --</option>
-                      {users.map(u => { const name = displayName(u, u.email); return <option key={u.id} value={name}>{name}</option>; })}
-                    </select>
+                    <label>Finished by <span className="label-note">(recorded automatically)</span></label>
+                    <input type="text" className="readonly-muted" value={finishedByStamp} readOnly title="The user who marks the work as finished is recorded automatically and cannot be changed here." />
                   </div>
                 )}
 

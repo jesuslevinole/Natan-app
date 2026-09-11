@@ -2,7 +2,7 @@
 .notes-btn {
   position: relative; display: inline-flex; align-items: center; justify-content: center;
   width: 30px; height: 30px; border-radius: 8px; border: 1px solid transparent; background: transparent;
-  color: var(--border-strong); cursor: default; transition: all 0.15s;
+  color: var(--text-faint); cursor: default; transition: all 0.15s;
 }
 .notes-btn.has-text { color: var(--primary-color); background: var(--primary-soft); border-color: var(--primary-soft-border); cursor: pointer; }
 .notes-btn.has-text:hover { background: var(--primary-color); color: #fff; border-color: var(--primary-color); }

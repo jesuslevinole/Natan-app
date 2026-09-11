@@ -8,3 +8,4 @@
 .insight.good b { color: #16a34a; }
 .insight.bad { border-color: var(--danger-soft-border); background: var(--danger-soft); }
 .insight.bad b { color: var(--danger-color); }
+[data-theme="dark"] .insight.good b { color: #4ade80; }

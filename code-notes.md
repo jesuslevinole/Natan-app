@@ -169,3 +169,16 @@ Verificación: `npm run check` 0/0, `npm run build` OK, render en Chromium (fech
 - Nota dev: la vista previa necesita `.env` con valores dummy (Firebase valida el formato del API key al cargar `getAuth`).
 
 Verificación: `npm run check` 0/0, `npm run build` OK, render en Chromium (hero, insight strip, campana con badge y panel, modal de borrado con motivo, Finished by en el formulario).
+
+## Ronda 9 (V0037) — scrollbars con la paleta y arreglos de modo oscuro
+
+- **Causa raíz del dark mode**: en el barrido de hex→variables (ronda del modo oscuro), colores de TEXTO claro sobre superficies siempre-oscuras quedaron mapeados a variables de superficie/borde, que en oscuro se vuelven oscuras: `.sidebar` tenía `color: var(--surface-2)` y `.nav-links li` `color: var(--border-strong)` → el menú lateral quedaba casi invisible en dark. Regla nueva: si la superficie es oscura en AMBOS temas (sidebar, login, tooltip de gráficos, caja de payload de logs), su texto va en hex fijo, no en variable de tema.
+- Arreglos: sidebar `#e2e8f0` / ítems `#cbd5e1`; loading del login `#cbd5e1`; tooltip de charts `#e2e8f0`/`#cbd5e1`; payload de Logs `#e2e8f0`; `.notes-btn` y `.dt-dash` pasan a `var(--text-faint)` (legibles en ambos temas).
+- **Acentos en oscuro**: bloque `[data-theme="dark"]` en index.css para los textos sobre tintes translúcidos: badges (info/success/warning/danger/login/import/export/restore/purge, outlined yes/no), alerts, `.text-accent`, `.text-success`, `.hint.warn`, `.lock-hint`, `.schedule-cell.today`, `.stock-level.low`, `.filter-chip`, `.insight.good`.
+- **Scrollbars**: bloque global en App.css — `scrollbar-width: thin` + `scrollbar-color` y `::-webkit-scrollbar` (10px, pulgar redondeado con `background-clip: content-box`, hover más claro) siguiendo `--border-strong`/`--text-faint`; el sidebar (oscuro en ambos temas) usa pulgar blanco translúcido de 8px. Nota: en Chromium headless (Linux) los scrollbars son overlay y no se ven en screenshots; en Windows/Chrome sí aplican.
+
+Verificación: `npm run check` 0/0, `npm run build` OK, screenshots dark de Work Activity y Reports (badges y chips legibles). Versión V0037 con su entrada en el changelog (la campana la anuncia sola).
+
+## Ronda 10 (V0038) — Finished by sin selección
+
+- El selector "Finished by" del formulario se reemplazó por un campo de solo lectura "(recorded automatically)": al marcar Work Finish = YES queda registrado el usuario logueado que lo marca, sin posibilidad de elegir otro. Si la orden ya estaba finalizada, editarla conserva el sello original (quién y cuándo); al reabrirla (NO) se limpia y se vuelve a estampar cuando se finalice de nuevo. `JobFormData.finishedBy` ya no se usa desde el formulario (el payload lo calcula `finishStamp` con `authorName`).

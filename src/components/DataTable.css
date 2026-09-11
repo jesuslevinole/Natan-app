@@ -78,7 +78,7 @@
 .dt-expand-btn.open svg { transform: rotate(90deg); }
 .dt-expanded-row td { background: var(--surface-2); padding: 0; }
 .dt-expanded-cell { padding: 14px 18px 18px 52px !important; box-shadow: inset 0 1px 0 var(--border-color); }
-.dt-dash { color: var(--border-strong); }
+.dt-dash { color: var(--text-faint); }
 .dt-empty { text-align: center; padding: 48px 20px !important; color: var(--text-muted); font-style: italic; }
 
 .dt.compact .dt-table tbody td { padding: 8px 12px; font-size: 0.82rem; }

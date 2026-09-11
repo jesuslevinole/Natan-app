@@ -92,12 +92,12 @@ body { background-color: var(--bg-color); color: var(--text-main); height: 100vh
 /* Fondo oscuro detrás del menú lateral en móvil (antes no tenía estilos y nunca se veía) */
 .sidebar-overlay { position: fixed; inset: 0; background: rgba(15, 23, 42, 0.5); z-index: 45; opacity: 0; pointer-events: none; transition: opacity 0.3s; }
 .sidebar-overlay.active { opacity: 1; pointer-events: auto; }
-.auth-wrapper .loading-screen { color: var(--border-strong); }
+.auth-wrapper .loading-screen { color: #cbd5e1; }
 .main-wrapper { flex: 1; display: flex; flex-direction: column; height: 100vh; overflow: hidden; transition: all 0.3s ease; }
 .main-content { flex: 1; padding: 24px 30px; overflow-y: auto; position: relative; background-color: var(--bg-color); }
 
 .sidebar { 
-  width: 260px; background-color: var(--sidebar-bg); color: var(--surface-2); 
+  width: 260px; background-color: var(--sidebar-bg); color: #e2e8f0; 
   display: flex; flex-direction: column; justify-content: space-between; 
   transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1); z-index: 50; overflow-x: hidden;
   box-shadow: 2px 0 8px rgba(0,0,0,0.1);
@@ -118,7 +118,7 @@ body { background-color: var(--bg-color); color: var(--text-main); height: 100vh
 .nav-links { list-style: none; padding: 20px 0; display: flex; flex-direction: column; gap: 5px; flex: 1; overflow-y: auto;}
 .nav-links li { 
   padding: 12px 20px; cursor: pointer; transition: all 0.2s; font-size: 0.95rem; 
-  border-left: 4px solid transparent; display: flex; align-items: center; gap: 15px; color: var(--border-strong); white-space: nowrap;
+  border-left: 4px solid transparent; display: flex; align-items: center; gap: 15px; color: #cbd5e1; white-space: nowrap; /* texto fijo: la barra es oscura en ambos temas */
 }
 .nav-links li:hover, .nav-links li.active { background-color: var(--sidebar-hover); color: white; }
 .nav-links li.active { border-left-color: var(--primary-color); font-weight: 600; }
@@ -369,3 +369,19 @@ dl.details-grid { margin: 0 0 30px 0; }
 .sidebar-version { display: inline-block; margin-top: 4px; font-size: 0.68rem; font-weight: 800; letter-spacing: 0.4px; color: #93c5fd; background: rgba(59, 130, 246, 0.15); padding: 2px 8px; border-radius: 999px; width: fit-content; }
 .mobile-header .bell-btn { border: none; background: none; color: #fff; }
 .mobile-header .bell-badge { border-color: var(--sidebar-bg); }
+
+/* =========================================
+   SCROLLBARS (paleta del tema; finos y redondeados)
+   ========================================= */
+* { scrollbar-width: thin; scrollbar-color: var(--border-strong) transparent; }
+*::-webkit-scrollbar { width: 10px; height: 10px; }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb { background-color: var(--border-strong); border-radius: 999px; border: 3px solid transparent; background-clip: content-box; }
+*::-webkit-scrollbar-thumb:hover { background-color: var(--text-faint); }
+*::-webkit-scrollbar-corner { background: transparent; }
+
+/* La barra lateral es oscura en ambos temas: pulgar blanco translúcido */
+.sidebar, .sidebar .nav-links { scrollbar-color: rgba(148, 163, 184, 0.35) transparent; }
+.sidebar ::-webkit-scrollbar, .sidebar::-webkit-scrollbar, .nav-links::-webkit-scrollbar { width: 8px; }
+.sidebar ::-webkit-scrollbar-thumb, .sidebar::-webkit-scrollbar-thumb, .nav-links::-webkit-scrollbar-thumb { background-color: rgba(148, 163, 184, 0.3); border: 2px solid transparent; background-clip: content-box; border-radius: 999px; }
+.sidebar ::-webkit-scrollbar-thumb:hover, .nav-links::-webkit-scrollbar-thumb:hover { background-color: rgba(148, 163, 184, 0.55); }
