@@ -3,7 +3,7 @@ import { collection, addDoc, updateDoc, doc } from 'firebase/firestore';
 import { initializeApp, getApp, deleteApp } from 'firebase/app';
 import { getAuth, createUserWithEmailAndPassword, sendPasswordResetEmail, signOut } from 'firebase/auth';
 import { db } from '../firebase';
-import { Users, Plus, Trash2, User as UserIcon, Edit2, ShieldAlert } from 'lucide-react';
+import { Users, Plus, Trash2, User as UserIcon, Edit2, ShieldAlert, Eye } from 'lucide-react';
 import type { SystemUser, UserStatus } from '../types';
 import Modal from '../components/Modal';
 import DeleteReasonModal from '../components/DeleteReasonModal';
@@ -21,7 +21,7 @@ import { formatDateDisplay, displayName, matchesSearch } from '../utils/helpers'
 type ModalState = 'closed' | 'add' | 'edit' | 'detail';
 
 export default function UsersDashboard() {
-  const { currentUser } = useAuth();
+  const { currentUser, realUser, startImpersonation } = useAuth();
   const authorName = useAuthorName();
   const { roles, users, isLoading } = useAppData();
 
@@ -122,6 +122,23 @@ export default function UsersDashboard() {
     if (user.email.toLowerCase() === currentUser?.email.toLowerCase()) { alert('You cannot revoke your own access.'); return; }
     setDeleting(user);
   };
+  /** Modo prueba: ver la app como este usuario, con su rol completo. */
+  const handleViewAs = (user: SystemUser) => {
+    if (!user.id) return;
+    const role = roles.find(r => r.id === user.roleId) ?? null;
+    const ok = window.confirm(
+      `View the app as ${user.firstName} ${user.lastName} (${role?.name ?? 'no role'})?\n\n` +
+      'You will see exactly what this user sees, including the Chat. ' +
+      'Everything you do is recorded in Activity History with your name. ' +
+      'Use the orange bar at the top to exit.',
+    );
+    if (!ok) return;
+    startImpersonation(
+      { uid: `viewas_${user.id}`, username: user.email, firstName: user.firstName, lastName: user.lastName, email: user.email, roleId: user.roleId },
+      role,
+    );
+  };
+
   const confirmDelete = async (reason: string) => {
     if (!deleting?.id) return;
     const { id, ...data } = deleting;
@@ -161,10 +178,17 @@ export default function UsersDashboard() {
         onRowClick={u => { setSelectedUserId(u.id ?? null); setModalState('detail'); }}
         emptyMessage="No users found."
         actions={user => (
-          <RequirePermission permission="manage_users">
-            <button type="button" className="icon-btn edit" onClick={(e) => { e.stopPropagation(); handleOpenEdit(user); }} title="Edit User"><Edit2 size={16} /></button>
-            <button type="button" className="icon-btn delete" onClick={(e) => { e.stopPropagation(); handleDeleteUser(user); }} title="Revoke Access"><Trash2 size={16} /></button>
-          </RequirePermission>
+          <>
+            <RequirePermission permission="impersonate_users">
+              {user.email.toLowerCase() !== (realUser?.email || '').toLowerCase() && (
+                <button type="button" className="icon-btn view-as" onClick={(e) => { e.stopPropagation(); handleViewAs(user); }} title={`View the app as ${user.firstName || user.email} (test mode)`}><Eye size={16} /></button>
+              )}
+            </RequirePermission>
+            <RequirePermission permission="manage_users">
+              <button type="button" className="icon-btn edit" onClick={(e) => { e.stopPropagation(); handleOpenEdit(user); }} title="Edit User"><Edit2 size={16} /></button>
+              <button type="button" className="icon-btn delete" onClick={(e) => { e.stopPropagation(); handleDeleteUser(user); }} title="Revoke Access"><Trash2 size={16} /></button>
+            </RequirePermission>
+          </>
         )}
       />
 

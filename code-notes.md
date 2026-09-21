@@ -191,3 +191,10 @@ Verificación: `npm run check` 0/0, `npm run build` OK, screenshots dark de Work
 - Preview: `mockPhoto` genera SVG data URLs para simular fotos; el chat en preview queda vacío (Firestore dummy).
 
 Verificación: `npm run check` 0/0, `npm run build` OK, Chromium: catálogo con miniaturas y lightbox, PhotoInput en el form, fotos en Item Entrance, chat (layout + modal DM/Grupo), import modal.
+
+## Ronda 12 (V0040) — modo "view as" (impersonación de prueba para admins)
+
+- **AuthProvider**: estados `viewAsUser`/`viewAsRole` sobre el usuario real. El contexto expone `currentUser` = impersonado (o el real), `userRole` = rol efectivo, más `realUser`, `isImpersonating`, `startImpersonation(user, role)` y `stopImpersonation()`. Con eso TODOS los módulos se comportan como el usuario impersonado sin tocarlos (authorName, chat con su email, permisos, sidebar). `startImpersonation` valida contra el rol REAL (`impersonate_users`, hereda de `manage_security`) y resuelve Super Admin por email de owner. "Log Out" durante el modo prueba solo sale del modo (no cierra la sesión del admin).
+- **Auditoría honesta**: `AuditLogger.setImpersonator(nombreReal)` — mientras está activo, todo log queda como `"Usuario (test by Admin)"`, y el inicio/fin del modo se registra en Activity History. Así se puede probar el chat como otro usuario sin falsear el historial.
+- **UI**: `ImpersonationBanner` (barra naranja fija arriba del contenido, también en móvil) con usuario, rol y "Exit test mode"; ícono de ojo por fila en Account Users (oculto en la propia fila) con confirm explicando el modo; guard en App.tsx que vuelve al Dashboard si el módulo activo deja de estar permitido con el rol impersonado. El estado no sobrevive un refresh (a propósito: recargar devuelve al admin).
+- Preview simula start/stop sin Firestore para poder verificar el flujo.

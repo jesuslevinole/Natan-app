@@ -56,6 +56,7 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
   { module: 'Account Users', permissions: [
     { id: 'view_users', label: 'View users', legacy: ['manage_security'] },
     { id: 'manage_users', label: 'Invite, edit & revoke users', legacy: ['manage_security'] },
+    { id: 'impersonate_users', label: 'View the app as another user (test mode)', legacy: ['manage_security'] },
   ] },
   { module: 'Roles', permissions: [
     { id: 'view_roles', label: 'View roles', legacy: ['manage_security'] },

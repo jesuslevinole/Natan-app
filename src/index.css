@@ -251,3 +251,5 @@ fieldset.group-box { border: 1px solid var(--border-color); min-width: 0; }
 [data-theme="dark"] .filter-chip { background: rgba(59, 130, 246, 0.25); color: #bfdbfe; }
 [data-theme="dark"] .filter-chip button { background: rgba(191, 219, 254, 0.15); }
 [data-theme="dark"] .filter-chip button:hover { background: rgba(191, 219, 254, 0.3); }
+.icon-btn.view-as:hover { background-color: var(--warning-soft); color: #d97706; }
+[data-theme="dark"] .icon-btn.view-as:hover { color: #fbbf24; }

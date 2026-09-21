@@ -103,6 +103,12 @@ La versión de la app vive en `src/version.ts` (V####, +1 por entrega) con su ch
 de la barra superior muestra las novedades de cada versión (con aviso hasta abrirlas) y alertas en
 vivo de órdenes vencidas y stock bajo.
 
+### Modo de prueba (view as)
+
+Un administrador con el permiso "View the app as another user" puede ver la app exactamente como
+otro usuario (rol completo incluido) desde Account Users → ícono de ojo. Una barra naranja indica el
+modo y permite salir; todo lo hecho queda en Activity History como "Usuario (test by Admin)".
+
 ### Chat interno
 
 Módulo Chat: mensajes directos y grupos entre los usuarios, en tiempo real, con indicador de no

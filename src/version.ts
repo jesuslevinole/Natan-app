@@ -3,7 +3,7 @@
  * Al publicar una versión nueva: sumar 1 aquí y agregar su entrada al inicio de CHANGELOG.
  * La campana de notificaciones marca "nuevo" cuando el usuario aún no vio la versión actual.
  */
-export const APP_VERSION = 'V0039';
+export const APP_VERSION = 'V0040';
 export const APP_VERSION_DATE = '2026-09-21';
 
 export interface ChangelogEntry {
@@ -13,6 +13,14 @@ export interface ChangelogEntry {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: 'V0040',
+    date: '2026-09-21',
+    items: [
+      'Test mode for admins: view the app as any other user, with that user\'s full role — ideal for trying the Chat and checking permissions.',
+      'An orange bar shows who you are viewing as; one click exits. Everything done in test mode is logged with the admin\'s real name.',
+    ],
+  },
   {
     version: 'V0039',
     date: '2026-09-21',

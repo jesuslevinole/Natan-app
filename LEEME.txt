@@ -1,39 +1,29 @@
-Natan-app V0039 — archivos para copiar sobre el proyecto
+Natan-app V0040 — archivos para copiar sobre el proyecto
 =========================================================
-Archivos nuevos o modificados sobre tu GitHub actual (V0038). Sin dependencias
-nuevas (no hace falta npm install).
+13 archivos sobre tu GitHub actual (V0039). Sin dependencias nuevas y sin
+reglas nuevas de Firestore.
 
 Cómo aplicarlo
 --------------
 1. Extraé el zip DENTRO de la carpeta del proyecto, reemplazando los existentes.
 2. npm run build
-3. git add -A && git commit -m "V0039" && git push
+3. git add -A && git commit -m "V0040" && git push
 
-IMPORTANTE — Firebase Console → Firestore → Reglas, agregar (sin esto el chat
-no funciona):
-      match /chats/{chatId} {
-        allow read, write: if request.auth != null;
-        match /messages/{msgId} {
-          allow read, write: if request.auth != null;
-        }
-      }
+Qué trae V0040 — MODO DE PRUEBA (view as)
+-----------------------------------------
+1. En Account Users cada fila tiene ahora un ícono de OJO: al tocarlo, ves la
+   app EXACTAMENTE como ese usuario, con su rol completo (menú, permisos,
+   botones y el Chat con su nombre y sus conversaciones).
+2. Mientras estás en modo prueba, una BARRA NARANJA arriba te recuerda como
+   quién estás viendo y con qué rol, con el botón "Exit test mode" para volver
+   a ser vos. Recargar la página también te devuelve a tu sesión real.
+3. Todo lo que hagas en modo prueba queda en Activity History como
+   "Usuario (test by Jesus Molero)" — el historial nunca miente.
+4. Permiso nuevo en Manage Roles → Account Users: "View the app as another
+   user (test mode)". Por defecto lo heredan solo los roles de administración.
+5. "Log Out" durante el modo prueba solo sale del modo (no cierra tu sesión).
+La campana anuncia la V0040 con estas novedades.
 
-Qué trae V0039
---------------
-1. FOTO POR ARTÍCULO:
-   - En Catalogs → Item Names cada artículo tiene ahora un campo Photo: subís
-     una imagen (se redimensiona sola a 320px) y queda guardada con el registro.
-   - La miniatura se ve en la tabla del catálogo Y junto a cada producto dentro
-     de Item Entrance. Clic en la miniatura = se ve en grande.
-2. CHAT INTERNO (ítem "Chat" en el menú, visible para todos los usuarios):
-   - Mensajes directos entre dos usuarios o grupos con nombre y miembros.
-   - En tiempo real, con punto azul de no leídos, separadores por día y hora
-     en cada mensaje. En el teléfono funciona como WhatsApp (lista → chat).
-   - En Manage Roles hay un permiso nuevo "Chat" por si querés limitarlo.
-3. IMPORTACIÓN FÁCIL DE PRODUCTOS (Item Entrance → Import):
-   - Botón "Download import template (.xlsx)": plantilla con una hoja Products
-     (una fila por producto, con Qty, ejemplos incluidos) y una hoja
-     Instructions que explica cada columna.
-   - Las filas con el mismo PO # se agrupan en una sola entrada.
-   - Si el Item Name o el Vendor no existen en los catálogos, se agregan solos.
-La campana anuncia la V0039 con estas novedades.
+Para probar el chat: entrá como un usuario (ojo), mandate un mensaje a vos
+mismo (tu usuario real), salí del modo y vas a ver el mensaje sin leer en tu
+propio Chat.

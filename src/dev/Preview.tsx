@@ -1,6 +1,8 @@
 import { Suspense, lazy, useState } from 'react';
 import { DataContext } from '../context/dataContext';
 import { AuthContext } from '../context/authContext';
+import ImpersonationBanner from '../components/ImpersonationBanner';
+import type { User, Role } from '../types';
 import { mockAppData } from './mockData';
 import LoadingScreen from '../components/LoadingScreen';
 import { useTheme } from '../hooks/useTheme';
@@ -31,14 +33,22 @@ export default function Preview() {
   const [active, setActive] = useState<Key>(initial in modules ? initial : 'dashboard');
   const Module = modules[active];
   const { theme, toggle } = useTheme();
+  // "View as" simulado para la maqueta (sin Firestore).
+  const realUser: User = { uid: 'preview', username: 'Preview', firstName: 'Jesus', lastName: 'Molero', email: 'preview@example.com', roleId: 'admin_role' };
+  const [viewAs, setViewAs] = useState<{ user: User; role: Role | null } | null>(null);
   return (
     <AuthContext.Provider value={{
-      currentUser: { uid: 'preview', username: 'Preview', firstName: 'Jesus', email: 'preview@example.com', roleId: 'admin_role' },
-      userRole: { id: 'admin_role', name: 'Super Admin', permissions: [] },
+      currentUser: viewAs?.user ?? realUser,
+      userRole: viewAs ? viewAs.role : { id: 'admin_role', name: 'Super Admin', permissions: [] },
       isRestoring: false, login: () => undefined, logout: async () => undefined, hasPermission: () => true,
+      realUser,
+      isImpersonating: viewAs !== null,
+      startImpersonation: (user, role) => setViewAs({ user, role }),
+      stopImpersonation: () => setViewAs(null),
     }}>
       <DataContext.Provider value={mockAppData}>
         <div className="preview-shell">
+          <ImpersonationBanner />
           <nav className="preview-nav">
             {(Object.keys(modules) as Key[]).map(k => (
               <button key={k} type="button" className={`chip${k === active ? ' active' : ''}`} onClick={() => setActive(k)}>{k}</button>

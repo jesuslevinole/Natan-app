@@ -2,10 +2,19 @@ import { collection, addDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 import type { LogEntry } from '../types';
 
+/** Nombre del admin real mientras está "viendo como" otro usuario (modo prueba). */
+let impersonator: string | null = null;
+
 export const AuditLogger = {
+  /** Marca (o limpia) el modo "view as": los logs quedan como "Usuario (test by Admin)". */
+  setImpersonator(realName: string | null) {
+    impersonator = realName;
+  },
+
   async log(entry: Omit<LogEntry, 'timestamp'>) {
     try {
-      const logData: LogEntry = { ...entry, timestamp: new Date().toISOString() };
+      const user = impersonator && entry.user !== impersonator ? `${entry.user} (test by ${impersonator})` : entry.user;
+      const logData: LogEntry = { ...entry, user, timestamp: new Date().toISOString() };
       await addDoc(collection(db, 'system_logs'), logData);
     } catch (error) {
       console.error('CRITICAL: Audit log failed to write.', error);

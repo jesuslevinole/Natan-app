@@ -1,4 +1,4 @@
-import { useState, lazy, Suspense, type ReactNode } from 'react';
+import { useState, useEffect, lazy, Suspense, type ReactNode } from 'react';
 import {
   PackageSearch, Briefcase, LogOut, BookOpen, BarChart2, Menu,
   ShieldAlert, Users as UsersIcon, ShieldCheck, LayoutDashboard, Settings, Sun, Moon, Trash2, MessageCircle,
@@ -13,6 +13,7 @@ import { useCompany } from './hooks/useCompany';
 import { useTheme } from './hooks/useTheme';
 import BrandMark from './components/BrandMark';
 import NotificationsBell from './components/NotificationsBell';
+import ImpersonationBanner from './components/ImpersonationBanner';
 import { APP_VERSION } from './version';
 import './App.css';
 
@@ -68,6 +69,12 @@ function AppShell() {
   };
 
   const visibleItems = NAV_ITEMS.filter(item => item.permission === null || hasPermission(item.permission));
+
+  // Si el módulo activo deja de estar permitido (p. ej. al entrar en "view as"
+  // con un rol más limitado), volvemos al Dashboard.
+  useEffect(() => {
+    if (!visibleItems.some(i => i.id === activeModule)) setActiveModule('dashboard');
+  }, [visibleItems, activeModule]);
 
   const renderModule = () => {
     switch (activeModule) {
@@ -126,6 +133,7 @@ function AppShell() {
       </aside>
 
       <div className="main-wrapper">
+        <ImpersonationBanner />
         {/* Barra superior (desktop): hamburguesa en la zona blanca + campana de notificaciones */}
         <div className="topbar desktop-only-flex">
           <button type="button" className="hamburger-btn" onClick={() => setIsSidebarCollapsed(v => !v)} title={isSidebarCollapsed ? 'Expand menu' : 'Collapse menu'} aria-label="Toggle sidebar">
