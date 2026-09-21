@@ -18,6 +18,7 @@ const modules = {
   users: lazy(() => import('../modules/UsersDashboard')),
   roles: lazy(() => import('../modules/RolesDashboard')),
   settings: lazy(() => import('../modules/SettingsModule')),
+  chat: lazy(() => import('../modules/ChatModule')),
 };
 type Key = keyof typeof modules;
 

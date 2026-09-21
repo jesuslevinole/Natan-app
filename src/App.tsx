@@ -1,7 +1,7 @@
 import { useState, lazy, Suspense, type ReactNode } from 'react';
 import {
   PackageSearch, Briefcase, LogOut, BookOpen, BarChart2, Menu,
-  ShieldAlert, Users as UsersIcon, ShieldCheck, LayoutDashboard, Settings, Sun, Moon, Trash2,
+  ShieldAlert, Users as UsersIcon, ShieldCheck, LayoutDashboard, Settings, Sun, Moon, Trash2, MessageCircle,
 } from 'lucide-react';
 import AuthScreen from './components/AuthScreen';
 import LoadingScreen from './components/LoadingScreen';
@@ -27,8 +27,9 @@ const RolesDashboard = lazy(() => import('./modules/RolesDashboard'));
 const LogsDashboard = lazy(() => import('./modules/LogsDashboard'));
 const SettingsModule = lazy(() => import('./modules/SettingsModule'));
 const TrashModule = lazy(() => import('./modules/TrashModule'));
+const ChatModule = lazy(() => import('./modules/ChatModule'));
 
-export type ModuleId = 'dashboard' | 'workActivity' | 'itemEntrance' | 'catalogs' | 'reports' | 'users' | 'roles' | 'audit_logs' | 'settings' | 'trash';
+export type ModuleId = 'dashboard' | 'workActivity' | 'itemEntrance' | 'catalogs' | 'reports' | 'chat' | 'users' | 'roles' | 'audit_logs' | 'settings' | 'trash';
 
 interface NavItem {
   id: ModuleId;
@@ -45,6 +46,7 @@ const NAV_ITEMS: NavItem[] = [
   { id: 'itemEntrance', label: 'Item Entrance', icon: <PackageSearch size={20} />, permission: 'view_item_entrance' },
   { id: 'catalogs', label: 'Catalogs', icon: <BookOpen size={20} />, permission: 'view_catalogs' },
   { id: 'reports', label: 'Reports', icon: <BarChart2 size={20} />, permission: 'view_reports' },
+  { id: 'chat', label: 'Chat', icon: <MessageCircle size={20} />, permission: 'view_chat' },
   { id: 'users', label: 'Account Users', icon: <UsersIcon size={20} />, permission: 'view_users', section: 'admin' },
   { id: 'roles', label: 'Manage Roles', icon: <ShieldCheck size={20} />, permission: 'view_roles', section: 'admin' },
   { id: 'audit_logs', label: 'Activity History', icon: <ShieldAlert size={20} />, permission: 'view_logs', section: 'admin' },
@@ -79,6 +81,7 @@ function AppShell() {
       case 'audit_logs': return <LogsDashboard />;
       case 'settings': return <SettingsModule />;
       case 'trash': return <TrashModule />;
+      case 'chat': return <ChatModule />;
     }
   };
 

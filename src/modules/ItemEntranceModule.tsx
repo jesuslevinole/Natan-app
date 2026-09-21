@@ -15,6 +15,7 @@ import ImportInventoryModal from '../components/ImportInventoryModal';
 import DeleteReasonModal from '../components/DeleteReasonModal';
 import { moveToTrash } from '../utils/trash';
 import NotesCell from '../components/NotesCell';
+import PhotoCell from '../components/PhotoCell';
 import DataTable, { type DataColumn } from '../components/DataTable';
 import { useFormConfig, useFieldRoles } from '../hooks/useAppHooks';
 import { useAppData } from '../hooks/useAppData';
@@ -82,6 +83,13 @@ export default function ItemEntranceModule() {
     const requiredRole = fieldRoles[fieldName];
     return !requiredRole || currentUser?.roleId === requiredRole;
   }, [isProcessing, currentUser, fieldRoles]);
+
+  // Foto del catálogo Item Names por nombre (se muestra junto a cada producto).
+  const photoByItemName = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const i of itemNames) if (i.photo) map.set((i.item_name || '').toLowerCase(), String(i.photo));
+    return map;
+  }, [itemNames]);
 
   const propertyOptions = useMemo(
     () => [...new Set([...destinations.map(d => d.property || ''), ...entrances.map(e => e.property || '')].filter(Boolean))].sort(),
@@ -269,6 +277,8 @@ export default function ItemEntranceModule() {
   ], [usage]);
 
   const detailColumns = useMemo<DataColumn<EntranceDetail>[]>(() => [
+    { id: 'photo', header: 'Photo', value: d => (photoByItemName.get((d.itemName || '').toLowerCase()) ? 'yes' : ''), align: 'center', sortable: false, filterable: false, width: '70px',
+      render: d => <PhotoCell src={photoByItemName.get((d.itemName || '').toLowerCase())} title={d.itemName} size={36} /> },
     { id: 'itemName', header: 'Item Name', value: d => d.itemName, render: d => <span className="cell-strong">{d.itemName}</span> },
     { id: 'category', header: 'Category', value: d => d.category || '', render: d => d.category ? <span className="badge neutral">{d.category}</span> : <span className="dt-dash">—</span> },
     { id: 'modelPart', header: 'Model / Part #', value: d => d.modelPart },
@@ -279,11 +289,13 @@ export default function ItemEntranceModule() {
     { id: 'warrantyExp', header: 'Warranty', value: d => d.warrantyExp || '', type: 'date', nowrap: true, defaultHidden: true, render: d => d.warrantyExp ? formatDateDisplay(d.warrantyExp) : '—' },
     { id: 'comments', header: 'Notes', value: d => d.comments || '', align: 'center', sortable: false, render: d => <NotesCell text={d.comments} title={`Notes — ${d.itemName}`} subtitle={d.modelPart} level={3} /> },
     { id: 'stock', header: 'Stock', value: d => getDetailStock(d, usage), type: 'number', align: 'center', render: d => <StockLevel stock={getDetailStock(d, usage)} total={d.itemsArrived} /> },
-  ], [usage]);
+  ], [usage, photoByItemName]);
 
   const lockHint = (field: string) => !isFieldEditable(field) && <span className="lock-hint"><Lock size={12} /> Locked</span>;
 
   const formDetailColumns = useMemo<DataColumn<EntranceDetail>[]>(() => [
+    { id: 'photo', header: 'Photo', value: d => (photoByItemName.get((d.itemName || '').toLowerCase()) ? 'yes' : ''), align: 'center', sortable: false, filterable: false, width: '70px',
+      render: d => <PhotoCell src={photoByItemName.get((d.itemName || '').toLowerCase())} title={d.itemName} size={36} /> },
     { id: 'itemName', header: 'Item Name', value: d => d.itemName, render: d => <span className="cell-strong">{d.itemName}</span> },
     { id: 'category', header: 'Category', value: d => d.category || '', render: d => d.category ? <span className="badge neutral">{d.category}</span> : <span className="dt-dash">—</span> },
     { id: 'modelPart', header: 'Model / Part #', value: d => d.modelPart },
@@ -295,7 +307,7 @@ export default function ItemEntranceModule() {
     { id: 'comments', header: 'Notes', value: d => d.comments || '', align: 'center', sortable: false, render: d => <NotesCell text={d.comments} title={`Notes — ${d.itemName}`} subtitle={d.modelPart} level={3} /> },
     { id: 'stock', header: 'Stock', value: d => (editingId ? getDetailStock(d, usage) : d.itemsArrived), type: 'number', align: 'center',
       render: d => <StockLevel stock={editingId ? getDetailStock(d, usage) : d.itemsArrived} total={d.itemsArrived} /> },
-  ], [editingId, usage]);
+  ], [editingId, usage, photoByItemName]);
 
   type HistoryRow = (typeof itemHistory)[number];
   const historyColumns = useMemo<DataColumn<HistoryRow>[]>(() => [

@@ -1,0 +1,11 @@
+.photo-cell { display: inline-flex; padding: 0; border: 1px solid var(--border-color); border-radius: 8px; overflow: hidden; background: var(--card-bg); cursor: zoom-in; transition: transform 0.15s, box-shadow 0.15s; }
+.photo-cell:hover { transform: scale(1.06); box-shadow: 0 4px 12px rgba(15, 23, 42, 0.18); }
+.photo-cell img { display: block; object-fit: cover; }
+.photo-cell.empty { width: 42px; height: 42px; align-items: center; justify-content: center; color: var(--text-faint); background: var(--surface-2); cursor: default; border-style: dashed; }
+
+.photo-lightbox { position: fixed; inset: 0; z-index: 1200; background: var(--overlay); display: flex; align-items: center; justify-content: center; padding: 24px; }
+.photo-lightbox figure { position: relative; margin: 0; background: var(--card-bg); border-radius: 14px; padding: 14px; max-width: min(90vw, 640px); max-height: 85vh; display: flex; flex-direction: column; gap: 8px; }
+.photo-lightbox img { max-width: 100%; max-height: calc(85vh - 70px); object-fit: contain; border-radius: 8px; }
+.photo-lightbox figcaption { text-align: center; font-weight: 600; color: var(--text-strong); font-size: 0.9rem; }
+.photo-lightbox-close { position: absolute; top: 10px; right: 10px; display: flex; padding: 6px; border: none; border-radius: 8px; background: var(--surface-3); color: var(--text-body); cursor: pointer; }
+.photo-lightbox-close:hover { background: var(--danger-soft); color: var(--danger-color); }

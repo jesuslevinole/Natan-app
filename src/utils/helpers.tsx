@@ -32,6 +32,7 @@ export const catalogsConfig: Record<string, CatalogSchema> = {
     fields: [
       { name: 'item_name', label: 'Item Name', type: 'text', required: true },
       { name: 'category', label: 'Category / Brand', type: 'text' },
+      { name: 'photo', label: 'Photo', type: 'photo' },
     ],
   },
 };

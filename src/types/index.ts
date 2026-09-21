@@ -135,7 +135,7 @@ export type ItemEntranceFormData = Omit<ItemEntranceRecord, 'id' | 'seq' | 'visu
 // =========================================
 // Catálogos
 // =========================================
-export type FieldType = 'text' | 'number' | 'select';
+export type FieldType = 'text' | 'number' | 'select' | 'photo';
 
 export interface CatalogField {
   name: string;
@@ -206,4 +206,29 @@ export interface TrashRecord {
   deletedBy: string;
   deletedAt: string;
   reason: string;
+}
+
+/** Conversación del chat interno (colección `chats` + subcolección `messages`). */
+export interface ChatConversation {
+  id: string;
+  type: 'dm' | 'group';
+  /** Nombre del grupo (los DM muestran el nombre del otro miembro). */
+  name?: string;
+  /** Emails (en minúsculas) de los miembros. */
+  members: string[];
+  /** email → nombre para mostrar, congelado al crear/editar el chat. */
+  memberNames: Record<string, string>;
+  createdBy: string;
+  createdAt: string;
+  lastMessage?: { text: string; senderEmail: string; senderName: string; at: string };
+  /** email (con puntos reemplazados por ',') → ISO de última lectura. */
+  lastReadBy?: Record<string, string>;
+}
+
+export interface ChatMessage {
+  id: string;
+  text: string;
+  senderEmail: string;
+  senderName: string;
+  at: string; // ISO
 }

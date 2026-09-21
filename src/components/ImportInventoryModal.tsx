@@ -19,8 +19,22 @@ interface Props {
 type Step = 'pick' | 'preview' | 'done';
 
 const TEMPLATE_ROWS = [
-  { Category: 'PLUMBING', 'Purch Date': '03/31/26', 'Model #': 'KITCHEN FAUCET', 'PO #': 'PO 3820', 'Serial #': '', 'War Exp': '', Vendor: 'HD SUPPLY', Mfr: '', Invoice: '9247518099', Price: 103.07, Qty: 2, Comments: 'KITCHEN FAUCET W/ SPRY' },
-  { Category: 'Boiler/HW Heater', 'Purch Date': '04/15/26', 'Model #': 'GCB-40', 'PO #': '', 'Serial #': '', 'War Exp': '04/14/32', Vendor: 'HD SUPPLY', Mfr: 'AO SMITH', Invoice: '9248074679', Price: 763.44, Qty: 1, Comments: 'HWH' },
+  { 'PO #': 'PO 4001', 'Purch Date': '09/15/26', 'Item Name': 'KITCHEN FAUCET', 'Model #': 'MOEN-87233', 'Serial #': '', Qty: 2, Price: 103.07, Category: 'PLUMBING', Vendor: 'HD SUPPLY', Mfr: 'MOEN', Invoice: '9247518099', 'War Exp': '', Comments: 'Kitchen faucet w/ spray' },
+  { 'PO #': 'PO 4001', 'Purch Date': '09/15/26', 'Item Name': 'BATH FAUCET', 'Model #': 'MOEN-84501', 'Serial #': '', Qty: 3, Price: 77.06, Category: 'PLUMBING', Vendor: 'HD SUPPLY', Mfr: 'MOEN', Invoice: '9247518099', 'War Exp': '', Comments: '' },
+  { 'PO #': 'PO 4002', 'Purch Date': '09/18/26', 'Item Name': 'WATER HEATER', 'Model #': 'GCB-40', 'Serial #': '2528144434171', Qty: 1, Price: 763.44, Category: 'Boiler/HW Heater', Vendor: 'HD SUPPLY', Mfr: 'AO SMITH', Invoice: '9248074679', 'War Exp': '04/14/32', Comments: 'For building 3' },
+];
+
+const TEMPLATE_INSTRUCTIONS = [
+  { Column: 'PO #', Required: 'Recommended', Notes: 'Rows with the same PO # become one purchase order. Leave empty to group by Invoice.' },
+  { Column: 'Purch Date', Required: 'Yes', Notes: 'Purchase date, MM/DD/YY or MM/DD/YYYY.' },
+  { Column: 'Item Name', Required: 'Yes', Notes: 'Product name. If it does not exist in the Item Names catalog it is added automatically.' },
+  { Column: 'Model #', Required: 'No', Notes: 'Model or part number.' },
+  { Column: 'Serial #', Required: 'No', Notes: 'Serial number of the unit, if any.' },
+  { Column: 'Qty', Required: 'No', Notes: 'Units of this product (default 1).' },
+  { Column: 'Price', Required: 'No', Notes: 'Unit price in USD. Used for the inventory value.' },
+  { Column: 'Category', Required: 'No', Notes: 'e.g. PLUMBING, AC/HVAC, Boiler/HW Heater.' },
+  { Column: 'Vendor', Required: 'Recommended', Notes: 'Supply company. New vendors are added to the catalog automatically.' },
+  { Column: 'Mfr / Invoice / War Exp / Comments', Required: 'No', Notes: 'Manufacturer, invoice number, warranty expiration and notes.' },
 ];
 
 /**
@@ -78,7 +92,7 @@ export default function ImportInventoryModal({ onClose }: Props) {
   const duplicates = useMemo(() => groups.filter(isDuplicate), [groups, isDuplicate]);
 
   const newCompanies = useMemo(() => [...new Set(toImport.map(g => g.supplyCompany).filter(c => c && !existingCompanies.has(c.toLowerCase())))], [toImport, existingCompanies]);
-  const newItems = useMemo(() => [...new Set(toImport.flatMap(g => g.rows.map(r => r.model)).filter(m => m && !existingItems.has(m.toLowerCase())))], [toImport, existingItems]);
+  const newItems = useMemo(() => [...new Set(toImport.flatMap(g => g.rows.map(r => r.item)).filter(m => m && !existingItems.has(m.toLowerCase())))], [toImport, existingItems]);
   const totals = useMemo(() => toImport.reduce((acc, g) => ({ units: acc.units + g.units, value: acc.value + g.value }), { units: 0, value: 0 }), [toImport]);
 
   const toggleExcluded = (key: string) => {
@@ -117,8 +131,8 @@ export default function ImportInventoryModal({ onClose }: Props) {
         chunk.forEach((g, idx) => {
           const details = g.rows.map((r, j) => ({
             detailId: `det_imp_${firstSeq + i + idx}_${j}`,
-            itemName: r.model,
-            modelPart: r.model,
+            itemName: r.item || r.model,
+            modelPart: r.model || r.item,
             serial: r.serial,
             orderDate: r.date,
             itemsArrived: r.qty,
@@ -167,14 +181,17 @@ export default function ImportInventoryModal({ onClose }: Props) {
     { id: 'po', header: 'PO #', value: g => g.po, nowrap: true, render: g => g.po ? <span className="cell-strong text-primary cell-mono">{g.po}</span> : <span className="badge warning">No PO</span> },
     { id: 'date', header: 'Date', value: g => g.date, type: 'date', nowrap: true, render: g => formatDateDisplay(g.date) },
     { id: 'supplyCompany', header: 'Vendor', value: g => g.supplyCompany },
-    { id: 'items', header: 'Products', value: g => g.rows.map(r => `${r.qty}× ${r.model}`).join(', '), render: g => <span className="cell-clamp" title={g.rows.map(r => `${r.qty}× ${r.model}`).join('\n')}>{g.rows.map(r => `${r.qty}× ${r.model}`).join(', ')}</span> },
+    { id: 'items', header: 'Products', value: g => g.rows.map(r => `${r.qty}× ${r.item || r.model}`).join(', '), render: g => <span className="cell-clamp" title={g.rows.map(r => `${r.qty}× ${r.item || r.model}`).join('\n')}>{g.rows.map(r => `${r.qty}× ${r.item || r.model}`).join(', ')}</span> },
     { id: 'units', header: 'Units', value: g => g.units, type: 'number', align: 'center' },
     { id: 'value', header: 'Value', value: g => g.value, type: 'number', align: 'right', render: g => formatCurrency(g.value) },
     { id: 'status', header: 'Status', value: g => (isDuplicate(g) ? 'exists' : excluded.has(g.key) ? 'skipped' : 'new'), align: 'center',
       render: g => isDuplicate(g) ? <span className="badge neutral">Already exists</span> : excluded.has(g.key) ? <span className="badge warning">Skipped</span> : <span className="badge success">New</span> },
   ];
 
-  const downloadTemplate = () => downloadWorkbook('inventory-import-template.xlsx', [{ name: 'Inventory', rows: TEMPLATE_ROWS as unknown as Record<string, unknown>[] }]);
+  const downloadTemplate = () => downloadWorkbook('inventory-import-template.xlsx', [
+    { name: 'Products', rows: TEMPLATE_ROWS as unknown as Record<string, unknown>[] },
+    { name: 'Instructions', rows: TEMPLATE_INSTRUCTIONS as unknown as Record<string, unknown>[] },
+  ]);
 
   return (
     <Modal
@@ -201,10 +218,10 @@ export default function ImportInventoryModal({ onClose }: Props) {
           <label className="import-dropzone">
             <Upload size={28} />
             <strong>{isParsing ? 'Reading file...' : 'Click to choose an Excel or CSV file'}</strong>
-            <span>Supported: the client&apos;s &quot;Inventory Report&quot; export (Item, Purch Date, Model #, Serial #, Vendor, Invoice, Price, Comments) or the template below. Each row is one unit; rows are grouped by PO #.</span>
+            <span>Easiest way: download the template below, fill one row per product (with Qty) and upload it here. Rows with the same PO # become one purchase order, and item names or vendors that don&apos;t exist yet are added to the catalogs automatically. The client&apos;s &quot;Inventory Report&quot; export also works as-is.</span>
             <input ref={fileInputRef} type="file" accept=".xlsx,.xls,.csv" onChange={e => handleFile(e.target.files?.[0])} disabled={isParsing} />
           </label>
-          <button type="button" className="btn-link flex-row mt-3" onClick={downloadTemplate}><Download size={14} /> Download template (.xlsx)</button>
+          <button type="button" className="action btn-secondary mt-3" onClick={downloadTemplate}><Download size={15} /> Download import template (.xlsx)</button>
         </div>
       )}
 

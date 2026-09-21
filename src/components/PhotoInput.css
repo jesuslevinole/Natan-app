@@ -1,0 +1,8 @@
+.photo-input { display: flex; gap: 14px; align-items: flex-start; }
+.photo-input-preview { width: 84px; height: 84px; flex-shrink: 0; border-radius: 12px; border: 1px solid var(--border-color); background: var(--card-bg); display: flex; align-items: center; justify-content: center; overflow: hidden; }
+.photo-input-preview.empty { border-style: dashed; color: var(--text-faint); background: var(--surface-2); }
+.photo-input-preview img { width: 100%; height: 100%; object-fit: cover; }
+.photo-input-actions { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+.photo-input-upload { cursor: pointer; }
+.photo-input-upload input { display: none; }
+.photo-input-upload.disabled { opacity: 0.6; pointer-events: none; }

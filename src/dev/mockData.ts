@@ -13,6 +13,10 @@ const iso = (d: Date) => d.toISOString().slice(0, 10);
 const daysAgo = (n: number) => { const d = new Date(); d.setDate(d.getDate() - n); return iso(d); };
 
 const streets = ['Overview Ct.', 'Staysail Ct.', 'Galleon Ct.', 'Mystyc Ct.', 'Silver Ct.', 'Leeward Ct.', 'Bove Ln.'];
+/** Mini imagen SVG como data URL para simular fotos de artículos en la vista previa. */
+const mockPhoto = (color: string, letter: string): string =>
+  `data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="160" height="160"><rect width="160" height="160" rx="18" fill="${color}"/><text x="80" y="104" font-family="Arial" font-size="72" font-weight="bold" fill="#fff" text-anchor="middle">${letter}</text></svg>`)}`;
+
 export const mockDestinations: Destination[] = Array.from({ length: 40 }, (_, i) => {
   const street = streets[i % streets.length];
   const unit = 2 + i * 3;
@@ -85,6 +89,9 @@ export const mockAppData: AppData = {
   users: mockUsers,
   destinations: mockDestinations,
   supplyCompanies: suppliers.map((s, i) => ({ id: `s${i}`, seq: i + 1, visualSeq: i + 1, company: s })),
-  itemNames: items.map(([n], i) => ({ id: `i${i}`, seq: i + 1, visualSeq: i + 1, item_name: n })),
+  itemNames: items.map(([n, , cat], i) => ({
+    id: `i${i}`, seq: i + 1, visualSeq: i + 1, item_name: n, category: cat,
+    photo: i % 2 === 0 ? mockPhoto(['#2563eb', '#16a34a', '#ea580c', '#7c3aed'][i % 4], n[0]) : '',
+  })),
   isLoading: false,
 };

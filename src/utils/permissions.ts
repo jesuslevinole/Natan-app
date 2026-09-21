@@ -46,6 +46,9 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
     { id: 'import_catalogs', label: 'Import addresses from Excel', legacy: ['manage_catalogs'] },
     { id: 'export_catalogs', label: 'Export catalogs to Excel', legacy: ['view_catalogs'] },
   ] },
+  { module: 'Chat', permissions: [
+    { id: 'view_chat', label: 'Use the internal chat (DMs & groups)', legacy: ['*'] },
+  ] },
   { module: 'Reports', permissions: [
     { id: 'view_reports', label: 'View reports' },
     { id: 'export_reports', label: 'Export reports (Excel / PDF)', legacy: ['view_reports'] },

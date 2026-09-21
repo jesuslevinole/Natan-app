@@ -1,23 +1,39 @@
-Natan-app V0038 — archivos para copiar sobre el proyecto
+Natan-app V0039 — archivos para copiar sobre el proyecto
 =========================================================
-10 archivos sobre tu GitHub actual (que está en V0036). Este zip incluye TAMBIÉN
-los arreglos de la V0037 (scrollbars y modo oscuro) por si todavía no la subiste:
-si ya la aplicaste, no pasa nada — son los mismos archivos y se pisan igual.
-Sin dependencias nuevas y sin reglas nuevas de Firestore.
+Archivos nuevos o modificados sobre tu GitHub actual (V0038). Sin dependencias
+nuevas (no hace falta npm install).
 
 Cómo aplicarlo
 --------------
 1. Extraé el zip DENTRO de la carpeta del proyecto, reemplazando los existentes.
 2. npm run build
-3. git add -A && git commit -m "V0038" && git push
+3. git add -A && git commit -m "V0039" && git push
 
-Qué trae V0038
+IMPORTANTE — Firebase Console → Firestore → Reglas, agregar (sin esto el chat
+no funciona):
+      match /chats/{chatId} {
+        allow read, write: if request.auth != null;
+        match /messages/{msgId} {
+          allow read, write: if request.auth != null;
+        }
+      }
+
+Qué trae V0039
 --------------
-1. FINISHED BY AUTOMÁTICO: al marcar Work Finish = YES ya no se puede elegir
-   quién finalizó. El campo quedó de solo lectura "(recorded automatically)" y
-   muestra al usuario logueado: quien marca YES es quien queda registrado, con
-   la fecha. Si la orden ya estaba finalizada y otro la edita, se conserva el
-   sello original; si se reabre (NO), se limpia y se vuelve a registrar al
-   finalizarla de nuevo.
-(Si venís de V0036, esto incluye además la V0037: scrollbars con la paleta en
-ambos temas y el modo oscuro con el menú lateral y los badges legibles.)
+1. FOTO POR ARTÍCULO:
+   - En Catalogs → Item Names cada artículo tiene ahora un campo Photo: subís
+     una imagen (se redimensiona sola a 320px) y queda guardada con el registro.
+   - La miniatura se ve en la tabla del catálogo Y junto a cada producto dentro
+     de Item Entrance. Clic en la miniatura = se ve en grande.
+2. CHAT INTERNO (ítem "Chat" en el menú, visible para todos los usuarios):
+   - Mensajes directos entre dos usuarios o grupos con nombre y miembros.
+   - En tiempo real, con punto azul de no leídos, separadores por día y hora
+     en cada mensaje. En el teléfono funciona como WhatsApp (lista → chat).
+   - En Manage Roles hay un permiso nuevo "Chat" por si querés limitarlo.
+3. IMPORTACIÓN FÁCIL DE PRODUCTOS (Item Entrance → Import):
+   - Botón "Download import template (.xlsx)": plantilla con una hoja Products
+     (una fila por producto, con Qty, ejemplos incluidos) y una hoja
+     Instructions que explica cada columna.
+   - Las filas con el mismo PO # se agrupan en una sola entrada.
+   - Si el Item Name o el Vendor no existen en los catálogos, se agregan solos.
+La campana anuncia la V0039 con estas novedades.

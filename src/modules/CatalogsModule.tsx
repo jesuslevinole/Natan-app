@@ -1,4 +1,4 @@
-import { useState, useMemo, type FormEvent } from 'react';
+import { useState, useMemo, useCallback, type FormEvent } from 'react';
 import { collection, addDoc, updateDoc, doc } from 'firebase/firestore';
 import { db } from '../firebase';
 import { BookOpen, ArrowLeft, Plus, Edit2, Trash2, FileSpreadsheet, Download } from 'lucide-react';
@@ -9,6 +9,8 @@ import SeqBadge from '../components/SeqBadge';
 import DataTable, { type DataColumn } from '../components/DataTable';
 import ImportDestinationsModal from '../components/ImportDestinationsModal';
 import DeleteReasonModal from '../components/DeleteReasonModal';
+import PhotoCell from '../components/PhotoCell';
+import PhotoInput from '../components/PhotoInput';
 import { moveToTrash } from '../utils/trash';
 import { catalogsConfig, matchesSearch } from '../utils/helpers';
 import { nextSequence } from '../utils/firestore';
@@ -53,16 +55,23 @@ export default function CatalogsModule() {
 
   const visibleFields = useMemo(() => selectedCatalog?.fields.filter(f => !f.hiddenInTable) ?? [], [selectedCatalog]);
 
+  const recordLabel = useCallback((record: CatalogRecord) => (selectedCatalog ? String(record[selectedCatalog.fields[0].name] ?? record.id) : record.id), [selectedCatalog]);
+
   const catalogColumns = useMemo<DataColumn<CatalogRecord>[]>(() => [
     { id: 'seq', header: '#', value: r => r.visualSeq ?? r.seq ?? null, type: 'number', align: 'center', width: '70px', hideable: false, render: r => <SeqBadge seq={r.visualSeq} /> },
-    ...visibleFields.map((f, idx): DataColumn<CatalogRecord> => ({
-      id: f.name,
-      header: f.label,
-      value: r => (r[f.name] as string | number | undefined) ?? '',
-      type: f.type === 'number' ? 'number' : 'text',
-      render: idx === 0 ? (r => <span className="cell-strong">{String(r[f.name] ?? '—')}</span>) : undefined,
-    })),
-  ], [visibleFields]);
+    ...visibleFields.map((f, idx): DataColumn<CatalogRecord> => (f.type === 'photo'
+      ? {
+          id: f.name, header: f.label, value: r => (r[f.name] ? 'yes' : ''), align: 'center', sortable: false, width: '80px',
+          render: r => <PhotoCell src={r[f.name] as string | undefined} title={recordLabel(r)} />,
+        }
+      : {
+          id: f.name,
+          header: f.label,
+          value: r => (r[f.name] as string | number | undefined) ?? '',
+          type: f.type === 'number' ? 'number' : 'text',
+          render: idx === 0 ? (r => <span className="cell-strong">{String(r[f.name] ?? '—')}</span>) : undefined,
+        })),
+  ], [visibleFields, recordLabel]);
 
   const filteredRecords = useMemo(() => records.filter(reg => {
     if (selectedCatalog?.id === 'destinations' && propertyFilter && reg.property !== propertyFilter) return false;
@@ -91,7 +100,7 @@ export default function CatalogsModule() {
       selectedCatalog.fields.forEach(f => {
         const raw = formData[f.name];
         if (raw === undefined || raw === '') return;
-        payload[f.name] = f.type === 'number' ? Number(raw) : String(raw).trim();
+        payload[f.name] = f.type === 'number' ? Number(raw) : f.type === 'photo' ? String(raw) : String(raw).trim();
       });
       if (currentRecord) {
         await updateDoc(doc(db, colName, currentRecord.id), payload);
@@ -111,7 +120,6 @@ export default function CatalogsModule() {
   };
 
   const [deleting, setDeleting] = useState<CatalogRecord | null>(null);
-  const recordLabel = (record: CatalogRecord) => (selectedCatalog ? String(record[selectedCatalog.fields[0].name] ?? record.id) : record.id);
   const handleDelete = (record: CatalogRecord) => {
     if (!selectedCatalog) return;
     // Una dirección con órdenes asociadas no se borra: quedarían órdenes apuntando a nada.
@@ -233,7 +241,9 @@ export default function CatalogsModule() {
                 <label htmlFor={`cat-${field.name}`}>
                   {field.label} {field.required && <span className="required-mark">*</span>}
                 </label>
-                {field.name === 'property' && properties.length > 0 ? (
+                {field.type === 'photo' ? (
+                  <PhotoInput value={String(formData[field.name] ?? '')} onChange={v => setFormData({ ...formData, [field.name]: v })} disabled={isProcessing} />
+                ) : field.name === 'property' && properties.length > 0 ? (
                   <>
                     <input id={`cat-${field.name}`} type="text" list="property-options" value={formData[field.name] ?? ''} onChange={e => setFormData({ ...formData, [field.name]: e.target.value })} disabled={isProcessing} />
                     <datalist id="property-options">{properties.map(p => <option key={p} value={p} />)}</datalist>

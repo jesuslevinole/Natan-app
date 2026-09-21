@@ -3,8 +3,8 @@
  * Al publicar una versión nueva: sumar 1 aquí y agregar su entrada al inicio de CHANGELOG.
  * La campana de notificaciones marca "nuevo" cuando el usuario aún no vio la versión actual.
  */
-export const APP_VERSION = 'V0038';
-export const APP_VERSION_DATE = '2026-09-11';
+export const APP_VERSION = 'V0039';
+export const APP_VERSION_DATE = '2026-09-21';
 
 export interface ChangelogEntry {
   version: string;
@@ -13,6 +13,15 @@ export interface ChangelogEntry {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: 'V0039',
+    date: '2026-09-21',
+    items: [
+      'Item photos: upload a photo for each item in the Item Names catalog; thumbnails show in the catalog and next to every product in Item Entrance (click to zoom).',
+      'New Chat module: direct messages and group chats between the users of the app, in real time, with unread indicators.',
+      'Easier product import: the Import dialog in Item Entrance now offers a simple template (with an Instructions sheet); item names and vendors that do not exist are added to the catalogs automatically.',
+    ],
+  },
   {
     version: 'V0038',
     date: '2026-09-11',

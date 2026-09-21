@@ -103,6 +103,22 @@ La versión de la app vive en `src/version.ts` (V####, +1 por entrega) con su ch
 de la barra superior muestra las novedades de cada versión (con aviso hasta abrirlas) y alertas en
 vivo de órdenes vencidas y stock bajo.
 
+### Chat interno
+
+Módulo Chat: mensajes directos y grupos entre los usuarios, en tiempo real, con indicador de no
+leídos. **Regla de Firestore necesaria**:
+```
+match /chats/{chatId} {
+  allow read, write: if request.auth != null;
+  match /messages/{msgId} { allow read, write: if request.auth != null; }
+}
+```
+
+### Fotos de artículos
+
+Cada registro de Item Names admite una foto (se redimensiona a 320px y se guarda como data URL en el
+documento). Se muestra como miniatura en el catálogo y junto a cada producto en Item Entrance.
+
 ### Papelera de reciclaje
 
 Nada se borra directo: al eliminar cualquier registro se pide el **motivo** y el documento completo va

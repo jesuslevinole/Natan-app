@@ -117,6 +117,8 @@ export const downloadWorkbook = (filename: string, sheets: Array<{ name: string;
 // Inventario (reporte "Inventory Report" del cliente u hoja propia)
 // =========================================
 export interface ImportedInventoryRow {
+  /** Nombre del artículo (catálogo Item Names). Si la hoja no lo trae, se usa el modelo. */
+  item: string;
   category: string;
   date: string;          // YYYY-MM-DD
   model: string;
@@ -194,7 +196,8 @@ export const parseInventoryFile = async (file: File): Promise<ImportedInventoryR
     const col = (...names: string[]) => header.findIndex(h => names.includes(h));
     const iCat = col('item', 'category', 'categoria', 'categoría');
     const iDate = col('purch date', 'date', 'purchase date', 'fecha');
-    const iModel = col('model #', 'model', 'modelo', 'item name');
+    const iItemName = col('item name', 'product', 'product name', 'articulo', 'artículo');
+    const iModel = col('model #', 'model', 'modelo', 'part #', 'part');
     const iPO = col('po #', 'po', 'purchase order');
     const iSerial = col('serial #', 'serial');
     const iWar = col('war exp', 'warranty', 'warranty exp');
@@ -204,13 +207,14 @@ export const parseInventoryFile = async (file: File): Promise<ImportedInventoryR
     const iPrice = col('price', 'unit price', 'precio');
     const iQty = col('qty', 'quantity', 'cantidad', 'units');
     const iCom = col('comments', 'comment', 'notes', 'comentarios');
-    if (iModel < 0 && iCat < 0) continue;
+    if (iModel < 0 && iItemName < 0 && iCat < 0) continue;
 
     for (const row of grid.slice(headerIdx + 1)) {
       const get = (i: number): Cell => (i >= 0 ? row[i] : null);
       const model = isText(get(iModel)) ? collapseSpaces(get(iModel) as string) : '';
+      const item = isText(get(iItemName)) ? collapseSpaces(get(iItemName) as string) : '';
       const category = isText(get(iCat)) ? collapseSpaces(get(iCat) as string) : '';
-      if (!model && !category) continue;
+      if (!model && !item && !category) continue;
       if (/^total/i.test(category) || /^page \d/i.test(category)) continue;
       const serialRaw = get(iSerial);
       let po = normalizePO(get(iPO));
@@ -222,6 +226,7 @@ export const parseInventoryFile = async (file: File): Promise<ImportedInventoryR
       const invoice = isText(invoiceRaw) ? collapseSpaces(invoiceRaw).replace(/^\*/, '') : isNum(invoiceRaw) ? String(invoiceRaw) : '';
       const qtyRaw = toNumber(get(iQty));
       out.push({
+        item: item || model,
         category,
         date: toIsoDate(get(iDate)),
         model,
@@ -252,7 +257,7 @@ export const groupInventoryRows = (rows: ImportedInventoryRow[]): ImportedPO[] =
     }
     if (r.date && (!g.date || r.date < g.date)) g.date = r.date;
     if (!g.supplyCompany && r.vendor) g.supplyCompany = r.vendor;
-    const same = g.rows.find(x => x.model === r.model && x.price === r.price && x.invoice === r.invoice && x.serial === r.serial && x.comments === r.comments && x.date === r.date);
+    const same = g.rows.find(x => x.item === r.item && x.model === r.model && x.price === r.price && x.invoice === r.invoice && x.serial === r.serial && x.comments === r.comments && x.date === r.date);
     if (same) same.qty += r.qty; else g.rows.push({ ...r });
     g.units += r.qty;
     g.value += (r.price ?? 0) * r.qty;
