@@ -1,29 +1,33 @@
-Natan-app V0040 — archivos para copiar sobre el proyecto
+Natan-app V0041 — archivos para copiar sobre el proyecto
 =========================================================
-13 archivos sobre tu GitHub actual (V0039). Sin dependencias nuevas y sin
-reglas nuevas de Firestore.
+15 archivos sobre tu GitHub actual (V0040). Sin dependencias nuevas y sin
+reglas nuevas de Firestore (usa la misma regla de `chats` de la V0039).
 
 Cómo aplicarlo
 --------------
 1. Extraé el zip DENTRO de la carpeta del proyecto, reemplazando los existentes.
+   OJO: el archivo src/modules/ChatModule.css se movió a
+   src/components/ChatPanel.css — borrá el viejo si te queda duplicado:
+       git rm src/modules/ChatModule.css
 2. npm run build
-3. git add -A && git commit -m "V0040" && git push
+3. git add -A && git commit -m "V0041" && git push
 
-Qué trae V0040 — MODO DE PRUEBA (view as)
------------------------------------------
-1. En Account Users cada fila tiene ahora un ícono de OJO: al tocarlo, ves la
-   app EXACTAMENTE como ese usuario, con su rol completo (menú, permisos,
-   botones y el Chat con su nombre y sus conversaciones).
-2. Mientras estás en modo prueba, una BARRA NARANJA arriba te recuerda como
-   quién estás viendo y con qué rol, con el botón "Exit test mode" para volver
-   a ser vos. Recargar la página también te devuelve a tu sesión real.
-3. Todo lo que hagas en modo prueba queda en Activity History como
-   "Usuario (test by Jesus Molero)" — el historial nunca miente.
-4. Permiso nuevo en Manage Roles → Account Users: "View the app as another
-   user (test mode)". Por defecto lo heredan solo los roles de administración.
-5. "Log Out" durante el modo prueba solo sale del modo (no cierra tu sesión).
-La campana anuncia la V0040 con estas novedades.
-
-Para probar el chat: entrá como un usuario (ojo), mandate un mensaje a vos
-mismo (tu usuario real), salí del modo y vas a ver el mensaje sin leer en tu
-propio Chat.
+Qué trae V0041 — CHAT ESTILO WHATSAPP
+--------------------------------------
+1. MENÚ CON CONTADOR Y ANIMACIÓN: el ítem "Chat" del menú lateral muestra un
+   contador verde con los mensajes sin leer, y el ícono BRINCA (con un "pop"
+   sonoro suave) cada vez que llega un mensaje nuevo. El contador también
+   aparece en el título de la pestaña del navegador: "(3) EZ Maintenance".
+2. BURBUJA FLOTANTE: abajo a la derecha, en TODAS las pantallas, hay una
+   burbuja de chat con su contador. Al tocarla se abre una ventanita para leer
+   y responder sin salir de lo que estabas haciendo (en el teléfono ocupa casi
+   toda la pantalla). La burbuja también brinca al recibir mensajes.
+   Dentro del módulo Chat la burbuja se oculta (sería redundante).
+3. FUNCIONES ESTILO WHATSAPP:
+   - Contador verde de no leídos POR CONVERSACIÓN en la lista (número real de
+     mensajes, no solo un punto).
+   - Checks en tus mensajes: ✓ enviado, ✓✓ celeste cuando TODOS los del chat
+     lo leyeron.
+   - Separadores por día, hora en cada burbuja y "You:" en la vista previa,
+     como ya venía de la V0039.
+La campana anuncia la V0041 con estas novedades.

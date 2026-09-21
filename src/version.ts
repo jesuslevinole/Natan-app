@@ -3,7 +3,7 @@
  * Al publicar una versión nueva: sumar 1 aquí y agregar su entrada al inicio de CHANGELOG.
  * La campana de notificaciones marca "nuevo" cuando el usuario aún no vio la versión actual.
  */
-export const APP_VERSION = 'V0040';
+export const APP_VERSION = 'V0041';
 export const APP_VERSION_DATE = '2026-09-21';
 
 export interface ChangelogEntry {
@@ -13,6 +13,15 @@ export interface ChangelogEntry {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: 'V0041',
+    date: '2026-09-21',
+    items: [
+      'Chat, WhatsApp style: the Chat menu item shows a green unread counter and bounces when a new message arrives (with a soft pop sound and the count in the browser tab).',
+      'Floating chat bubble at the bottom-right: check and answer your chats from any screen, without leaving what you are doing.',
+      'Per-conversation unread counters, and sent/read checkmarks on your messages (double blue check when everyone has read it).',
+    ],
+  },
   {
     version: 'V0040',
     date: '2026-09-21',

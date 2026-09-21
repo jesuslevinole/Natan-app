@@ -198,3 +198,15 @@ Verificación: `npm run check` 0/0, `npm run build` OK, Chromium: catálogo con 
 - **Auditoría honesta**: `AuditLogger.setImpersonator(nombreReal)` — mientras está activo, todo log queda como `"Usuario (test by Admin)"`, y el inicio/fin del modo se registra en Activity History. Así se puede probar el chat como otro usuario sin falsear el historial.
 - **UI**: `ImpersonationBanner` (barra naranja fija arriba del contenido, también en móvil) con usuario, rol y "Exit test mode"; ícono de ojo por fila en Account Users (oculto en la propia fila) con confirm explicando el modo; guard en App.tsx que vuelve al Dashboard si el módulo activo deja de estar permitido con el rol impersonado. El estado no sobrevive un refresh (a propósito: recargar devuelve al admin).
 - Preview simula start/stop sin Firestore para poder verificar el flujo.
+
+## Ronda 13 (V0041) — chat estilo WhatsApp: badge en el menú, burbuja flotante y checks
+
+- **ChatProvider global** (`context/ChatProvider` + `hooks/useChat`): la suscripción a `chats` subió del módulo al App para alimentar el badge del menú, la burbuja flotante y el módulo a la vez. Suma `unreadTotal`, hace un "pop" (Web Audio, con try/catch por autoplay) cuando el total sube y pone el contador en el título de la pestaña "(3) EZ Maintenance".
+- **No leídos reales por conversación**: el doc del chat guarda `unread.{emailKey}`; `sendChatMessage` (ahora recibe el chat con `members`) incrementa el contador de cada otro miembro con `increment(1)` y `markChatRead` lo pone en 0. Chats viejos sin el campo: fallback booleano (cuenta 1). Contador verde estilo WhatsApp en la lista.
+- **Checks ✔/✔✔**: en mis burbujas, un check = enviado; doble check celeste = leído por TODOS los demás miembros (`isReadByAll` compara `lastReadBy` de cada miembro contra el `at` del mensaje). Sin escrituras extra: usa la marca de lectura que ya existía.
+- **ChatPanel** (`components/ChatPanel`, extraído de ChatModule): mismo panel con `variant='full'|'widget'`; el módulo quedó como cáscara. La variante widget fuerza una columna (lista ↔ conversación con volver).
+- **Burbuja flotante** (`components/ChatWidget`): FAB fijo abajo a la derecha en toda la app (oculto dentro del módulo Chat y sin permiso `view_chat`), badge verde con el total y animación de brinco (`chat-bounce`, 2 saltos) cuando llega un mensaje; abre una ventanita 380×560 con el ChatPanel. En móvil ocupa casi toda la pantalla.
+- **Menú**: el ítem Chat muestra el contador verde y el ícono brinca al recibir (componentitos `ChatNavIcon`/`ChatNavBadge` en App.tsx; el badge se reposiciona con el sidebar colapsado).
+- Preview: `ChatContext` se inyecta con 2 chats de ejemplo (unread 2+1) para verificar el widget sin Firestore.
+
+Verificación: check 0/0, build OK, Chromium: FAB con badge 3, ventanita con contadores por chat, vista de conversación con volver.

@@ -1,6 +1,8 @@
 import { Suspense, lazy, useState } from 'react';
 import { DataContext } from '../context/dataContext';
 import { AuthContext } from '../context/authContext';
+import { ChatContext } from '../context/chatContext';
+import ChatWidget from '../components/ChatWidget';
 import ImpersonationBanner from '../components/ImpersonationBanner';
 import type { User, Role } from '../types';
 import { mockAppData } from './mockData';
@@ -46,9 +48,17 @@ export default function Preview() {
       startImpersonation: (user, role) => setViewAs({ user, role }),
       stopImpersonation: () => setViewAs(null),
     }}>
+      <ChatContext.Provider value={{
+        isLoading: false, loadError: '', unreadTotal: 3,
+        chats: [
+          { id: 'dm1', type: 'dm', members: ['preview@example.com', 'natan@example.com'], memberNames: { 'preview@example.com': 'Jesus Molero', 'natan@example.com': 'Natan Cruz' }, createdBy: 'natan@example.com', createdAt: '2026-09-20T10:00:00Z', lastMessage: { text: 'Realizó las actividades necesarias?', senderEmail: 'natan@example.com', senderName: 'Natan Cruz', at: '2026-09-21T10:50:00Z' }, lastReadBy: {}, unread: { 'preview@example,com': 2 } },
+          { id: 'g1', type: 'group', name: 'Maintenance team', members: ['preview@example.com', 'natan@example.com', 'erick@example.com'], memberNames: { 'preview@example.com': 'Jesus Molero', 'natan@example.com': 'Natan Cruz', 'erick@example.com': 'Erick Pimentel' }, createdBy: 'preview@example.com', createdAt: '2026-09-19T10:00:00Z', lastMessage: { text: 'The faucet for building 3 arrived', senderEmail: 'erick@example.com', senderName: 'Erick Pimentel', at: '2026-09-21T09:15:00Z' }, lastReadBy: {}, unread: { 'preview@example,com': 1 } },
+        ],
+      }}>
       <DataContext.Provider value={mockAppData}>
         <div className="preview-shell">
           <ImpersonationBanner />
+          <ChatWidget hidden={active === 'chat'} />
           <nav className="preview-nav">
             {(Object.keys(modules) as Key[]).map(k => (
               <button key={k} type="button" className={`chip${k === active ? ' active' : ''}`} onClick={() => setActive(k)}>{k}</button>
@@ -63,6 +73,7 @@ export default function Preview() {
           </main>
         </div>
       </DataContext.Provider>
+      </ChatContext.Provider>
     </AuthContext.Provider>
   );
 }

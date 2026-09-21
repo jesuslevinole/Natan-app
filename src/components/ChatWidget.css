@@ -1,0 +1,22 @@
+.chat-fab { position: fixed; right: 22px; bottom: 22px; z-index: 400; width: 54px; height: 54px; border-radius: 50%; border: none; background: var(--primary-color); color: #fff; display: flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: 0 10px 26px -8px rgba(37, 99, 235, 0.55); transition: transform 0.15s, filter 0.15s; }
+.chat-fab:hover { filter: brightness(1.08); transform: translateY(-2px); }
+.chat-fab-badge { position: absolute; top: -4px; right: -4px; min-width: 20px; height: 20px; padding: 0 5px; border-radius: 999px; background: #22c55e; color: #fff; font-size: 0.68rem; font-weight: 800; display: flex; align-items: center; justify-content: center; border: 2px solid var(--bg-color); }
+.chat-fab.bounce { animation: chat-bounce 0.5s ease 2; }
+@keyframes chat-bounce {
+  0%, 100% { transform: translateY(0); }
+  35% { transform: translateY(-12px) scale(1.06); }
+  60% { transform: translateY(2px); }
+}
+
+.chat-widget-window { position: fixed; right: 22px; bottom: 88px; z-index: 400; width: 380px; max-width: calc(100vw - 32px); height: min(560px, calc(100vh - 130px)); background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 16px; box-shadow: 0 24px 60px -18px rgba(15, 23, 42, 0.45); display: flex; flex-direction: column; overflow: hidden; animation: chat-widget-in 0.18s ease; }
+@keyframes chat-widget-in { from { opacity: 0; transform: translateY(10px) scale(0.98); } to { opacity: 1; transform: none; } }
+.chat-widget-head { display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; background: var(--primary-color); color: #fff; flex-shrink: 0; }
+.chat-widget-close { display: flex; border: none; background: rgba(255, 255, 255, 0.15); color: #fff; border-radius: 8px; padding: 4px; cursor: pointer; }
+.chat-widget-close:hover { background: rgba(255, 255, 255, 0.3); }
+.chat-widget-body { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.chat-widget-body .chat-shell, .chat-widget-body .chat-layout { height: 100%; }
+
+@media (max-width: 600px) {
+  .chat-fab { right: 14px; bottom: 14px; }
+  .chat-widget-window { right: 8px; left: 8px; width: auto; bottom: 78px; height: calc(100vh - 100px); }
+}

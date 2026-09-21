@@ -1,4 +1,4 @@
-import { useState, useEffect, lazy, Suspense, type ReactNode } from 'react';
+import { useState, useEffect, useRef, lazy, Suspense, type ReactNode } from 'react';
 import {
   PackageSearch, Briefcase, LogOut, BookOpen, BarChart2, Menu,
   ShieldAlert, Users as UsersIcon, ShieldCheck, LayoutDashboard, Settings, Sun, Moon, Trash2, MessageCircle,
@@ -14,6 +14,9 @@ import { useTheme } from './hooks/useTheme';
 import BrandMark from './components/BrandMark';
 import NotificationsBell from './components/NotificationsBell';
 import ImpersonationBanner from './components/ImpersonationBanner';
+import ChatWidget from './components/ChatWidget';
+import { ChatProvider } from './context/ChatProvider';
+import { useChat } from './hooks/useChat';
 import { APP_VERSION } from './version';
 import './App.css';
 
@@ -54,6 +57,30 @@ const NAV_ITEMS: NavItem[] = [
   { id: 'trash', label: 'Recycle Bin', icon: <Trash2 size={20} />, permission: 'view_trash', section: 'admin' },
   { id: 'settings', label: 'Business Settings', icon: <Settings size={20} />, permission: 'manage_settings', section: 'admin' },
 ];
+
+/** Ícono del ítem Chat: brinca cuando llega un mensaje nuevo. */
+function ChatNavIcon({ icon }: { icon: ReactNode }) {
+  const { unreadTotal } = useChat();
+  const [bouncing, setBouncing] = useState(false);
+  const prev = useRef(unreadTotal);
+  useEffect(() => {
+    if (unreadTotal > prev.current) {
+      setBouncing(true);
+      const timer = setTimeout(() => setBouncing(false), 1200);
+      prev.current = unreadTotal;
+      return () => clearTimeout(timer);
+    }
+    prev.current = unreadTotal;
+  }, [unreadTotal]);
+  return <span className={`chat-nav-icon${bouncing ? ' bounce' : ''}`}>{icon}</span>;
+}
+
+/** Contador de no leídos junto al ítem Chat del menú. */
+function ChatNavBadge() {
+  const { unreadTotal } = useChat();
+  if (unreadTotal === 0) return null;
+  return <span className="chat-nav-badge">{unreadTotal > 99 ? '99+' : unreadTotal}</span>;
+}
 
 function AppShell() {
   const { currentUser, userRole, logout, hasPermission } = useAuth();
@@ -112,7 +139,8 @@ function AppShell() {
               onClick={() => handleModuleChange(item.id)}
               title={isSidebarCollapsed ? item.label : undefined}
             >
-              {item.icon} <span>{item.label}</span>
+              {item.id === 'chat' ? <ChatNavIcon icon={item.icon} /> : item.icon} <span>{item.label}</span>
+              {item.id === 'chat' && <ChatNavBadge />}
             </li>
           ))}
         </ul>
@@ -165,6 +193,9 @@ function AppShell() {
         <main className="main-content">
           <Suspense fallback={<LoadingScreen />}>{renderModule()}</Suspense>
         </main>
+
+        {/* Burbuja flotante del chat (oculta dentro del propio módulo Chat) */}
+        <ChatWidget hidden={activeModule === 'chat'} />
       </div>
     </div>
   );
@@ -176,7 +207,9 @@ function AuthGate() {
   if (!currentUser) return <AuthScreen onDevLogin={login} />;
   return (
     <DataProvider>
-      <AppShell />
+      <ChatProvider>
+        <AppShell />
+      </ChatProvider>
     </DataProvider>
   );
 }

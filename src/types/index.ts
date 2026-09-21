@@ -223,6 +223,8 @@ export interface ChatConversation {
   lastMessage?: { text: string; senderEmail: string; senderName: string; at: string };
   /** email (con puntos reemplazados por ',') → ISO de última lectura. */
   lastReadBy?: Record<string, string>;
+  /** email (clave segura) → mensajes sin leer de ese miembro. */
+  unread?: Record<string, number>;
 }
 
 export interface ChatMessage {
