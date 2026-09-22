@@ -3,7 +3,7 @@
  * Al publicar una versión nueva: sumar 1 aquí y agregar su entrada al inicio de CHANGELOG.
  * La campana de notificaciones marca "nuevo" cuando el usuario aún no vio la versión actual.
  */
-export const APP_VERSION = 'V0041';
+export const APP_VERSION = 'V0042';
 export const APP_VERSION_DATE = '2026-09-21';
 
 export interface ChangelogEntry {
@@ -13,6 +13,15 @@ export interface ChangelogEntry {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: 'V0042',
+    date: '2026-09-22',
+    items: [
+      'Chat: delete any message "for me" (the other members still see it) and translate messages English ↔ Spanish right inside the bubble.',
+      'Presence: green "Online" dot in the chat and a Connection column in Account Users showing who is connected and when each user last opened the app.',
+      'Account Users: "Resend access email" button (as many times as needed); the login screen already offers "Forgot your password?".',
+    ],
+  },
   {
     version: 'V0041',
     date: '2026-09-21',

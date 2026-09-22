@@ -1,4 +1,4 @@
-import { addDoc, collection, doc, increment, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore';
+import { addDoc, arrayUnion, collection, doc, increment, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 import type { ChatConversation } from '../types';
 
@@ -90,4 +90,21 @@ export const chatDisplayName = (chat: ChatConversation, myEmail: string): string
   if (chat.type === 'group') return chat.name || 'Group chat';
   const other = chat.members.find(m => m !== myEmail.toLowerCase());
   return (other && chat.memberNames[other]) || other || 'Direct message';
+};
+
+/** Borra un mensaje SOLO para este usuario (los demás miembros lo siguen viendo). */
+export const deleteMessageForMe = async (chatId: string, messageId: string, email: string): Promise<void> => {
+  await updateDoc(doc(db, 'chats', chatId, 'messages', messageId), { deletedFor: arrayUnion(emailKey(email)) });
+};
+
+/** true si este usuario borró el mensaje para sí. */
+export const isDeletedForMe = (msg: { deletedFor?: string[] }, email: string): boolean =>
+  (msg.deletedFor ?? []).includes(emailKey(email));
+
+/** Heurística simple para dirección de traducción: true si el texto parece español. */
+export const looksSpanish = (text: string): boolean => {
+  if (/[áéíóúñü¿¡]/i.test(text)) return true;
+  const es = (text.toLowerCase().match(/\b(el|la|los|las|que|de|por|para|con|una|uno|esta|este|hola|gracias|buenos|dias|trabajo|ya|si|no se|donde|cuando|hacer|necesito)\b/g) ?? []).length;
+  const en = (text.toLowerCase().match(/\b(the|and|for|with|this|that|you|are|is|to|of|in|on|please|thanks|work|done|need|when|where)\b/g) ?? []).length;
+  return es > en;
 };

@@ -1,13 +1,16 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { collection, onSnapshot, orderBy, query, limit } from 'firebase/firestore';
-import { MessageCircle, Plus, Users, Send, Search, ArrowLeft, Hash, User as UserIcon, Check, CheckCheck } from 'lucide-react';
+import { MessageCircle, Plus, Users, Send, Search, ArrowLeft, Hash, User as UserIcon, Check, CheckCheck, Trash2, Languages } from 'lucide-react';
 import { db } from '../firebase';
 import Modal from './Modal';
 import LoadingScreen from './LoadingScreen';
 import { useAppData } from '../hooks/useAppData';
 import { useChat } from '../hooks/useChat';
 import { useAuth, useAuthorName } from '../hooks/useAuth';
-import { ensureConversation, sendChatMessage, markChatRead, hasUnread, unreadCount, isReadByAll, chatDisplayName } from '../utils/chat';
+import { ensureConversation, sendChatMessage, markChatRead, hasUnread, unreadCount, isReadByAll, chatDisplayName, deleteMessageForMe, isDeletedForMe, looksSpanish } from '../utils/chat';
+import { usePresence } from '../hooks/usePresence';
+import { translateText } from '../utils/textAssist';
+import { formatDateTimeDisplay } from '../utils/helpers';
 import { displayName, formatDateDisplay, getTodayString } from '../utils/helpers';
 import type { ChatMessage } from '../types';
 import './ChatPanel.css';
@@ -44,6 +47,12 @@ export default function ChatPanel({ variant = 'full' }: Props) {
   const [isCreating, setIsCreating] = useState(false);
   const [error, setError] = useState('');
   const endRef = useRef<HTMLDivElement>(null);
+  const { presence, isOnline } = usePresence();
+  // Traducciones por mensaje (cache local): id → { text, shown, loading }.
+  const [translations, setTranslations] = useState<Record<string, { text: string; shown: boolean; loading: boolean }>>({});
+
+  // Mensajes que este usuario no borró "para mí".
+  const visibleMessages = useMemo(() => messages.filter(m => !isDeletedForMe(m, myEmail)), [messages, myEmail]);
 
   const activeChat = useMemo(() => chats.find(c => c.id === activeId) ?? null, [chats, activeId]);
 
@@ -90,6 +99,44 @@ export default function ChatPanel({ variant = 'full' }: Props) {
     } finally {
       setIsSending(false);
     }
+  };
+
+  const handleDeleteForMe = async (messageId: string) => {
+    if (!activeChat) return;
+    if (!window.confirm('Delete this message for you?\n\nOther members of the chat will still see it.')) return;
+    try {
+      await deleteMessageForMe(activeChat.id, messageId, myEmail);
+    } catch (err) {
+      console.error('Delete for me failed', err);
+      alert('Could not delete the message. Please try again.');
+    }
+  };
+
+  /** Traduce EN↔ES (auto-detecta el idioma) y muestra la traducción bajo el mensaje. */
+  const handleTranslate = async (m: ChatMessage) => {
+    const existing = translations[m.id];
+    if (existing?.text || existing?.loading) {
+      setTranslations(prev => ({ ...prev, [m.id]: { ...prev[m.id], shown: !prev[m.id].shown } }));
+      return;
+    }
+    setTranslations(prev => ({ ...prev, [m.id]: { text: '', shown: true, loading: true } }));
+    try {
+      const from = looksSpanish(m.text) ? 'es' : 'en';
+      const to = from === 'es' ? 'en' : 'es';
+      const out = await translateText(m.text, from, to);
+      setTranslations(prev => ({ ...prev, [m.id]: { text: out, shown: true, loading: false } }));
+    } catch (err) {
+      console.error('Translate failed', err);
+      setTranslations(prev => { const next = { ...prev }; delete next[m.id]; return next; });
+      alert('Could not translate right now. Please try again in a moment.');
+    }
+  };
+
+  /** Estado de presencia para el header de un DM: "Online" o "Last seen ...". */
+  const presenceLine = (email: string): string => {
+    if (isOnline(email)) return 'Online';
+    const r = presence.get(email.toLowerCase());
+    return r ? `Last seen ${formatDateTimeDisplay(r.lastSeenAt)}` : 'Direct message';
   };
 
   const nameOf = (email: string) => {
@@ -166,7 +213,10 @@ export default function ChatPanel({ variant = 'full' }: Props) {
               const unread = unreadCount(chat, myEmail);
               return (
                 <button key={chat.id} type="button" className={`chat-item${chat.id === activeId ? ' active' : ''}${unread > 0 ? ' unread' : ''}`} onClick={() => setActiveId(chat.id)}>
-                  <span className={`chat-avatar ${chat.type}`}>{chat.type === 'group' ? <Users size={16} /> : <UserIcon size={16} />}</span>
+                  <span className={`chat-avatar ${chat.type}`}>
+                    {chat.type === 'group' ? <Users size={16} /> : <UserIcon size={16} />}
+                    {chat.type === 'dm' && isOnline(chat.members.find(m => m !== myEmail) || '') && <span className="chat-online-dot" title="Online" />}
+                  </span>
                   <span className="chat-item-body">
                     <span className="chat-item-top">
                       <b>{chatDisplayName(chat, myEmail)}</b>
@@ -195,30 +245,44 @@ export default function ChatPanel({ variant = 'full' }: Props) {
             <>
               <header className="chat-panel-head">
                 <button type="button" className="icon-btn chat-back" onClick={() => setActiveId(null)} title="Back to conversations"><ArrowLeft size={18} /></button>
-                <span className={`chat-avatar ${activeChat.type}`}>{activeChat.type === 'group' ? <Users size={16} /> : <UserIcon size={16} />}</span>
+                <span className={`chat-avatar ${activeChat.type}`}>
+                  {activeChat.type === 'group' ? <Users size={16} /> : <UserIcon size={16} />}
+                  {activeChat.type === 'dm' && isOnline(activeChat.members.find(m => m !== myEmail) || '') && <span className="chat-online-dot" title="Online" />}
+                </span>
                 <div className="chat-panel-title">
                   <b>{chatDisplayName(activeChat, myEmail)}</b>
                   <small>
                     {activeChat.type === 'group'
                       ? `${activeChat.members.length} members: ${activeChat.members.map(m => activeChat.memberNames[m] || m).join(', ')}`
-                      : 'Direct message'}
+                      : presenceLine(activeChat.members.find(m => m !== myEmail) || '')}
                   </small>
                 </div>
               </header>
               <div className="chat-messages">
                 {isLoadingMessages && <p className="chat-empty-hint">Loading messages...</p>}
-                {!isLoadingMessages && messages.length === 0 && <p className="chat-empty-hint">No messages yet — say hello!</p>}
-                {messages.map((m, i) => {
+                {!isLoadingMessages && visibleMessages.length === 0 && <p className="chat-empty-hint">No messages yet — say hello!</p>}
+                {visibleMessages.map((m, i) => {
                   const mine = m.senderEmail === myEmail;
-                  const showDay = i === 0 || dayOf(messages[i - 1].at) !== dayOf(m.at);
-                  const showSender = !mine && activeChat.type === 'group' && (i === 0 || messages[i - 1].senderEmail !== m.senderEmail || showDay);
+                  const showDay = i === 0 || dayOf(visibleMessages[i - 1].at) !== dayOf(m.at);
+                  const showSender = !mine && activeChat.type === 'group' && (i === 0 || visibleMessages[i - 1].senderEmail !== m.senderEmail || showDay);
+                  const tr = translations[m.id];
                   return (
                     <div key={m.id}>
                       {showDay && <div className="chat-day"><span>{dayOf(m.at) === getTodayString() ? 'Today' : formatDateDisplay(m.at)}</span></div>}
                       <div className={`chat-msg${mine ? ' mine' : ''}`}>
                         {showSender && <small className="chat-msg-sender">{m.senderName}</small>}
-                        <div className="chat-bubble">
+                        <div className="chat-msg-row">
+                          <span className="chat-msg-actions">
+                            <button type="button" className="chat-msg-action" onClick={() => handleTranslate(m)} title="Translate (English ↔ Spanish)" aria-label="Translate message"><Languages size={13} /></button>
+                            <button type="button" className="chat-msg-action danger" onClick={() => handleDeleteForMe(m.id)} title="Delete for me (others still see it)" aria-label="Delete message for me"><Trash2 size={13} /></button>
+                          </span>
+                          <div className="chat-bubble">
                           {m.text}
+                          {tr?.shown && (
+                            <span className="chat-translation">
+                              <Languages size={11} /> {tr.loading ? 'Translating...' : tr.text}
+                            </span>
+                          )}
                           <small className="chat-msg-time">
                             {new Date(m.at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
                             {mine && (
@@ -227,6 +291,7 @@ export default function ChatPanel({ variant = 'full' }: Props) {
                               </span>
                             )}
                           </small>
+                          </div>
                         </div>
                       </div>
                     </div>

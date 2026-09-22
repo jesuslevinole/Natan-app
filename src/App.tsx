@@ -16,6 +16,7 @@ import NotificationsBell from './components/NotificationsBell';
 import ImpersonationBanner from './components/ImpersonationBanner';
 import ChatWidget from './components/ChatWidget';
 import { ChatProvider } from './context/ChatProvider';
+import { PresenceProvider } from './context/PresenceProvider';
 import { useChat } from './hooks/useChat';
 import { APP_VERSION } from './version';
 import './App.css';
@@ -207,9 +208,11 @@ function AuthGate() {
   if (!currentUser) return <AuthScreen onDevLogin={login} />;
   return (
     <DataProvider>
-      <ChatProvider>
-        <AppShell />
-      </ChatProvider>
+      <PresenceProvider>
+        <ChatProvider>
+          <AppShell />
+        </ChatProvider>
+      </PresenceProvider>
     </DataProvider>
   );
 }

@@ -253,3 +253,9 @@ fieldset.group-box { border: 1px solid var(--border-color); min-width: 0; }
 [data-theme="dark"] .filter-chip button:hover { background: rgba(191, 219, 254, 0.3); }
 .icon-btn.view-as:hover { background-color: var(--warning-soft); color: #d97706; }
 [data-theme="dark"] .icon-btn.view-as:hover { color: #fbbf24; }
+.conn-online { display: inline-flex; align-items: center; gap: 6px; font-weight: 700; color: #16a34a; font-size: 0.82rem; }
+[data-theme="dark"] .conn-online { color: #4ade80; }
+.conn-dot { width: 9px; height: 9px; border-radius: 50%; background: #22c55e; box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.2); }
+.conn-last { color: var(--text-muted); font-size: 0.8rem; }
+.icon-btn.resend:hover { background-color: var(--cyan-soft); color: #0891b2; }
+[data-theme="dark"] .icon-btn.resend:hover { color: #67e8f9; }

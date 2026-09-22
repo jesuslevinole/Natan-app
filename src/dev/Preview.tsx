@@ -2,6 +2,7 @@ import { Suspense, lazy, useState } from 'react';
 import { DataContext } from '../context/dataContext';
 import { AuthContext } from '../context/authContext';
 import { ChatContext } from '../context/chatContext';
+import { PresenceContext } from '../context/presenceContext';
 import ChatWidget from '../components/ChatWidget';
 import ImpersonationBanner from '../components/ImpersonationBanner';
 import type { User, Role } from '../types';
@@ -48,6 +49,13 @@ export default function Preview() {
       startImpersonation: (user, role) => setViewAs({ user, role }),
       stopImpersonation: () => setViewAs(null),
     }}>
+      <PresenceContext.Provider value={{
+        presence: new Map([
+          ['natan@example.com', { email: 'natan@example.com', name: 'Natan Cruz', lastSeenAt: new Date().toISOString() }],
+          ['erick@example.com', { email: 'erick@example.com', name: 'Erick Pimentel', lastSeenAt: '2026-09-20T22:10:00Z' }],
+        ]),
+        isOnline: (email) => email.toLowerCase() === 'natan@example.com',
+      }}>
       <ChatContext.Provider value={{
         isLoading: false, loadError: '', unreadTotal: 3,
         chats: [
@@ -74,6 +82,7 @@ export default function Preview() {
         </div>
       </DataContext.Provider>
       </ChatContext.Provider>
+      </PresenceContext.Provider>
     </AuthContext.Provider>
   );
 }

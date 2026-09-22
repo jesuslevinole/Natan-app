@@ -1,33 +1,38 @@
-Natan-app V0041 — archivos para copiar sobre el proyecto
+Natan-app V0042 — archivos para copiar sobre el proyecto
 =========================================================
-15 archivos sobre tu GitHub actual (V0040). Sin dependencias nuevas y sin
-reglas nuevas de Firestore (usa la misma regla de `chats` de la V0039).
+14 archivos sobre tu GitHub actual (V0041). Sin dependencias nuevas.
 
 Cómo aplicarlo
 --------------
 1. Extraé el zip DENTRO de la carpeta del proyecto, reemplazando los existentes.
-   OJO: el archivo src/modules/ChatModule.css se movió a
-   src/components/ChatPanel.css — borrá el viejo si te queda duplicado:
-       git rm src/modules/ChatModule.css
 2. npm run build
-3. git add -A && git commit -m "V0041" && git push
+3. git add -A && git commit -m "V0042" && git push
 
-Qué trae V0041 — CHAT ESTILO WHATSAPP
---------------------------------------
-1. MENÚ CON CONTADOR Y ANIMACIÓN: el ítem "Chat" del menú lateral muestra un
-   contador verde con los mensajes sin leer, y el ícono BRINCA (con un "pop"
-   sonoro suave) cada vez que llega un mensaje nuevo. El contador también
-   aparece en el título de la pestaña del navegador: "(3) EZ Maintenance".
-2. BURBUJA FLOTANTE: abajo a la derecha, en TODAS las pantallas, hay una
-   burbuja de chat con su contador. Al tocarla se abre una ventanita para leer
-   y responder sin salir de lo que estabas haciendo (en el teléfono ocupa casi
-   toda la pantalla). La burbuja también brinca al recibir mensajes.
-   Dentro del módulo Chat la burbuja se oculta (sería redundante).
-3. FUNCIONES ESTILO WHATSAPP:
-   - Contador verde de no leídos POR CONVERSACIÓN en la lista (número real de
-     mensajes, no solo un punto).
-   - Checks en tus mensajes: ✓ enviado, ✓✓ celeste cuando TODOS los del chat
-     lo leyeron.
-   - Separadores por día, hora en cada burbuja y "You:" en la vista previa,
-     como ya venía de la V0039.
-La campana anuncia la V0041 con estas novedades.
+IMPORTANTE — Firebase Console → Firestore → Reglas, agregar (sin esto no
+funciona la presencia de "quién está conectado"):
+      match /presence/{docId} {
+        allow read, write: if request.auth != null;
+      }
+
+Qué trae V0042
+--------------
+1. BORRAR MENSAJES "PARA MÍ": pasando el mouse sobre cualquier mensaje del chat
+   aparecen dos botoncitos; el de basura borra el mensaje SOLO para vos — los
+   demás miembros del chat lo siguen viendo, como en WhatsApp. (En el teléfono
+   los botones se ven tenues junto a cada burbuja.)
+2. TRADUCIR EN EL CHAT: el otro botoncito (idiomas) traduce el mensaje
+   directamente en la burbuja: detecta solo si está en inglés o español y lo
+   traduce al otro idioma. Tocás de nuevo y se oculta. (Usa el mismo traductor
+   gratuito del "ES→EN" de las órdenes: ~5.000 palabras por día.)
+3. QUIÉN ESTÁ CONECTADO:
+   - En Account Users hay una columna nueva "Connection": punto verde "Online"
+     si la persona tiene el app abierto ahora, "Last seen 09/22/2026, 3:10 PM"
+     con su última conexión, o "Never connected" si nunca entró.
+   - En el chat: punto verde sobre el avatar de los mensajes directos y
+     "Online" / "Last seen ..." en el encabezado de la conversación.
+4. EMAIL DE ACCESO:
+   - En Account Users cada usuario tiene un botón de SOBRE: reenvía el email
+     de acceso (el link para elegir contraseña) las veces que haga falta.
+   - "Forgot your password?" ya está en el login desde hace unas versiones:
+     está debajo del botón Log In y manda el link de restablecer contraseña.
+La campana anuncia la V0042 con estas novedades.

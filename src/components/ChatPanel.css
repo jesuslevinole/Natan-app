@@ -74,3 +74,22 @@
 /* Checks de enviado/leído en mis burbujas */
 .chat-checks { display: inline-flex; margin-left: 4px; vertical-align: middle; color: rgba(255, 255, 255, 0.75); }
 .chat-checks.read { color: #7dd3fc; }
+
+/* Acciones por mensaje (traducir / borrar para mí): aparecen al pasar el mouse */
+.chat-msg-row { display: flex; align-items: flex-end; gap: 6px; max-width: 100%; }
+.chat-msg.mine .chat-msg-row { flex-direction: row; }
+.chat-msg:not(.mine) .chat-msg-row { flex-direction: row-reverse; }
+.chat-msg-actions { display: flex; gap: 4px; opacity: 0; transition: opacity 0.15s; flex-shrink: 0; padding-bottom: 4px; }
+.chat-msg-row:hover .chat-msg-actions { opacity: 1; }
+@media (hover: none) { .chat-msg-actions { opacity: 0.45; } }
+.chat-msg-action { display: flex; padding: 5px; border: 1px solid var(--border-color); border-radius: 8px; background: var(--card-bg); color: var(--text-muted); cursor: pointer; }
+.chat-msg-action:hover { color: var(--primary-color); border-color: var(--primary-soft-border); }
+.chat-msg-action.danger:hover { color: var(--danger-color); border-color: var(--danger-soft-border); background: var(--danger-soft); }
+
+/* Traducción bajo el texto del mensaje */
+.chat-translation { display: flex; align-items: flex-start; gap: 5px; margin-top: 6px; padding-top: 6px; border-top: 1px dashed rgba(148, 163, 184, 0.5); font-size: 0.8rem; font-style: italic; opacity: 0.92; }
+.chat-msg.mine .chat-translation { border-top-color: rgba(255, 255, 255, 0.45); }
+
+/* Punto verde de "online" sobre el avatar */
+.chat-avatar { position: relative; }
+.chat-online-dot { position: absolute; right: -1px; bottom: -1px; width: 11px; height: 11px; border-radius: 50%; background: #22c55e; border: 2px solid var(--card-bg); }

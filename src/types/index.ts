@@ -233,4 +233,14 @@ export interface ChatMessage {
   senderEmail: string;
   senderName: string;
   at: string; // ISO
+  /** emailKeys de quienes borraron el mensaje "para mí" (los demás lo siguen viendo). */
+  deletedFor?: string[];
+}
+
+/** Presencia de un usuario (colección `presence`, doc id = emailKey). */
+export interface PresenceRecord {
+  email: string;
+  name: string;
+  /** Último latido de la app abierta (ISO). Online = hace menos de 2 minutos. */
+  lastSeenAt: string;
 }

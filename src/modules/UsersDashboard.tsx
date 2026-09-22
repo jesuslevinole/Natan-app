@@ -3,7 +3,7 @@ import { collection, addDoc, updateDoc, doc } from 'firebase/firestore';
 import { initializeApp, getApp, deleteApp } from 'firebase/app';
 import { getAuth, createUserWithEmailAndPassword, sendPasswordResetEmail, signOut } from 'firebase/auth';
 import { db } from '../firebase';
-import { Users, Plus, Trash2, User as UserIcon, Edit2, ShieldAlert, Eye } from 'lucide-react';
+import { Users, Plus, Trash2, User as UserIcon, Edit2, ShieldAlert, Eye, MailPlus } from 'lucide-react';
 import type { SystemUser, UserStatus } from '../types';
 import Modal from '../components/Modal';
 import DeleteReasonModal from '../components/DeleteReasonModal';
@@ -14,14 +14,16 @@ import LoadingScreen from '../components/LoadingScreen';
 import { UserStatusBadge } from '../components/StatusBadge';
 import { AuditLogger } from '../utils/logger';
 import { useAuth, useAuthorName } from '../hooks/useAuth';
+import { usePresence } from '../hooks/usePresence';
 import RequirePermission from '../components/RequirePermission';
 import { useAppData } from '../hooks/useAppData';
-import { formatDateDisplay, displayName, matchesSearch } from '../utils/helpers';
+import { formatDateDisplay, displayName, matchesSearch, formatDateTimeDisplay } from '../utils/helpers';
 
 type ModalState = 'closed' | 'add' | 'edit' | 'detail';
 
 export default function UsersDashboard() {
   const { currentUser, realUser, startImpersonation } = useAuth();
+  const { presence, isOnline } = usePresence();
   const authorName = useAuthorName();
   const { roles, users, isLoading } = useAppData();
 
@@ -52,7 +54,15 @@ export default function UsersDashboard() {
       ) },
     { id: 'role', header: 'Assigned Role', value: u => roleName(u.roleId), render: u => <span className="badge info">{roleName(u.roleId)}</span> },
     { id: 'status', header: 'Status', value: u => u.status, align: 'center', render: u => <UserStatusBadge status={u.status} /> },
-  ], [roleName]);
+    { id: 'connection', header: 'Connection', value: u => (isOnline(u.email) ? 'Online' : presence.get(u.email.toLowerCase())?.lastSeenAt ?? ''), nowrap: true,
+      render: u => {
+        if (isOnline(u.email)) return <span className="conn-online"><span className="conn-dot" /> Online</span>;
+        const r = presence.get(u.email.toLowerCase());
+        return r
+          ? <span className="conn-last" title={`Last time in the app: ${formatDateTimeDisplay(r.lastSeenAt)}`}>Last seen {formatDateTimeDisplay(r.lastSeenAt)}</span>
+          : <span className="dt-dash" title="Has never opened the app">Never connected</span>;
+      } },
+  ], [roleName, presence, isOnline]);
 
   const sortedUsers = useMemo(
     () => [...users]
@@ -122,6 +132,22 @@ export default function UsersDashboard() {
     if (user.email.toLowerCase() === currentUser?.email.toLowerCase()) { alert('You cannot revoke your own access.'); return; }
     setDeleting(user);
   };
+  /** Reenvía el email de acceso (link para elegir contraseña). Se puede las veces que haga falta. */
+  const handleResendAccess = async (user: SystemUser) => {
+    if (!window.confirm(`Send the access email to ${user.email} again?\n\nThey will receive a link to choose their password and enter the app.`)) return;
+    try {
+      await sendPasswordResetEmail(getAuth(), user.email);
+      AuditLogger.log({ action: 'UPDATE', module: 'Account Users', user: authorName, targetId: user.id, details: `Access email re-sent to ${user.email}` });
+      alert(`Done! The access email was sent to ${user.email}. Ask them to check spam if they don't see it.`);
+    } catch (error) {
+      console.error('Resend access failed', error);
+      const code = (error as { code?: string }).code;
+      alert(code === 'auth/user-not-found'
+        ? 'This email has no login account yet. Delete the user and invite them again to create it.'
+        : 'Could not send the email. Please try again in a moment.');
+    }
+  };
+
   /** Modo prueba: ver la app como este usuario, con su rol completo. */
   const handleViewAs = (user: SystemUser) => {
     if (!user.id) return;
@@ -185,6 +211,7 @@ export default function UsersDashboard() {
               )}
             </RequirePermission>
             <RequirePermission permission="manage_users">
+              <button type="button" className="icon-btn resend" onClick={(e) => { e.stopPropagation(); handleResendAccess(user); }} title="Resend access email"><MailPlus size={16} /></button>
               <button type="button" className="icon-btn edit" onClick={(e) => { e.stopPropagation(); handleOpenEdit(user); }} title="Edit User"><Edit2 size={16} /></button>
               <button type="button" className="icon-btn delete" onClick={(e) => { e.stopPropagation(); handleDeleteUser(user); }} title="Revoke Access"><Trash2 size={16} /></button>
             </RequirePermission>

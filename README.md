@@ -103,6 +103,12 @@ La versión de la app vive en `src/version.ts` (V####, +1 por entrega) con su ch
 de la barra superior muestra las novedades de cada versión (con aviso hasta abrirlas) y alertas en
 vivo de órdenes vencidas y stock bajo.
 
+### Presencia (quién está conectado)
+
+Cada sesión "late" en la colección `presence`; el chat muestra el punto verde de Online y Account
+Users tiene la columna Connection (Online / Last seen / Never connected). **Regla de Firestore
+necesaria**: `match /presence/{docId} { allow read, write: if request.auth != null; }`
+
 ### Modo de prueba (view as)
 
 Un administrador con el permiso "View the app as another user" puede ver la app exactamente como

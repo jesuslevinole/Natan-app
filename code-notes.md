@@ -210,3 +210,12 @@ Verificación: `npm run check` 0/0, `npm run build` OK, Chromium: catálogo con 
 - Preview: `ChatContext` se inyecta con 2 chats de ejemplo (unread 2+1) para verificar el widget sin Firestore.
 
 Verificación: check 0/0, build OK, Chromium: FAB con badge 3, ventanita con contadores por chat, vista de conversación con volver.
+
+## Ronda 14 (V0042) — borrar para mí, traducción en el chat, presencia y reenvío de acceso
+
+- **Borrar para mí**: `ChatMessage.deletedFor: string[]` (emailKeys); `deleteMessageForMe` hace `arrayUnion` sobre el mensaje y el render filtra con `isDeletedForMe` — el doc no se toca para los demás. Acciones por burbuja (`.chat-msg-actions`): aparecen al hover (desktop) y tenues en touch (`@media (hover: none)`), con confirm.
+- **Traducir EN↔ES**: botón Languages por mensaje; `looksSpanish` (tildes/¿¡ + stopwords ES vs EN) decide la dirección y `translateText` (MyMemory, ya existente de TextAssist, ~5k palabras/día) trae la traducción, cacheada en estado local y toggle mostrar/ocultar debajo del texto (`.chat-translation`).
+- **Presencia** (`context/PresenceProvider` + `hooks/usePresence`, colección `presence`, doc id = emailKey): latido `setDoc merge {email, name, lastSeenAt}` al abrir, cada 60s y al volver a la pestaña; suscripción a toda la colección; `isOnline` = latido < 2 min, con tick de 30s para que caduque solo. En "view as" late el ADMIN REAL (usa `realUser`). UI: dot verde en avatares de DM + "Online"/"Last seen ..." en el header del chat, y columna **Connection** en Account Users (Online / Last seen fecha-hora / Never connected). **Regla Firestore nueva**: `match /presence/{docId} { allow read, write: if request.auth != null; }`.
+- **Acceso**: botón "Resend access email" (MailPlus) en Account Users → `sendPasswordResetEmail` del auth principal (reutilizable las veces que haga falta; el "email de acceso" del invite ES un reset de Firebase), con log en Activity History y manejo de `auth/user-not-found`. El "Forgot your password?" del login ya existía (vista `forgot` de AuthScreen).
+
+Verificación: check 0/0, build OK, Chromium: columna Connection + botón mail en users; dot online y contadores en chat. Las acciones de burbuja no se capturan en preview (sin mensajes de Firestore) — validadas por compilación y CSS.
