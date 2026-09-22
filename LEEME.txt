@@ -1,38 +1,24 @@
-Natan-app V0042 — archivos para copiar sobre el proyecto
+Natan-app V0043 — archivos para copiar sobre el proyecto
 =========================================================
-14 archivos sobre tu GitHub actual (V0041). Sin dependencias nuevas.
+5 archivos sobre tu GitHub actual (V0042). Sin dependencias nuevas y sin
+reglas de Firestore.
 
 Cómo aplicarlo
 --------------
 1. Extraé el zip DENTRO de la carpeta del proyecto, reemplazando los existentes.
 2. npm run build
-3. git add -A && git commit -m "V0042" && git push
+3. git add -A && git commit -m "V0043" && git push
 
-IMPORTANTE — Firebase Console → Firestore → Reglas, agregar (sin esto no
-funciona la presencia de "quién está conectado"):
-      match /presence/{docId} {
-        allow read, write: if request.auth != null;
-      }
-
-Qué trae V0042
---------------
-1. BORRAR MENSAJES "PARA MÍ": pasando el mouse sobre cualquier mensaje del chat
-   aparecen dos botoncitos; el de basura borra el mensaje SOLO para vos — los
-   demás miembros del chat lo siguen viendo, como en WhatsApp. (En el teléfono
-   los botones se ven tenues junto a cada burbuja.)
-2. TRADUCIR EN EL CHAT: el otro botoncito (idiomas) traduce el mensaje
-   directamente en la burbuja: detecta solo si está en inglés o español y lo
-   traduce al otro idioma. Tocás de nuevo y se oculta. (Usa el mismo traductor
-   gratuito del "ES→EN" de las órdenes: ~5.000 palabras por día.)
-3. QUIÉN ESTÁ CONECTADO:
-   - En Account Users hay una columna nueva "Connection": punto verde "Online"
-     si la persona tiene el app abierto ahora, "Last seen 09/22/2026, 3:10 PM"
-     con su última conexión, o "Never connected" si nunca entró.
-   - En el chat: punto verde sobre el avatar de los mensajes directos y
-     "Online" / "Last seen ..." en el encabezado de la conversación.
-4. EMAIL DE ACCESO:
-   - En Account Users cada usuario tiene un botón de SOBRE: reenvía el email
-     de acceso (el link para elegir contraseña) las veces que haga falta.
-   - "Forgot your password?" ya está en el login desde hace unas versiones:
-     está debajo del botón Log In y manda el link de restablecer contraseña.
-La campana anuncia la V0042 con estas novedades.
+Qué pasaba y qué trae V0043
+---------------------------
+Los botones de la V0042 SÍ estaban, pero solo aparecían al pasar el mouse
+exactamente sobre el mensaje (opacidad 0 el resto del tiempo) — mal diseño mío,
+imposibles de descubrir. Ahora:
+1. Los dos botoncitos (traducir y borrar para mí) se ven SIEMPRE junto a cada
+   burbuja, un poco tenues, y se iluminan al pasar el mouse. En los mensajes
+   recibidos quedan a la derecha de la burbuja; en los tuyos, a la izquierda.
+2. Igual en el módulo Chat y en la burbuja flotante (comparten el mismo panel).
+3. También agregué una vista de demostración de burbujas al preview de diseño
+   (solo desarrollo, no afecta producción).
+TIP: si después del deploy no los ves, refrescá con Ctrl+Shift+R (caché).
+La campana anuncia la V0043.

@@ -24,6 +24,7 @@ const modules = {
   roles: lazy(() => import('../modules/RolesDashboard')),
   settings: lazy(() => import('../modules/SettingsModule')),
   chat: lazy(() => import('../modules/ChatModule')),
+  chatdemo: lazy(() => import('./ChatBubblesDemo')),
 };
 type Key = keyof typeof modules;
 

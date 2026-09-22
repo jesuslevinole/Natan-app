@@ -273,8 +273,8 @@ export default function ChatPanel({ variant = 'full' }: Props) {
                         {showSender && <small className="chat-msg-sender">{m.senderName}</small>}
                         <div className="chat-msg-row">
                           <span className="chat-msg-actions">
-                            <button type="button" className="chat-msg-action" onClick={() => handleTranslate(m)} title="Translate (English ↔ Spanish)" aria-label="Translate message"><Languages size={13} /></button>
-                            <button type="button" className="chat-msg-action danger" onClick={() => handleDeleteForMe(m.id)} title="Delete for me (others still see it)" aria-label="Delete message for me"><Trash2 size={13} /></button>
+                            <button type="button" className="chat-msg-action" onClick={() => handleTranslate(m)} title="Translate (English ↔ Spanish)" aria-label="Translate message"><Languages size={14} /></button>
+                            <button type="button" className="chat-msg-action danger" onClick={() => handleDeleteForMe(m.id)} title="Delete for me (others still see it)" aria-label="Delete message for me"><Trash2 size={14} /></button>
                           </span>
                           <div className="chat-bubble">
                           {m.text}

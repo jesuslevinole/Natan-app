@@ -219,3 +219,9 @@ Verificación: check 0/0, build OK, Chromium: FAB con badge 3, ventanita con con
 - **Acceso**: botón "Resend access email" (MailPlus) en Account Users → `sendPasswordResetEmail` del auth principal (reutilizable las veces que haga falta; el "email de acceso" del invite ES un reset de Firebase), con log en Activity History y manejo de `auth/user-not-found`. El "Forgot your password?" del login ya existía (vista `forgot` de AuthScreen).
 
 Verificación: check 0/0, build OK, Chromium: columna Connection + botón mail en users; dot online y contadores en chat. Las acciones de burbuja no se capturan en preview (sin mensajes de Firestore) — validadas por compilación y CSS.
+
+## Ronda 15 (V0043) — acciones del chat siempre visibles
+
+- Reporte: "no veo los botoncitos" (módulo y widget). Diagnóstico con harness `src/dev/ChatBubblesDemo.tsx` (burbujas estáticas con el CSS real, módulo `chatdemo` del preview): el CSS funcionaba, pero las acciones tenían `opacity: 0` y solo aparecían al hover exacto de la fila — indescubrible.
+- Fix: `.chat-msg-actions` siempre visibles (`opacity: 0.6`, hover/focus-within → 1), íconos a 14px. Se eliminó la regla `@media (hover: none)`. Aplica a módulo y burbuja flotante (mismo ChatPanel).
+- Lección de UX para el resto del app: nada de acciones solo-al-hover en features que el cliente debe descubrir solo.

@@ -79,10 +79,9 @@
 .chat-msg-row { display: flex; align-items: flex-end; gap: 6px; max-width: 100%; }
 .chat-msg.mine .chat-msg-row { flex-direction: row; }
 .chat-msg:not(.mine) .chat-msg-row { flex-direction: row-reverse; }
-.chat-msg-actions { display: flex; gap: 4px; opacity: 0; transition: opacity 0.15s; flex-shrink: 0; padding-bottom: 4px; }
-.chat-msg-row:hover .chat-msg-actions { opacity: 1; }
-@media (hover: none) { .chat-msg-actions { opacity: 0.45; } }
-.chat-msg-action { display: flex; padding: 5px; border: 1px solid var(--border-color); border-radius: 8px; background: var(--card-bg); color: var(--text-muted); cursor: pointer; }
+.chat-msg-actions { display: flex; gap: 4px; opacity: 0.6; transition: opacity 0.15s; flex-shrink: 0; padding-bottom: 4px; }
+.chat-msg-row:hover .chat-msg-actions, .chat-msg-actions:focus-within { opacity: 1; }
+.chat-msg-action { display: flex; padding: 6px; border: 1px solid var(--border-color); border-radius: 8px; background: var(--card-bg); color: var(--text-muted); cursor: pointer; }
 .chat-msg-action:hover { color: var(--primary-color); border-color: var(--primary-soft-border); }
 .chat-msg-action.danger:hover { color: var(--danger-color); border-color: var(--danger-soft-border); background: var(--danger-soft); }
 
