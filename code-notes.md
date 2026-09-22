@@ -225,3 +225,11 @@ Verificación: check 0/0, build OK, Chromium: columna Connection + botón mail e
 - Reporte: "no veo los botoncitos" (módulo y widget). Diagnóstico con harness `src/dev/ChatBubblesDemo.tsx` (burbujas estáticas con el CSS real, módulo `chatdemo` del preview): el CSS funcionaba, pero las acciones tenían `opacity: 0` y solo aparecían al hover exacto de la fila — indescubrible.
 - Fix: `.chat-msg-actions` siempre visibles (`opacity: 0.6`, hover/focus-within → 1), íconos a 14px. Se eliminó la regla `@media (hover: none)`. Aplica a módulo y burbuja flotante (mismo ChatPanel).
 - Lección de UX para el resto del app: nada de acciones solo-al-hover en features que el cliente debe descubrir solo.
+
+## Ronda 16 (V0044) — arreglo de la dirección de traducción en el chat
+
+- Bug: "Estoy emocionado" se "traducía" a español (la heurística no lo detectaba: sin tildes y sin stopwords de la lista corta → asumía inglés y MyMemory devolvía casi lo mismo).
+- Fix doble en `utils/chat.ts`:
+  1. `looksSpanish` con listas de palabras mucho más amplias (estoy/es/gusta/quiero/reviso/mensaje/prueba/etc.) y empate a favor del español; probada con casos unitarios en node.
+  2. Red de seguridad general: `isSameText(a, b)` (normaliza tildes/puntuación y compara; ≥80% de palabras en común = "mismo texto"). En `handleTranslate`, si la traducción vuelve prácticamente igual al original, se reintenta automáticamente en la dirección opuesta. Así, aunque la heurística falle, el usuario nunca ve una "traducción" idéntica.
+- Nota: MyMemory no se puede probar desde este entorno (red restringida); la lógica quedó cubierta con pruebas unitarias de la heurística y de `isSameText`.

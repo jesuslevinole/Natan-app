@@ -7,7 +7,7 @@ import LoadingScreen from './LoadingScreen';
 import { useAppData } from '../hooks/useAppData';
 import { useChat } from '../hooks/useChat';
 import { useAuth, useAuthorName } from '../hooks/useAuth';
-import { ensureConversation, sendChatMessage, markChatRead, hasUnread, unreadCount, isReadByAll, chatDisplayName, deleteMessageForMe, isDeletedForMe, looksSpanish } from '../utils/chat';
+import { ensureConversation, sendChatMessage, markChatRead, hasUnread, unreadCount, isReadByAll, chatDisplayName, deleteMessageForMe, isDeletedForMe, looksSpanish, isSameText } from '../utils/chat';
 import { usePresence } from '../hooks/usePresence';
 import { translateText } from '../utils/textAssist';
 import { formatDateTimeDisplay } from '../utils/helpers';
@@ -121,9 +121,15 @@ export default function ChatPanel({ variant = 'full' }: Props) {
     }
     setTranslations(prev => ({ ...prev, [m.id]: { text: '', shown: true, loading: true } }));
     try {
+      // Detecta el idioma; si la "traducción" vuelve casi igual (dirección equivocada),
+      // reintenta hacia el otro idioma. Así "Estoy emocionado" nunca se traduce a español.
       const from = looksSpanish(m.text) ? 'es' : 'en';
       const to = from === 'es' ? 'en' : 'es';
-      const out = await translateText(m.text, from, to);
+      let out = await translateText(m.text, from, to);
+      if (isSameText(out, m.text)) {
+        const retry = await translateText(m.text, to, from);
+        if (!isSameText(retry, m.text)) out = retry;
+      }
       setTranslations(prev => ({ ...prev, [m.id]: { text: out, shown: true, loading: false } }));
     } catch (err) {
       console.error('Translate failed', err);

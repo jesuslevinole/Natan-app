@@ -1,24 +1,27 @@
-Natan-app V0043 — archivos para copiar sobre el proyecto
+Natan-app V0044 — archivos para copiar sobre el proyecto
 =========================================================
-5 archivos sobre tu GitHub actual (V0042). Sin dependencias nuevas y sin
-reglas de Firestore.
+7 archivos sobre tu GitHub actual (V0042). Este zip INCLUYE también la V0043
+(botones siempre visibles) por si todavía no la subiste; si ya la aplicaste,
+se pisan los mismos archivos y no pasa nada. Sin dependencias nuevas.
 
 Cómo aplicarlo
 --------------
 1. Extraé el zip DENTRO de la carpeta del proyecto, reemplazando los existentes.
 2. npm run build
-3. git add -A && git commit -m "V0043" && git push
+3. git add -A && git commit -m "V0044" && git push
 
-Qué pasaba y qué trae V0043
----------------------------
-Los botones de la V0042 SÍ estaban, pero solo aparecían al pasar el mouse
-exactamente sobre el mensaje (opacidad 0 el resto del tiempo) — mal diseño mío,
-imposibles de descubrir. Ahora:
-1. Los dos botoncitos (traducir y borrar para mí) se ven SIEMPRE junto a cada
-   burbuja, un poco tenues, y se iluminan al pasar el mouse. En los mensajes
-   recibidos quedan a la derecha de la burbuja; en los tuyos, a la izquierda.
-2. Igual en el módulo Chat y en la burbuja flotante (comparten el mismo panel).
-3. También agregué una vista de demostración de burbujas al preview de diseño
-   (solo desarrollo, no afecta producción).
-TIP: si después del deploy no los ves, refrescá con Ctrl+Shift+R (caché).
-La campana anuncia la V0043.
+Qué trae V0044 — ARREGLO DE LA TRADUCCIÓN
+------------------------------------------
+El problema: "Estoy emocionado" no tiene tildes, el detector corto no lo
+reconocía como español, asumía inglés y el traductor devolvía lo mismo.
+El arreglo es doble:
+1. El detector de idioma ahora conoce muchísimas más palabras del español
+   (estoy, es, gusta, quiero, reviso, mensaje, prueba...) y ante la duda
+   asume español.
+2. Red de seguridad: si la traducción vuelve prácticamente idéntica al
+   original (señal de que la dirección estaba mal), el app reintenta solo
+   hacia el otro idioma. Nunca más vas a ver un mensaje "traducido" a su
+   mismo idioma.
+(Si venís de la V0042, esto incluye además la V0043: los botoncitos de
+traducir y borrar ahora se ven siempre junto a cada mensaje.)
+La campana anuncia la V0044.

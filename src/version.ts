@@ -3,7 +3,7 @@
  * Al publicar una versión nueva: sumar 1 aquí y agregar su entrada al inicio de CHANGELOG.
  * La campana de notificaciones marca "nuevo" cuando el usuario aún no vio la versión actual.
  */
-export const APP_VERSION = 'V0043';
+export const APP_VERSION = 'V0044';
 export const APP_VERSION_DATE = '2026-09-21';
 
 export interface ChangelogEntry {
@@ -13,6 +13,13 @@ export interface ChangelogEntry {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: 'V0044',
+    date: '2026-09-22',
+    items: [
+      'Chat translation fix: Spanish messages without accents (like "Estoy emocionado") are now detected correctly, and if a translation comes back unchanged the app automatically retries in the other direction.',
+    ],
+  },
   {
     version: 'V0043',
     date: '2026-09-22',

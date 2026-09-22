@@ -101,10 +101,26 @@ export const deleteMessageForMe = async (chatId: string, messageId: string, emai
 export const isDeletedForMe = (msg: { deletedFor?: string[] }, email: string): boolean =>
   (msg.deletedFor ?? []).includes(emailKey(email));
 
-/** Heurística simple para dirección de traducción: true si el texto parece español. */
+/** Heurística para dirección de traducción: true si el texto parece español. */
 export const looksSpanish = (text: string): boolean => {
   if (/[áéíóúñü¿¡]/i.test(text)) return true;
-  const es = (text.toLowerCase().match(/\b(el|la|los|las|que|de|por|para|con|una|uno|esta|este|hola|gracias|buenos|dias|trabajo|ya|si|no se|donde|cuando|hacer|necesito)\b/g) ?? []).length;
-  const en = (text.toLowerCase().match(/\b(the|and|for|with|this|that|you|are|is|to|of|in|on|please|thanks|work|done|need|when|where)\b/g) ?? []).length;
-  return es > en;
+  const es = (text.toLowerCase().match(/\b(el|la|los|las|que|de|del|por|para|con|sin|una|uno|unos|esta|este|esto|estoy|estas|estamos|es|son|soy|hay|muy|bien|mal|hola|gracias|buenos|buenas|dias|dia|manana|hoy|ayer|trabajo|ya|si|donde|cuando|como|hacer|hecho|necesito|puedo|puede|tengo|tiene|listo|nada|todo|pero|tambien|aqui|alla|rato|reviso|revisar|mensaje|prueba|nuevo|nueva|otro|otra|le|lo|les|nos|mi|tu|su|usted|ustedes|porque|entonces|ahora|luego|despues|antes|gusta|gustan|gustaria|quiero|quieres|quiere|vamos|voy|vas|va|dale|claro|perfecto|listo|hagamos|terminado|terminar|falta|faltan)\b/g) ?? []).length;
+  const en = (text.toLowerCase().match(/\b(the|and|for|with|this|that|these|those|you|your|are|is|am|was|were|be|been|will|would|to|of|in|on|at|it|its|i|im|we|they|he|she|my|me|us|please|thanks|thank|work|working|done|need|needs|when|where|what|how|why|not|no|yes|ok|okay|still|today|tomorrow|yesterday|good|well|there|here|dealing|believe|message|test|new)\b/g) ?? []).length;
+  return es >= en;
+};
+
+/** Normaliza para comparar si una "traducción" quedó casi igual al original. */
+const normalizeForCompare = (s: string): string =>
+  s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9\s]/g, '').replace(/\s+/g, ' ').trim();
+
+/** true si dos textos son prácticamente el mismo (traducción "de ida y vuelta" fallida). */
+export const isSameText = (a: string, b: string): boolean => {
+  const na = normalizeForCompare(a);
+  const nb = normalizeForCompare(b);
+  if (!na || !nb) return false;
+  if (na === nb) return true;
+  const wa = new Set(na.split(' '));
+  const wb = nb.split(' ');
+  const common = wb.filter(w => wa.has(w)).length;
+  return common / Math.max(wa.size, wb.length) >= 0.8;
 };
