@@ -1,8 +1,8 @@
 import { useState, useMemo, useCallback, type FormEvent, type MouseEvent } from 'react';
 import { collection, addDoc, updateDoc, doc } from 'firebase/firestore';
 import { db } from '../firebase';
-import { PackageSearch, Plus, Settings, Edit2, Trash2, Maximize2, Lock, FileSpreadsheet } from 'lucide-react';
-import type { NormalizedEntrance, ItemEntranceFormData, EntranceDetail } from '../types';
+import { PackageSearch, Plus, Settings, Edit2, Trash2, Maximize2, Lock, FileSpreadsheet , Search, CheckCircle2, ArrowLeft } from 'lucide-react';
+import type { NormalizedEntrance, ItemEntranceFormData, EntranceDetail, ItemName } from '../types';
 import Modal from '../components/Modal';
 import ModuleHeader from '../components/ModuleHeader';
 import SeqBadge from '../components/SeqBadge';
@@ -77,6 +77,11 @@ export default function ItemEntranceModule() {
   const [isImportOpen, setIsImportOpen] = useState(false);
   const [editingDetailId, setEditingDetailId] = useState<string | null>(null);
   const [isProductModalOpen, setIsProductModalOpen] = useState(false);
+  // Vista del modal de productos: catálogo con buscador → formulario del producto elegido.
+  const [productView, setProductView] = useState<'list' | 'form'>('list');
+  const [catalogSearch, setCatalogSearch] = useState('');
+  const [manualEntry, setManualEntry] = useState(false);
+  const [justAdded, setJustAdded] = useState('');
 
   const isFieldEditable = useCallback((fieldName: string) => {
     if (isProcessing) return false;
@@ -104,19 +109,6 @@ export default function ItemEntranceModule() {
     () => supplyCompanies.filter(c => c.company).map(c => ({ id: c.company, label: c.company })),
     [supplyCompanies],
   );
-  /** Al elegir un artículo del catálogo, Model/Part #, Serial # y Category vienen solos. */
-  const handlePickCatalogItem = (val: string) => {
-    const cat = itemNames.find(i => (i.item_name || '').toLowerCase() === val.toLowerCase());
-    setDetailDraft(prev => ({
-      ...prev,
-      itemName: val,
-      part: cat?.part ? String(cat.part) : prev.part,
-      modelPart: cat?.model ? String(cat.model) : prev.modelPart,
-      serial: cat?.serial ? String(cat.serial) : prev.serial,
-      sku: cat?.sku ? String(cat.sku) : prev.sku,
-      category: cat?.category ? String(cat.category) : prev.category,
-    }));
-  };
 
   // Aviso (no bloqueo) si el PO # editado ya existe en otra entrada.
   const poDuplicate = useMemo(() => {
@@ -124,11 +116,6 @@ export default function ItemEntranceModule() {
     if (!po) return false;
     return entrances.some(e => e.id !== editingId && (e.po || '').trim().toLowerCase() === po);
   }, [formData.po, entrances, editingId]);
-
-  const itemNameOptions = useMemo(
-    () => itemNames.filter(i => i.item_name).map(i => ({ id: i.item_name, label: i.item_name, sublabel: i.category || undefined })),
-    [itemNames],
-  );
 
   const orderById = useMemo(() => new Map(jobOrders.map(o => [o.id, o])), [jobOrders]);
 
@@ -199,16 +186,65 @@ export default function ItemEntranceModule() {
     return true;
   };
 
-  const openProductModal = () => { setDetailDraft(emptyDetail); setEditingDetailId(null); setIsProductModalOpen(true); };
-  const closeProductModal = () => { setIsProductModalOpen(false); setEditingDetailId(null); setDetailDraft(emptyDetail); };
-  /** Guardar y cerrar / guardar y cargar otro. */
-  const saveProduct = (addAnother: boolean) => {
-    if (!handleAddOrUpdateDetail()) return;
-    if (!addAnother) setIsProductModalOpen(false);
+  const openProductModal = () => {
+    setDetailDraft(emptyDetail);
+    setEditingDetailId(null);
+    setCatalogSearch('');
+    setManualEntry(false);
+    setJustAdded('');
+    setProductView('list');
+    setIsProductModalOpen(true);
   };
+  const closeProductModal = () => { setIsProductModalOpen(false); setEditingDetailId(null); setDetailDraft(emptyDetail); setJustAdded(''); };
+
+  /** Elegir un producto del catálogo: precarga sus datos y pide el resto. */
+  const selectCatalogProduct = (item: ItemName) => {
+    setDetailDraft({
+      ...emptyDetail,
+      itemName: item.item_name,
+      part: item.part ? String(item.part) : '',
+      modelPart: item.model ? String(item.model) : '',
+      serial: item.serial ? String(item.serial) : '',
+      sku: item.sku ? String(item.sku) : '',
+      category: item.category ? String(item.category) : '',
+    });
+    setManualEntry(false);
+    setJustAdded('');
+    setProductView('form');
+  };
+
+  /** Producto que no está en el catálogo: nombre libre. */
+  const startManualProduct = () => {
+    setDetailDraft(emptyDetail);
+    setManualEntry(true);
+    setJustAdded('');
+    setProductView('form');
+  };
+
+  /** Add: agrega a la tabla del PO y vuelve al catálogo SIN cerrar (para seguir agregando). */
+  const saveProduct = () => {
+    const name = detailDraft.itemName;
+    if (!handleAddOrUpdateDetail()) return;
+    if (editingDetailId) { setIsProductModalOpen(false); return; }
+    setJustAdded(name);
+    setProductView('list');
+  };
+
+  /** Catálogo filtrado por el buscador del modal. */
+  const filteredCatalog = useMemo(() => {
+    const term = catalogSearch.trim().toLowerCase();
+    const sorted = [...itemNames].sort((a, b) => (a.item_name || '').localeCompare(b.item_name || ''));
+    if (!term) return sorted;
+    return sorted.filter(i =>
+      [i.item_name, i.category, i.part, i.model, i.serial, i.sku].some(v => String(v ?? '').toLowerCase().includes(term)),
+    );
+  }, [itemNames, catalogSearch]);
 
   const handleEditDetail = (detail: EntranceDetail) => {
     setIsProductModalOpen(true);
+    setProductView('form');
+    setManualEntry(true); // en edición el nombre queda editable como texto
+    setJustAdded('');
     setDetailDraft({ ...detail });
     setEditingDetailId(detail.detailId);
   };
@@ -536,75 +572,134 @@ export default function ItemEntranceModule() {
 
           {isProductModalOpen && (
             <Modal
-              title={editingDetailId ? 'Edit Product' : 'Add Product'}
+              title={editingDetailId ? 'Edit Product' : (productView === 'list' ? 'Add Products from Catalog' : 'Product details')}
               onClose={closeProductModal}
-              size="lg"
+              size={productView === 'list' ? 'xl' : 'lg'}
               level={3}
             >
-              <div className="form-grid">
-                <div className="form-group">
-                  <label>Item Name {isDetailReq('itemName') && '*'}</label>
-                  <SearchableSelect options={itemNameOptions} value={detailDraft.itemName} onChange={handlePickCatalogItem} placeholder="-- Search from Catalog --" />
-                </div>
-                <div className="form-group">
-                  <label>Part / Union #</label>
-                  <input type="text" value={detailDraft.part ?? ''} onChange={e => setDetailDraft({ ...detailDraft, part: e.target.value })} />
-                </div>
-                <div className="form-group">
-                  <label>Model # {isDetailReq('modelPart') && '*'}</label>
-                  <input type="text" value={detailDraft.modelPart} onChange={e => setDetailDraft({ ...detailDraft, modelPart: e.target.value })} required={isDetailReq('modelPart')} />
-                </div>
-                <div className="form-group">
-                  <label className="label-primary">Serial / MFG # {isDetailReq('serial') && '*'}</label>
-                  <input type="text" value={detailDraft.serial} onChange={e => setDetailDraft({ ...detailDraft, serial: e.target.value })} required={isDetailReq('serial')} />
-                </div>
-                <div className="form-group">
-                  <label>Store SKU / Internet #</label>
-                  <input type="text" value={detailDraft.sku ?? ''} onChange={e => setDetailDraft({ ...detailDraft, sku: e.target.value })} />
-                </div>
-                <div className="form-group">
-                  <label>Arrived Date {isDetailReq('orderDate') && '*'}</label>
-                  <input type="date" value={detailDraft.orderDate} onChange={e => setDetailDraft({ ...detailDraft, orderDate: e.target.value })} required={isDetailReq('orderDate')} />
-                </div>
-                <div className="form-group">
-                  <label>Items Arrived {isDetailReq('itemsArrived') && '*'}</label>
-                  <input type="number" min="0" value={detailDraft.itemsArrived} onChange={e => setDetailDraft({ ...detailDraft, itemsArrived: Number(e.target.value) })} />
-                </div>
-                <div className="form-group">
-                  <label>Category {isDetailReq('category') && '*'}</label>
-                  <input type="text" list="detail-categories" value={detailDraft.category ?? ''} onChange={e => setDetailDraft({ ...detailDraft, category: e.target.value })} required={isDetailReq('category')} placeholder="e.g. PLUMBING" />
-                  <datalist id="detail-categories">{categoryOptions.map(c => <option key={c} value={c} />)}</datalist>
-                </div>
-                <div className="form-group">
-                  <label>Unit Price {isDetailReq('price') && '*'}</label>
-                  <input type="number" min="0" step="0.01" value={detailDraft.price ?? ''} onChange={e => setDetailDraft({ ...detailDraft, price: e.target.value === '' ? undefined : Number(e.target.value) })} required={isDetailReq('price')} placeholder="0.00" />
-                </div>
-                <div className="form-group">
-                  <label>Invoice # {isDetailReq('invoice') && '*'}</label>
-                  <input type="text" value={detailDraft.invoice ?? ''} onChange={e => setDetailDraft({ ...detailDraft, invoice: e.target.value })} required={isDetailReq('invoice')} />
-                </div>
-                <div className="form-group">
-                  <label>Warranty Exp. {isDetailReq('warrantyExp') && '*'}</label>
-                  <input type="date" value={detailDraft.warrantyExp ?? ''} onChange={e => setDetailDraft({ ...detailDraft, warrantyExp: e.target.value })} required={isDetailReq('warrantyExp')} />
-                </div>
-                <div className="form-group">
-                  <label>Manufacturer</label>
-                  <input type="text" value={detailDraft.manufacturer ?? ''} onChange={e => setDetailDraft({ ...detailDraft, manufacturer: e.target.value })} placeholder="e.g. AO SMITH" />
-                </div>
-                <div className="form-group span-2">
-                  <label>Notes / Comments</label>
-                  <input type="text" value={detailDraft.comments ?? ''} onChange={e => setDetailDraft({ ...detailDraft, comments: e.target.value })} placeholder="e.g. installed in OV39 on 3/11/26" />
-                </div>
-              </div>
-              <div className="form-actions">
-                <button type="button" className="action btn-secondary" onClick={closeProductModal}>Cancel</button>
-                {!editingDetailId && (
-                  <button type="button" className="action btn-secondary" onClick={() => saveProduct(true)}><Plus size={16} /> Add &amp; add another</button>
-                )}
-                <button type="button" className="action btn-primary" onClick={() => saveProduct(false)}>
-                  <Plus size={16} /> {editingDetailId ? 'Update Product' : 'Add Product'}
-                </button>
-              </div>
+              {productView === 'list' ? (
+                <>
+                  <div className="picker-toolbar">
+                    <div className="picker-search">
+                      <Search size={15} />
+                      <input
+                        type="text"
+                        value={catalogSearch}
+                        onChange={e => setCatalogSearch(e.target.value)}
+                        placeholder="Search by name, category, part, model, serial or SKU..."
+                        autoFocus
+                      />
+                    </div>
+                    <button type="button" className="action btn-secondary" onClick={startManualProduct}><Plus size={15} /> Not in catalog</button>
+                  </div>
+                  {justAdded && <p className="picker-added"><CheckCircle2 size={15} /> <b>{justAdded}</b> was added to this PO ({(formData.details ?? []).length} product{(formData.details ?? []).length === 1 ? '' : 's'}). Pick the next one or press Done.</p>}
+                  <div className="picker-table-wrap">
+                    <table className="picker-table">
+                      <thead>
+                        <tr><th>Photo</th><th>Item Name</th><th>Category</th><th>Part / Union #</th><th>Model #</th><th /></tr>
+                      </thead>
+                      <tbody>
+                        {filteredCatalog.length === 0 && (
+                          <tr><td colSpan={6} className="picker-empty">No catalog items match &quot;{catalogSearch}&quot;.</td></tr>
+                        )}
+                        {filteredCatalog.map(item => (
+                          <tr key={item.id} onClick={() => selectCatalogProduct(item)} title={`Add ${item.item_name} to this PO`}>
+                            <td><PhotoCell src={item.photo ? String(item.photo) : undefined} title={item.item_name} size={32} /></td>
+                            <td className="cell-strong">{item.item_name}</td>
+                            <td>{item.category ? <span className="badge neutral">{String(item.category)}</span> : <span className="dt-dash">—</span>}</td>
+                            <td>{item.part ? String(item.part) : <span className="dt-dash">—</span>}</td>
+                            <td>{item.model ? String(item.model) : <span className="dt-dash">—</span>}</td>
+                            <td><button type="button" className="action btn-primary btn-sm" onClick={(e) => { e.stopPropagation(); selectCatalogProduct(item); }}>Select</button></td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <div className="form-actions">
+                    <button type="button" className="action btn-primary" onClick={closeProductModal}>Done</button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  {!editingDetailId && !manualEntry && (
+                    <div className="picker-selected">
+                      <PhotoCell src={(itemNames.find(i => i.item_name === detailDraft.itemName)?.photo as string | undefined) || undefined} title={detailDraft.itemName} size={40} />
+                      <div className="picker-selected-text">
+                        <b>{detailDraft.itemName}</b>
+                        <small>From the catalog — fields below marked in blue came pre-filled; complete the rest.</small>
+                      </div>
+                      <button type="button" className="action btn-secondary btn-sm" onClick={() => setProductView('list')}><ArrowLeft size={14} /> Back to catalog</button>
+                    </div>
+                  )}
+                  <div className="form-grid">
+                    {(manualEntry || !!editingDetailId) && (
+                      <div className="form-group">
+                        <label>Item Name {isDetailReq('itemName') && '*'}</label>
+                        <input type="text" value={detailDraft.itemName} onChange={e => setDetailDraft({ ...detailDraft, itemName: e.target.value })} placeholder="Product name" />
+                      </div>
+                    )}
+                    <div className="form-group">
+                      <label>Part / Union #</label>
+                      <input type="text" value={detailDraft.part ?? ''} onChange={e => setDetailDraft({ ...detailDraft, part: e.target.value })} />
+                    </div>
+                    <div className="form-group">
+                      <label>Model # {isDetailReq('modelPart') && '*'}</label>
+                      <input type="text" value={detailDraft.modelPart} onChange={e => setDetailDraft({ ...detailDraft, modelPart: e.target.value })} required={isDetailReq('modelPart')} />
+                    </div>
+                    <div className="form-group">
+                      <label className="label-primary">Serial / MFG # {isDetailReq('serial') && '*'}</label>
+                      <input type="text" value={detailDraft.serial} onChange={e => setDetailDraft({ ...detailDraft, serial: e.target.value })} required={isDetailReq('serial')} />
+                    </div>
+                    <div className="form-group">
+                      <label>Store SKU / Internet #</label>
+                      <input type="text" value={detailDraft.sku ?? ''} onChange={e => setDetailDraft({ ...detailDraft, sku: e.target.value })} />
+                    </div>
+                    <div className="form-group">
+                      <label>Arrived Date {isDetailReq('orderDate') && '*'}</label>
+                      <input type="date" value={detailDraft.orderDate} onChange={e => setDetailDraft({ ...detailDraft, orderDate: e.target.value })} required={isDetailReq('orderDate')} />
+                    </div>
+                    <div className="form-group">
+                      <label>Items Arrived {isDetailReq('itemsArrived') && '*'}</label>
+                      <input type="number" min="0" value={detailDraft.itemsArrived} onChange={e => setDetailDraft({ ...detailDraft, itemsArrived: Number(e.target.value) })} />
+                    </div>
+                    <div className="form-group">
+                      <label>Category {isDetailReq('category') && '*'}</label>
+                      <input type="text" list="detail-categories" value={detailDraft.category ?? ''} onChange={e => setDetailDraft({ ...detailDraft, category: e.target.value })} required={isDetailReq('category')} placeholder="e.g. PLUMBING" />
+                      <datalist id="detail-categories">{categoryOptions.map(c => <option key={c} value={c} />)}</datalist>
+                    </div>
+                    <div className="form-group">
+                      <label>Unit Price {isDetailReq('price') && '*'}</label>
+                      <input type="number" min="0" step="0.01" value={detailDraft.price ?? ''} onChange={e => setDetailDraft({ ...detailDraft, price: e.target.value === '' ? undefined : Number(e.target.value) })} required={isDetailReq('price')} placeholder="0.00" />
+                    </div>
+                    <div className="form-group">
+                      <label>Invoice # {isDetailReq('invoice') && '*'}</label>
+                      <input type="text" value={detailDraft.invoice ?? ''} onChange={e => setDetailDraft({ ...detailDraft, invoice: e.target.value })} required={isDetailReq('invoice')} />
+                    </div>
+                    <div className="form-group">
+                      <label>Warranty Exp. {isDetailReq('warrantyExp') && '*'}</label>
+                      <input type="date" value={detailDraft.warrantyExp ?? ''} onChange={e => setDetailDraft({ ...detailDraft, warrantyExp: e.target.value })} required={isDetailReq('warrantyExp')} />
+                    </div>
+                    <div className="form-group">
+                      <label>Manufacturer</label>
+                      <input type="text" value={detailDraft.manufacturer ?? ''} onChange={e => setDetailDraft({ ...detailDraft, manufacturer: e.target.value })} placeholder="e.g. AO SMITH" />
+                    </div>
+                    <div className="form-group span-2">
+                      <label>Notes / Comments</label>
+                      <input type="text" value={detailDraft.comments ?? ''} onChange={e => setDetailDraft({ ...detailDraft, comments: e.target.value })} placeholder="e.g. installed in OV39 on 3/11/26" />
+                    </div>
+                  </div>
+                  <div className="form-actions">
+                    {editingDetailId ? (
+                      <button type="button" className="action btn-secondary" onClick={closeProductModal}>Cancel</button>
+                    ) : (
+                      <button type="button" className="action btn-secondary" onClick={() => setProductView('list')}><ArrowLeft size={15} /> Back</button>
+                    )}
+                    <button type="button" className="action btn-primary" onClick={saveProduct}>
+                      <Plus size={16} /> {editingDetailId ? 'Update Product' : 'Add to this PO'}
+                    </button>
+                  </div>
+                </>
+              )}
             </Modal>
           )}
 

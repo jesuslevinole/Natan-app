@@ -264,3 +264,26 @@ fieldset.group-box { border: 1px solid var(--border-color); min-width: 0; }
 .grid-span-all { grid-column: 1 / -1; }
 @media (max-width: 760px) { .form-grid.catalog-grid-3 { grid-template-columns: 1fr; } }
 .products-toolbar { display: flex; justify-content: flex-end; margin-bottom: 12px; }
+
+/* Selector de productos del catálogo (modal de Item Entrance) */
+.picker-toolbar { display: flex; gap: 10px; align-items: center; margin-bottom: 12px; flex-wrap: wrap; }
+.picker-search { flex: 1; min-width: 240px; display: flex; align-items: center; gap: 8px; padding: 0 12px; border: 1px solid var(--border-color); border-radius: 10px; background: var(--surface-2); color: var(--text-faint); }
+.picker-search input { border: none; background: none; box-shadow: none; padding: 10px 0; flex: 1; }
+.picker-search input:focus { box-shadow: none; }
+.picker-added { display: flex; align-items: center; gap: 7px; margin: 0 0 10px; padding: 9px 12px; border-radius: 10px; background: var(--success-soft); color: #16a34a; font-size: 0.82rem; }
+[data-theme="dark"] .picker-added { color: #4ade80; }
+.picker-table-wrap { max-height: 46vh; overflow: auto; border: 1px solid var(--border-color); border-radius: 12px; }
+.picker-table { width: 100%; border-collapse: collapse; font-size: 0.83rem; }
+.picker-table th { position: sticky; top: 0; background: var(--surface-2); text-align: left; padding: 9px 12px; font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); border-bottom: 1px solid var(--border-color); z-index: 1; }
+.picker-table td { padding: 8px 10px; border-bottom: 1px solid var(--border-color); color: var(--text-main); white-space: nowrap; }
+.picker-table td:last-child { width: 1%; padding-right: 12px; }
+.picker-table .action.btn-sm { padding: 5px 12px; font-size: 0.74rem; }
+.picker-table td:nth-child(2) { white-space: normal; min-width: 150px; }
+.picker-table tbody tr { cursor: pointer; }
+.picker-table tbody tr:hover { background: var(--primary-soft); }
+.picker-table tbody tr:last-child td { border-bottom: none; }
+.picker-empty { text-align: center; color: var(--text-muted); padding: 20px !important; cursor: default; }
+.picker-selected { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; padding: 10px 12px; border: 1px solid var(--primary-soft-border); border-radius: 12px; background: var(--primary-soft); }
+.picker-selected-text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.picker-selected-text b { color: var(--text-strong); }
+.picker-selected-text small { color: var(--text-muted); font-size: 0.74rem; }

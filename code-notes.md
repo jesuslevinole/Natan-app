@@ -256,3 +256,14 @@ Verificación: check 0/0, build OK, Chromium: form del catálogo con los 4 campo
 - **Item Entrance**: el `inline-form-box` de productos se movió a un `Modal` propio (level 3, encima del modal del PO) que se abre con el botón "Add Product" (`.products-toolbar`). `handleAddOrUpdateDetail` ahora devuelve boolean (validación) y `saveProduct(addAnother)` permite "Add & add another" para cargar varios seguidos; editar una fila de la tabla abre el mismo modal con el draft cargado ("Update Product"). Cancel/cerrar limpia el draft.
 
 Verificación: check 0/0, build OK, Chromium: New Record del catálogo en 3 columnas con foto a lo ancho, y el modal de producto abierto sobre el del PO con los tres botones.
+
+## Ronda 20 (V0048) — "Add Product" abre el catálogo con buscador
+
+- El modal de producto de Item Entrance ahora tiene **2 vistas** (`productView: 'list' | 'form'`):
+  - **Lista** (Modal `xl`): tabla liviana del catálogo completo (`.picker-table`: foto, nombre, categoría, Part/Union #, Model #, botón Select; fila entera clickeable; thead sticky; scroll interno 46vh) con **buscador** arriba (`.picker-search`, autoFocus) que filtra por nombre/categoría/part/model/serial/sku (`filteredCatalog`, ordenado alfabéticamente), botón "Not in catalog" para nombre libre (`startManualProduct` → `manualEntry`) y botón **Done** para cerrar.
+  - **Form** (Modal `lg`): `selectCatalogProduct(item)` precarga itemName + los 4 identificadores + categoría y muestra el banner `.picker-selected` (foto + "Back to catalog"); solo se piden los campos restantes. El Item Name solo es editable en modo manual o edición.
+- **Agregar sin cerrar**: `saveProduct()` valida (`handleAddOrUpdateDetail` devuelve boolean), agrega al PO y vuelve a la lista con el banner verde `.picker-added` ("X was added to this PO (N products)…"), conservando la búsqueda; el modal solo se cierra con Done/X. En **edición** (lápiz de la tabla) se abre directo la vista form con "Update Product" y ahí sí cierra al guardar.
+- Se eliminaron `handlePickCatalogItem` e `itemNameOptions` (el SearchableSelect de item ya no existe; sigue el de Supply Company). Ojo: al recortar eso se fue de paso el memo `poDuplicate` y hubo que restaurarlo (quedó después de `companyOptions`).
+- CSS nuevo en index.css bajo "Selector de productos del catálogo" (`.picker-*`), con hover `--primary-soft` en filas y última columna compacta.
+
+Verificación: check 0/0, build OK, Chromium: lista con buscador y fotos → click en "Bathroom Faucet" → form precargado (PU-400/MOD-1000/SN77000/1000-654-100/PLUMBING) → "Add to this PO" → vuelve a la lista con banner "1 product" y el modal abierto.

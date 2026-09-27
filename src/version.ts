@@ -3,7 +3,7 @@
  * Al publicar una versión nueva: sumar 1 aquí y agregar su entrada al inicio de CHANGELOG.
  * La campana de notificaciones marca "nuevo" cuando el usuario aún no vio la versión actual.
  */
-export const APP_VERSION = 'V0047';
+export const APP_VERSION = 'V0048';
 export const APP_VERSION_DATE = '2026-09-21';
 
 export interface ChangelogEntry {
@@ -13,6 +13,14 @@ export interface ChangelogEntry {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: 'V0048',
+    date: '2026-09-27',
+    items: [
+      '"Add Product" now opens the full catalog in a table with a search box: pick a product, complete only the missing fields (arrived date, quantity, price...), press Add — and the dialog stays open so you can keep adding products.',
+      'Products not in the catalog can still be typed manually ("Not in catalog" button).',
+    ],
+  },
   {
     version: 'V0047',
     date: '2026-09-27',

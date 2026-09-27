@@ -1,26 +1,30 @@
-Natan-app V0047 — archivos para copiar sobre el proyecto
+Natan-app V0048 — archivos para copiar sobre el proyecto
 =========================================================
-6 archivos sobre tu GitHub actual (V0046). Sin dependencias nuevas y sin
+5 archivos sobre tu GitHub actual (V0047). Sin dependencias nuevas y sin
 reglas de Firestore.
 
 Cómo aplicarlo
 --------------
 1. Extraé el zip DENTRO de la carpeta del proyecto, reemplazando los existentes.
 2. npm run build
-3. git add -A && git commit -m "V0047" && git push
+3. git add -A && git commit -m "V0048" && git push
 
-Qué trae V0047
---------------
-1. FORMULARIO DEL CATÁLOGO EN 3 COLUMNAS: el New/Edit Record de Item Names ya
-   no es una columna larga con scroll — los 6 campos van en 3 columnas y la
-   foto ocupa su propia fila a lo ancho. El modal es más ancho para que entre
-   cómodo. Los catálogos chicos (direcciones, vendors) siguen igual que antes.
-2. PRODUCTOS EN MODAL: en Item Entrance la sección de productos ya no muestra
-   el formulario abierto todo el tiempo. Ahora hay un botón "Add Product" que
-   abre una ventana propia con todos los campos del producto. Adentro tenés:
-   - "Add Product": agrega y cierra.
-   - "Add & add another": agrega y deja la ventana abierta y limpia para
-     cargar el siguiente (ideal para POs con varios productos).
-   - Editar un producto de la lista (lápiz) abre la misma ventana con los
-     datos cargados y el botón "Update Product".
-La campana anuncia la V0047.
+Qué trae V0048 — ADD PRODUCT CON EL CATÁLOGO COMPLETO
+------------------------------------------------------
+1. Al presionar "Add Product" se abre un modal con LA TABLA DE TODOS LOS
+   PRODUCTOS del catálogo: foto, nombre, categoría, Part / Union # y Model #,
+   con un BUSCADOR arriba que filtra por nombre, categoría, part, model,
+   serial o SKU mientras escribís.
+2. Al seleccionar un producto (clic en la fila o en "Select"), pasás a una
+   pantalla que ya trae precargado todo lo que el catálogo sabe (los 4
+   identificadores + categoría) y solo te pregunta lo que falta: fecha de
+   llegada, cantidad, precio, factura, garantía, fabricante y notas.
+3. El botón "Add to this PO" agrega el producto a la tabla del PO y NO CIERRA
+   el modal: te devuelve a la lista del catálogo con un aviso verde
+   ("Bathroom Faucet was added to this PO (3 products)...") para que sigas
+   agregando. Cuando termines, botón "Done".
+4. "Not in catalog": para productos que no están en el catálogo, escribís el
+   nombre a mano como siempre.
+5. Editar un producto ya agregado (lápiz) abre la misma ventana con los datos
+   cargados y el botón "Update Product".
+La campana anuncia la V0048.
