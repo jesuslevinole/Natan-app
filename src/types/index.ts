@@ -88,8 +88,12 @@ export interface JobProduct {
 export interface EntranceDetail {
   detailId: string;      // ID único generado en cliente dentro del array
   itemName: string;
-  modelPart: string;
-  serial: string;
+  /** Part / Union # (del catálogo o manual). */
+  part?: string;
+  modelPart: string;      // Model #
+  serial: string;         // Serial / MFG #
+  /** Store SKU / Internet # (del catálogo o manual). */
+  sku?: string;
   orderDate: string;     // Arrived Date por producto
   itemsArrived: number;  // Total inicial recibido para este producto
   // Campos del reporte de inventario del cliente (opcionales; llegan por importación o por el formulario)
@@ -182,9 +186,11 @@ export interface SupplyCompany extends CatalogRecord {
 export interface ItemName extends CatalogRecord {
   item_name: string;
   category?: string;
-  /** Modelo y serial "por defecto" del artículo: se autocompletan al elegirlo en Item Entrance. */
-  model?: string;
-  serial?: string;
+  /** Identificadores "por defecto" del artículo: se autocompletan al elegirlo en Item Entrance. */
+  part?: string;   // Part / Union #
+  model?: string;  // Model #
+  serial?: string; // Serial / MFG #
+  sku?: string;    // Store SKU / Internet #
 }
 
 /** Opción normalizada para selects (id = valor guardado, label = texto visible). */

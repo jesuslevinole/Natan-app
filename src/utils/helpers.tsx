@@ -32,8 +32,10 @@ export const catalogsConfig: Record<string, CatalogSchema> = {
     fields: [
       { name: 'item_name', label: 'Item Name', type: 'text', required: true },
       { name: 'category', label: 'Category / Brand', type: 'text' },
-      { name: 'model', label: 'Model / Part #', type: 'text' },
-      { name: 'serial', label: 'Serial #', type: 'text' },
+      { name: 'part', label: 'Part / Union #', type: 'text' },
+      { name: 'model', label: 'Model #', type: 'text' },
+      { name: 'serial', label: 'Serial / MFG #', type: 'text' },
+      { name: 'sku', label: 'Store SKU / Internet #', type: 'text' },
       { name: 'photo', label: 'Photo', type: 'photo' },
     ],
   },

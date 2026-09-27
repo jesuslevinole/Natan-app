@@ -91,7 +91,7 @@ export const mockAppData: AppData = {
   supplyCompanies: suppliers.map((s, i) => ({ id: `s${i}`, seq: i + 1, visualSeq: i + 1, company: s })),
   itemNames: items.map(([n, , cat], i) => ({
     id: `i${i}`, seq: i + 1, visualSeq: i + 1, item_name: n, category: cat,
-    model: i % 2 === 0 ? `MOD-${1000 + i}` : '', serial: i % 3 === 0 ? `SN${77000 + i}` : '',
+    part: i % 2 === 0 ? `PU-${400 + i}` : '', model: i % 2 === 0 ? `MOD-${1000 + i}` : '', serial: i % 3 === 0 ? `SN${77000 + i}` : '', sku: i % 2 === 0 ? `${1000 + i}-654-${100 + i}` : '',
     photo: i % 2 === 0 ? mockPhoto(['#2563eb', '#16a34a', '#ea580c', '#7c3aed'][i % 4], n[0]) : '',
   })),
   isLoading: false,

@@ -19,7 +19,7 @@ interface Props {
 type Step = 'pick' | 'preview' | 'done';
 
 const TEMPLATE_ROWS = [
-  { 'PO #': 'PO 4001', 'Purch Date': '09/15/26', 'Item Name': 'KITCHEN FAUCET', 'Model #': 'MOEN-87233', 'Serial #': '', Qty: 2, Price: 103.07, Category: 'PLUMBING', Vendor: 'HD SUPPLY', Mfr: 'MOEN', Invoice: '9247518099', 'War Exp': '', Comments: 'Kitchen faucet w/ spray' },
+  { 'PO #': 'PO 4001', 'Purch Date': '09/15/26', 'Item Name': 'KITCHEN FAUCET', 'Part / Union #': 'PU-1102', 'Model #': 'MOEN-87233', 'Store SKU / Internet #': '1002-654-118', 'Serial #': '', Qty: 2, Price: 103.07, Category: 'PLUMBING', Vendor: 'HD SUPPLY', Mfr: 'MOEN', Invoice: '9247518099', 'War Exp': '', Comments: 'Kitchen faucet w/ spray' },
   { 'PO #': 'PO 4001', 'Purch Date': '09/15/26', 'Item Name': 'BATH FAUCET', 'Model #': 'MOEN-84501', 'Serial #': '', Qty: 3, Price: 77.06, Category: 'PLUMBING', Vendor: 'HD SUPPLY', Mfr: 'MOEN', Invoice: '9247518099', 'War Exp': '', Comments: '' },
   { 'PO #': 'PO 4002', 'Purch Date': '09/18/26', 'Item Name': 'WATER HEATER', 'Model #': 'GCB-40', 'Serial #': '2528144434171', Qty: 1, Price: 763.44, Category: 'Boiler/HW Heater', Vendor: 'HD SUPPLY', Mfr: 'AO SMITH', Invoice: '9248074679', 'War Exp': '04/14/32', Comments: 'For building 3' },
 ];
@@ -28,7 +28,9 @@ const TEMPLATE_INSTRUCTIONS = [
   { Column: 'PO #', Required: 'Recommended', Notes: 'Rows with the same PO # become one purchase order. Leave empty to group by Invoice.' },
   { Column: 'Purch Date', Required: 'Yes', Notes: 'Purchase date, MM/DD/YY or MM/DD/YYYY.' },
   { Column: 'Item Name', Required: 'Yes', Notes: 'Product name. If it does not exist in the Item Names catalog it is added automatically.' },
-  { Column: 'Model #', Required: 'No', Notes: 'Model or part number.' },
+  { Column: 'Part / Union #', Required: 'No', Notes: 'Part or union number of the item.' },
+  { Column: 'Model #', Required: 'No', Notes: 'Model number.' },
+  { Column: 'Store SKU / Internet #', Required: 'No', Notes: 'Store SKU or internet number.' },
   { Column: 'Serial #', Required: 'No', Notes: 'Serial number of the unit, if any.' },
   { Column: 'Qty', Required: 'No', Notes: 'Units of this product (default 1).' },
   { Column: 'Price', Required: 'No', Notes: 'Unit price in USD. Used for the inventory value.' },
@@ -120,7 +122,7 @@ export default function ImportInventoryModal({ onClose }: Props) {
         newCompanies.forEach((company, i) => batch.set(doc(collection(db, 'catalog_supply_companies')), { company, address: '', seq: companySeq + i, createdAt }));
         newItems.forEach((item_name, i) => {
           const src = toImport.flatMap(g => g.rows).find(r => (r.item || r.model) === item_name);
-          batch.set(doc(collection(db, 'catalog_item_names')), { item_name, category: src?.category || '', model: src?.model || '', serial: '', seq: itemSeq + i, createdAt });
+          batch.set(doc(collection(db, 'catalog_item_names')), { item_name, category: src?.category || '', part: src?.part || '', model: src?.model || '', serial: '', sku: src?.sku || '', seq: itemSeq + i, createdAt });
         });
         await batch.commit();
       }
@@ -135,7 +137,9 @@ export default function ImportInventoryModal({ onClose }: Props) {
           const details = g.rows.map((r, j) => ({
             detailId: `det_imp_${firstSeq + i + idx}_${j}`,
             itemName: r.item || r.model,
+            part: r.part || '',
             modelPart: r.model || r.item,
+            sku: r.sku || '',
             serial: r.serial,
             orderDate: r.date,
             itemsArrived: r.qty,

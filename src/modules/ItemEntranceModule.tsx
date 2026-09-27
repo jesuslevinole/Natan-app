@@ -47,7 +47,7 @@ const DETAIL_FIELDS = [
 
 const generateDetailId = () => `det_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
 
-const emptyDetail: EntranceDetail = { detailId: '', itemName: '', modelPart: '', serial: '', orderDate: '', itemsArrived: 0, category: '', price: undefined, invoice: '', warrantyExp: '', manufacturer: '', comments: '' };
+const emptyDetail: EntranceDetail = { detailId: '', itemName: '', part: '', modelPart: '', serial: '', sku: '', orderDate: '', itemsArrived: 0, category: '', price: undefined, invoice: '', warrantyExp: '', manufacturer: '', comments: '' };
 
 const initialForm = (): ItemEntranceFormData => ({
   date: getTodayString(), po: '', supplyCompany: '', details: [],
@@ -109,8 +109,10 @@ export default function ItemEntranceModule() {
     setDetailDraft(prev => ({
       ...prev,
       itemName: val,
+      part: cat?.part ? String(cat.part) : prev.part,
       modelPart: cat?.model ? String(cat.model) : prev.modelPart,
       serial: cat?.serial ? String(cat.serial) : prev.serial,
+      sku: cat?.sku ? String(cat.sku) : prev.sku,
       category: cat?.category ? String(cat.category) : prev.category,
     }));
   };
@@ -300,8 +302,10 @@ export default function ItemEntranceModule() {
       render: d => <PhotoCell src={photoByItemName.get((d.itemName || '').toLowerCase())} title={d.itemName} size={36} /> },
     { id: 'itemName', header: 'Item Name', value: d => d.itemName, render: d => <span className="cell-strong">{d.itemName}</span> },
     { id: 'category', header: 'Category', value: d => d.category || '', render: d => d.category ? <span className="badge neutral">{d.category}</span> : <span className="dt-dash">—</span> },
-    { id: 'modelPart', header: 'Model / Part #', value: d => d.modelPart },
-    { id: 'serial', header: 'Serial #', value: d => d.serial, render: d => d.serial ? <span className="cell-mono">{d.serial}</span> : <span className="dt-dash">—</span> },
+    { id: 'part', header: 'Part / Union #', value: d => d.part || '', defaultHidden: true, render: d => d.part || <span className="dt-dash">—</span> },
+    { id: 'modelPart', header: 'Model #', value: d => d.modelPart },
+    { id: 'sku', header: 'Store SKU / Internet #', value: d => d.sku || '', defaultHidden: true, render: d => d.sku || <span className="dt-dash">—</span> },
+    { id: 'serial', header: 'Serial / MFG #', value: d => d.serial, render: d => d.serial ? <span className="cell-mono">{d.serial}</span> : <span className="dt-dash">—</span> },
     { id: 'orderDate', header: 'Arrived', value: d => d.orderDate, type: 'date', nowrap: true, render: d => d.orderDate ? formatDateDisplay(d.orderDate) : '—' },
     { id: 'price', header: 'Unit Price', value: d => d.price ?? null, type: 'number', align: 'right', render: d => formatCurrency(d.price) },
     { id: 'invoice', header: 'Invoice', value: d => d.invoice || '', defaultHidden: true, render: d => d.invoice ? <span className="cell-mono">{d.invoice}</span> : <span className="dt-dash">—</span> },
@@ -317,8 +321,10 @@ export default function ItemEntranceModule() {
       render: d => <PhotoCell src={photoByItemName.get((d.itemName || '').toLowerCase())} title={d.itemName} size={36} /> },
     { id: 'itemName', header: 'Item Name', value: d => d.itemName, render: d => <span className="cell-strong">{d.itemName}</span> },
     { id: 'category', header: 'Category', value: d => d.category || '', render: d => d.category ? <span className="badge neutral">{d.category}</span> : <span className="dt-dash">—</span> },
-    { id: 'modelPart', header: 'Model / Part #', value: d => d.modelPart },
-    { id: 'serial', header: 'Serial #', value: d => d.serial, render: d => d.serial ? <span className="cell-mono">{d.serial}</span> : <span className="dt-dash">—</span> },
+    { id: 'part', header: 'Part / Union #', value: d => d.part || '', defaultHidden: true, render: d => d.part || <span className="dt-dash">—</span> },
+    { id: 'modelPart', header: 'Model #', value: d => d.modelPart },
+    { id: 'sku', header: 'Store SKU / Internet #', value: d => d.sku || '', defaultHidden: true, render: d => d.sku || <span className="dt-dash">—</span> },
+    { id: 'serial', header: 'Serial / MFG #', value: d => d.serial, render: d => d.serial ? <span className="cell-mono">{d.serial}</span> : <span className="dt-dash">—</span> },
     { id: 'orderDate', header: 'Arrived', value: d => d.orderDate, type: 'date', nowrap: true, render: d => d.orderDate ? formatDateDisplay(d.orderDate) : '—' },
     { id: 'price', header: 'Unit Price', value: d => d.price ?? null, type: 'number', align: 'right', render: d => formatCurrency(d.price) },
     { id: 'invoice', header: 'Invoice', value: d => d.invoice || '', defaultHidden: true, render: d => d.invoice ? <span className="cell-mono">{d.invoice}</span> : <span className="dt-dash">—</span> },
@@ -478,12 +484,20 @@ export default function ItemEntranceModule() {
                   <SearchableSelect options={itemNameOptions} value={detailDraft.itemName} onChange={handlePickCatalogItem} placeholder="-- Search from Catalog --" />
                 </div>
                 <div className="form-group">
-                  <label>Model / Part # {isDetailReq('modelPart') && '*'}</label>
+                  <label>Part / Union #</label>
+                  <input type="text" value={detailDraft.part ?? ''} onChange={e => setDetailDraft({ ...detailDraft, part: e.target.value })} />
+                </div>
+                <div className="form-group">
+                  <label>Model # {isDetailReq('modelPart') && '*'}</label>
                   <input type="text" value={detailDraft.modelPart} onChange={e => setDetailDraft({ ...detailDraft, modelPart: e.target.value })} required={isDetailReq('modelPart')} />
                 </div>
                 <div className="form-group">
-                  <label className="label-primary">Serial # {isDetailReq('serial') && '*'}</label>
+                  <label className="label-primary">Serial / MFG # {isDetailReq('serial') && '*'}</label>
                   <input type="text" value={detailDraft.serial} onChange={e => setDetailDraft({ ...detailDraft, serial: e.target.value })} required={isDetailReq('serial')} />
+                </div>
+                <div className="form-group">
+                  <label>Store SKU / Internet #</label>
+                  <input type="text" value={detailDraft.sku ?? ''} onChange={e => setDetailDraft({ ...detailDraft, sku: e.target.value })} />
                 </div>
                 <div className="form-group">
                   <label>Arrived Date {isDetailReq('orderDate') && '*'}</label>

@@ -119,6 +119,8 @@ export const downloadWorkbook = (filename: string, sheets: Array<{ name: string;
 export interface ImportedInventoryRow {
   /** Nombre del artículo (catálogo Item Names). Si la hoja no lo trae, se usa el modelo. */
   item: string;
+  part: string;
+  sku: string;
   category: string;
   date: string;          // YYYY-MM-DD
   model: string;
@@ -197,7 +199,9 @@ export const parseInventoryFile = async (file: File): Promise<ImportedInventoryR
     const iCat = col('item', 'category', 'categoria', 'categoría');
     const iDate = col('purch date', 'date', 'purchase date', 'fecha');
     const iItemName = col('item name', 'product', 'product name', 'articulo', 'artículo');
-    const iModel = col('model #', 'model', 'modelo', 'part #', 'part');
+    const iPart = col('part / union #', 'part / union', 'part #', 'part', 'union #', 'union');
+    const iModel = col('model #', 'model', 'modelo');
+    const iSku = col('store sku / internet #', 'store sku', 'sku', 'internet #', 'internet');
     const iPO = col('po #', 'po', 'purchase order');
     const iSerial = col('serial #', 'serial');
     const iWar = col('war exp', 'warranty', 'warranty exp');
@@ -213,6 +217,8 @@ export const parseInventoryFile = async (file: File): Promise<ImportedInventoryR
       const get = (i: number): Cell => (i >= 0 ? row[i] : null);
       const model = isText(get(iModel)) ? collapseSpaces(get(iModel) as string) : '';
       const item = isText(get(iItemName)) ? collapseSpaces(get(iItemName) as string) : '';
+      const part = isText(get(iPart)) ? collapseSpaces(get(iPart) as string) : '';
+      const sku = isText(get(iSku)) ? collapseSpaces(get(iSku) as string) : '';
       const category = isText(get(iCat)) ? collapseSpaces(get(iCat) as string) : '';
       if (!model && !item && !category) continue;
       if (/^total/i.test(category) || /^page \d/i.test(category)) continue;
@@ -227,6 +233,8 @@ export const parseInventoryFile = async (file: File): Promise<ImportedInventoryR
       const qtyRaw = toNumber(get(iQty));
       out.push({
         item: item || model,
+        part,
+        sku,
         category,
         date: toIsoDate(get(iDate)),
         model,

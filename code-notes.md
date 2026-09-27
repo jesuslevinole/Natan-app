@@ -241,3 +241,11 @@ Verificación: check 0/0, build OK, Chromium: columna Connection + botón mail e
 - **PO # abierto**: el input dejó de ser readonly (se quitó `input.readonly-po` del CSS). Sigue viniendo sugerido por el autonumerador (`formatPONumber(nextSequence)`), se guarda en mayúsculas, y un hint naranja avisa (sin bloquear) si ese PO # ya existe en otra entrada (`poDuplicate` memo) porque los reportes agrupan por PO.
 
 Verificación: check 0/0, build OK, Chromium: form del catálogo con los 2 campos, autofill al elegir "Garbage Disposal 1/2HP" (MOD-1004 + PLUMBING; serial vacío porque ese mock no tiene), PO # editable con nota "(suggested — you can change it)".
+
+## Ronda 18 (V0046) — cuatro identificadores por artículo
+
+- El catálogo Item Names pasó de model/serial a los 4 identificadores que usa el cliente: `part` (Part / Union #), `model` (Model #), `serial` (Serial / MFG #) y `sku` (Store SKU / Internet #), en `helpers.tsx` + `ItemName` (los datos ya guardados en model/serial siguen valiendo).
+- `EntranceDetail` suma `part?` y `sku?`; el form de Item Entrance tiene sus dos inputs nuevos y las etiquetas quedaron "Model #" y "Serial / MFG #". `handlePickCatalogItem` jala los 4 + Category al elegir el producto (solo pisa si el catálogo tiene valor). En las tablas de detalle, Part y SKU son columnas `defaultHidden` (se activan en Columns) para no ensanchar de más.
+- Import: el parser reconoce las columnas "Part / Union #" y "Store SKU / Internet #" (con alias), la plantilla las incluye (Products + Instructions) y los item names creados por importación guardan part/model/sku.
+
+Verificación: check 0/0, build OK, Chromium: form del catálogo con los 4 campos y autofill completo en Item Entrance (PU-400 / MOD-1000 / SN77000 / 1000-654-100 / PLUMBING al elegir "Bathroom Faucet").

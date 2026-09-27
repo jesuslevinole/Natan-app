@@ -1,27 +1,26 @@
-Natan-app V0045 — archivos para copiar sobre el proyecto
+Natan-app V0046 — archivos para copiar sobre el proyecto
 =========================================================
-8 archivos sobre tu GitHub actual (V0044). Sin dependencias nuevas y sin
+9 archivos sobre tu GitHub actual (V0045). Sin dependencias nuevas y sin
 reglas de Firestore.
 
 Cómo aplicarlo
 --------------
 1. Extraé el zip DENTRO de la carpeta del proyecto, reemplazando los existentes.
 2. npm run build
-3. git add -A && git commit -m "V0045" && git push
+3. git add -A && git commit -m "V0046" && git push
 
-Qué trae V0045
+Qué trae V0046
 --------------
-1. CATÁLOGO CON MODELO Y SERIAL: en Catalogs → Item Names cada artículo ahora
-   guarda también "Model / Part #" y "Serial #" (junto a la foto). Aparecen en
-   el formulario y como columnas de la tabla. La importación de inventario
-   también guarda el modelo cuando crea item names nuevos.
-2. AUTOCOMPLETADO EN ITEM ENTRANCE: al elegir un producto del catálogo en
-   "Search from Catalog", el Model / Part #, el Serial # y la Category se
-   llenan solos con lo que tenga el catálogo. Igual podés corregirlos en la
-   fila (por ejemplo el serial de la unidad concreta que llegó).
-3. PO # ABIERTO: el campo ya no está bloqueado. Viene sugerido con el número
-   automático de siempre (PO0024, PO0025...), pero podés escribir el que
-   quieras (se guarda en mayúsculas). Si escribís un PO # que ya existe en
-   otra entrada, sale un aviso naranja — no te bloquea, solo te avisa porque
-   los reportes agrupan las filas por PO #.
-La campana anuncia la V0045.
+1. CATÁLOGO CON LOS 4 IDENTIFICADORES: cada artículo de Item Names guarda ahora
+   Part / Union #, Model #, Serial / MFG # y Store SKU / Internet # (además de
+   la categoría y la foto). Lo que ya tenías guardado como Model y Serial se
+   conserva tal cual.
+2. ITEM ENTRANCE LOS JALA SOLOS: al elegir el producto en "Search from
+   Catalog" se llenan automáticamente los 4 campos + la categoría. Part/Union
+   y Store SKU tienen su propio campo en el formulario, y en la tabla de
+   productos están como columnas opcionales (se activan desde "Columns" para
+   no ensanchar la tabla de más). Todo sigue editable después de llenarse.
+3. La plantilla de importación también acepta las columnas nuevas
+   "Part / Union #" y "Store SKU / Internet #" (descargala de nuevo para ver
+   los ejemplos), y los item names que crea la importación las guardan.
+La campana anuncia la V0046.
