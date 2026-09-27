@@ -114,7 +114,6 @@
    ========================================= */
 /* Campo bloqueado por seguridad a nivel de campo o de solo lectura */
 input.locked, select.locked, input:read-only.locked { background-color: var(--surface-3); cursor: not-allowed; }
-input.readonly-po { background-color: var(--surface-3); cursor: not-allowed; font-weight: bold; color: var(--primary-color); }
 input.readonly-muted { background-color: var(--surface-3); color: var(--text-muted); cursor: not-allowed; font-weight: 600; border: 1px solid var(--border-strong); }
 .lock-hint { font-size: 0.75rem; color: #ef4444; display: inline-flex; align-items: center; gap: 3px; }
 .label-primary { color: var(--primary-color); font-weight: bold; }

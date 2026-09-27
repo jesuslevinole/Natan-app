@@ -103,6 +103,25 @@ export default function ItemEntranceModule() {
     () => supplyCompanies.filter(c => c.company).map(c => ({ id: c.company, label: c.company })),
     [supplyCompanies],
   );
+  /** Al elegir un artículo del catálogo, Model/Part #, Serial # y Category vienen solos. */
+  const handlePickCatalogItem = (val: string) => {
+    const cat = itemNames.find(i => (i.item_name || '').toLowerCase() === val.toLowerCase());
+    setDetailDraft(prev => ({
+      ...prev,
+      itemName: val,
+      modelPart: cat?.model ? String(cat.model) : prev.modelPart,
+      serial: cat?.serial ? String(cat.serial) : prev.serial,
+      category: cat?.category ? String(cat.category) : prev.category,
+    }));
+  };
+
+  // Aviso (no bloqueo) si el PO # editado ya existe en otra entrada.
+  const poDuplicate = useMemo(() => {
+    const po = formData.po.trim().toLowerCase();
+    if (!po) return false;
+    return entrances.some(e => e.id !== editingId && (e.po || '').trim().toLowerCase() === po);
+  }, [formData.po, entrances, editingId]);
+
   const itemNameOptions = useMemo(
     () => itemNames.filter(i => i.item_name).map(i => ({ id: i.item_name, label: i.item_name, sublabel: i.category || undefined })),
     [itemNames],
@@ -428,8 +447,9 @@ export default function ItemEntranceModule() {
               </div>
             </div>
             <div className="form-group">
-              <label className="label-primary">PO # {isItemReq('po') && '*'} <span className="label-note">(auto-generated)</span></label>
-              <input type="text" className="readonly-po" value={formData.po} readOnly />
+              <label className="label-primary">PO # {isItemReq('po') && '*'} <span className="label-note">(suggested — you can change it)</span></label>
+              <input type="text" value={formData.po} onChange={e => setFormData({ ...formData, po: e.target.value.toUpperCase() })} required={isItemReq('po')} maxLength={20} />
+              {poDuplicate && <span className="hint warn">This PO # already exists in another entrance. You can still save it, but reports group rows by PO #.</span>}
             </div>
             <div className="form-group">
               <label>Property / Complex</label>
@@ -455,7 +475,7 @@ export default function ItemEntranceModule() {
               <div className="form-grid">
                 <div className="form-group">
                   <label>Item Name {isDetailReq('itemName') && '*'}</label>
-                  <SearchableSelect options={itemNameOptions} value={detailDraft.itemName} onChange={(val) => setDetailDraft({ ...detailDraft, itemName: val })} placeholder="-- Search from Catalog --" />
+                  <SearchableSelect options={itemNameOptions} value={detailDraft.itemName} onChange={handlePickCatalogItem} placeholder="-- Search from Catalog --" />
                 </div>
                 <div className="form-group">
                   <label>Model / Part # {isDetailReq('modelPart') && '*'}</label>

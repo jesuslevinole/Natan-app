@@ -3,7 +3,7 @@
  * Al publicar una versión nueva: sumar 1 aquí y agregar su entrada al inicio de CHANGELOG.
  * La campana de notificaciones marca "nuevo" cuando el usuario aún no vio la versión actual.
  */
-export const APP_VERSION = 'V0044';
+export const APP_VERSION = 'V0045';
 export const APP_VERSION_DATE = '2026-09-21';
 
 export interface ChangelogEntry {
@@ -13,6 +13,15 @@ export interface ChangelogEntry {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: 'V0045',
+    date: '2026-09-27',
+    items: [
+      'Item Names catalog now stores Model / Part # and Serial # for each item (next to the photo).',
+      'Item Entrance: picking a product from the catalog fills Model / Part #, Serial # and Category automatically (you can still edit them).',
+      'The PO # field is now editable: it comes suggested (auto-numbered) but you can change it, with a warning if it already exists.',
+    ],
+  },
   {
     version: 'V0044',
     date: '2026-09-22',

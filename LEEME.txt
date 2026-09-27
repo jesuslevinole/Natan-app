@@ -1,27 +1,27 @@
-Natan-app V0044 — archivos para copiar sobre el proyecto
+Natan-app V0045 — archivos para copiar sobre el proyecto
 =========================================================
-7 archivos sobre tu GitHub actual (V0042). Este zip INCLUYE también la V0043
-(botones siempre visibles) por si todavía no la subiste; si ya la aplicaste,
-se pisan los mismos archivos y no pasa nada. Sin dependencias nuevas.
+8 archivos sobre tu GitHub actual (V0044). Sin dependencias nuevas y sin
+reglas de Firestore.
 
 Cómo aplicarlo
 --------------
 1. Extraé el zip DENTRO de la carpeta del proyecto, reemplazando los existentes.
 2. npm run build
-3. git add -A && git commit -m "V0044" && git push
+3. git add -A && git commit -m "V0045" && git push
 
-Qué trae V0044 — ARREGLO DE LA TRADUCCIÓN
-------------------------------------------
-El problema: "Estoy emocionado" no tiene tildes, el detector corto no lo
-reconocía como español, asumía inglés y el traductor devolvía lo mismo.
-El arreglo es doble:
-1. El detector de idioma ahora conoce muchísimas más palabras del español
-   (estoy, es, gusta, quiero, reviso, mensaje, prueba...) y ante la duda
-   asume español.
-2. Red de seguridad: si la traducción vuelve prácticamente idéntica al
-   original (señal de que la dirección estaba mal), el app reintenta solo
-   hacia el otro idioma. Nunca más vas a ver un mensaje "traducido" a su
-   mismo idioma.
-(Si venís de la V0042, esto incluye además la V0043: los botoncitos de
-traducir y borrar ahora se ven siempre junto a cada mensaje.)
-La campana anuncia la V0044.
+Qué trae V0045
+--------------
+1. CATÁLOGO CON MODELO Y SERIAL: en Catalogs → Item Names cada artículo ahora
+   guarda también "Model / Part #" y "Serial #" (junto a la foto). Aparecen en
+   el formulario y como columnas de la tabla. La importación de inventario
+   también guarda el modelo cuando crea item names nuevos.
+2. AUTOCOMPLETADO EN ITEM ENTRANCE: al elegir un producto del catálogo en
+   "Search from Catalog", el Model / Part #, el Serial # y la Category se
+   llenan solos con lo que tenga el catálogo. Igual podés corregirlos en la
+   fila (por ejemplo el serial de la unidad concreta que llegó).
+3. PO # ABIERTO: el campo ya no está bloqueado. Viene sugerido con el número
+   automático de siempre (PO0024, PO0025...), pero podés escribir el que
+   quieras (se guarda en mayúsculas). Si escribís un PO # que ya existe en
+   otra entrada, sale un aviso naranja — no te bloquea, solo te avisa porque
+   los reportes agrupan las filas por PO #.
+La campana anuncia la V0045.

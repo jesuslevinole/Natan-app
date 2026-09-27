@@ -233,3 +233,11 @@ Verificación: check 0/0, build OK, Chromium: columna Connection + botón mail e
   1. `looksSpanish` con listas de palabras mucho más amplias (estoy/es/gusta/quiero/reviso/mensaje/prueba/etc.) y empate a favor del español; probada con casos unitarios en node.
   2. Red de seguridad general: `isSameText(a, b)` (normaliza tildes/puntuación y compara; ≥80% de palabras en común = "mismo texto"). En `handleTranslate`, si la traducción vuelve prácticamente igual al original, se reintenta automáticamente en la dirección opuesta. Así, aunque la heurística falle, el usuario nunca ve una "traducción" idéntica.
 - Nota: MyMemory no se puede probar desde este entorno (red restringida); la lógica quedó cubierta con pruebas unitarias de la heurística y de `isSameText`.
+
+## Ronda 17 (V0045) — modelo y serial en el catálogo, autofill en Item Entrance y PO # editable
+
+- **Catálogo Item Names**: campos nuevos `model` (Model / Part #) y `serial` (Serial #) en la config de `helpers.tsx` (+ `ItemName` en types). Aparecen en el form y como columnas del catálogo; el import de inventario ahora guarda también el `model` al crear item names faltantes.
+- **Autofill**: `handlePickCatalogItem` en ItemEntranceModule — al elegir un artículo del catálogo se completan Model / Part #, Serial # y Category desde el registro (solo pisa si el catálogo tiene valor; todo sigue editable). El serial del catálogo es el "por defecto" del artículo; el de la unidad concreta se puede corregir en la fila.
+- **PO # abierto**: el input dejó de ser readonly (se quitó `input.readonly-po` del CSS). Sigue viniendo sugerido por el autonumerador (`formatPONumber(nextSequence)`), se guarda en mayúsculas, y un hint naranja avisa (sin bloquear) si ese PO # ya existe en otra entrada (`poDuplicate` memo) porque los reportes agrupan por PO.
+
+Verificación: check 0/0, build OK, Chromium: form del catálogo con los 2 campos, autofill al elegir "Garbage Disposal 1/2HP" (MOD-1004 + PLUMBING; serial vacío porque ese mock no tiene), PO # editable con nota "(suggested — you can change it)".

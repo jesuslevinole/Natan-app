@@ -118,7 +118,10 @@ export default function ImportInventoryModal({ onClose }: Props) {
       if (newCompanies.length || newItems.length) {
         const batch = writeBatch(db);
         newCompanies.forEach((company, i) => batch.set(doc(collection(db, 'catalog_supply_companies')), { company, address: '', seq: companySeq + i, createdAt }));
-        newItems.forEach((item_name, i) => batch.set(doc(collection(db, 'catalog_item_names')), { item_name, category: '', seq: itemSeq + i, createdAt }));
+        newItems.forEach((item_name, i) => {
+          const src = toImport.flatMap(g => g.rows).find(r => (r.item || r.model) === item_name);
+          batch.set(doc(collection(db, 'catalog_item_names')), { item_name, category: src?.category || '', model: src?.model || '', serial: '', seq: itemSeq + i, createdAt });
+        });
         await batch.commit();
       }
 

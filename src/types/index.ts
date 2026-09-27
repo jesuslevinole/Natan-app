@@ -182,6 +182,9 @@ export interface SupplyCompany extends CatalogRecord {
 export interface ItemName extends CatalogRecord {
   item_name: string;
   category?: string;
+  /** Modelo y serial "por defecto" del artículo: se autocompletan al elegirlo en Item Entrance. */
+  model?: string;
+  serial?: string;
 }
 
 /** Opción normalizada para selects (id = valor guardado, label = texto visible). */
