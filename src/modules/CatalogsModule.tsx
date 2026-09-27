@@ -228,16 +228,16 @@ export default function CatalogsModule() {
 
       {modalState === 'form' && (
         <Modal
-          size="md"
+          size={selectedCatalog.fields.length > 3 ? "lg" : "md"}
           title={currentRecord ? 'Edit Record' : 'New Record'}
           onClose={() => setModalState('closed')}
           onSubmit={handleSave}
           closeDisabled={isProcessing}
           actions={<button type="submit" className="action btn-primary" disabled={isProcessing}>{isProcessing ? 'Saving...' : 'Save'}</button>}
         >
-          <div className="form-grid single-col">
+          <div className={selectedCatalog.fields.length > 3 ? "form-grid catalog-grid-3" : "form-grid single-col"}>
             {selectedCatalog.fields.map(field => (
-              <div key={field.name} className="form-group">
+              <div key={field.name} className={`form-group${field.type === 'photo' ? ' grid-span-all' : ''}`}>
                 <label htmlFor={`cat-${field.name}`}>
                   {field.label} {field.required && <span className="required-mark">*</span>}
                 </label>

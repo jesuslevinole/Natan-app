@@ -1,26 +1,26 @@
-Natan-app V0046 — archivos para copiar sobre el proyecto
+Natan-app V0047 — archivos para copiar sobre el proyecto
 =========================================================
-9 archivos sobre tu GitHub actual (V0045). Sin dependencias nuevas y sin
+6 archivos sobre tu GitHub actual (V0046). Sin dependencias nuevas y sin
 reglas de Firestore.
 
 Cómo aplicarlo
 --------------
 1. Extraé el zip DENTRO de la carpeta del proyecto, reemplazando los existentes.
 2. npm run build
-3. git add -A && git commit -m "V0046" && git push
+3. git add -A && git commit -m "V0047" && git push
 
-Qué trae V0046
+Qué trae V0047
 --------------
-1. CATÁLOGO CON LOS 4 IDENTIFICADORES: cada artículo de Item Names guarda ahora
-   Part / Union #, Model #, Serial / MFG # y Store SKU / Internet # (además de
-   la categoría y la foto). Lo que ya tenías guardado como Model y Serial se
-   conserva tal cual.
-2. ITEM ENTRANCE LOS JALA SOLOS: al elegir el producto en "Search from
-   Catalog" se llenan automáticamente los 4 campos + la categoría. Part/Union
-   y Store SKU tienen su propio campo en el formulario, y en la tabla de
-   productos están como columnas opcionales (se activan desde "Columns" para
-   no ensanchar la tabla de más). Todo sigue editable después de llenarse.
-3. La plantilla de importación también acepta las columnas nuevas
-   "Part / Union #" y "Store SKU / Internet #" (descargala de nuevo para ver
-   los ejemplos), y los item names que crea la importación las guardan.
-La campana anuncia la V0046.
+1. FORMULARIO DEL CATÁLOGO EN 3 COLUMNAS: el New/Edit Record de Item Names ya
+   no es una columna larga con scroll — los 6 campos van en 3 columnas y la
+   foto ocupa su propia fila a lo ancho. El modal es más ancho para que entre
+   cómodo. Los catálogos chicos (direcciones, vendors) siguen igual que antes.
+2. PRODUCTOS EN MODAL: en Item Entrance la sección de productos ya no muestra
+   el formulario abierto todo el tiempo. Ahora hay un botón "Add Product" que
+   abre una ventana propia con todos los campos del producto. Adentro tenés:
+   - "Add Product": agrega y cierra.
+   - "Add & add another": agrega y deja la ventana abierta y limpia para
+     cargar el siguiente (ideal para POs con varios productos).
+   - Editar un producto de la lista (lápiz) abre la misma ventana con los
+     datos cargados y el botón "Update Product".
+La campana anuncia la V0047.

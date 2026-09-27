@@ -249,3 +249,10 @@ Verificación: check 0/0, build OK, Chromium: form del catálogo con los 2 campo
 - Import: el parser reconoce las columnas "Part / Union #" y "Store SKU / Internet #" (con alias), la plantilla las incluye (Products + Instructions) y los item names creados por importación guardan part/model/sku.
 
 Verificación: check 0/0, build OK, Chromium: form del catálogo con los 4 campos y autofill completo en Item Entrance (PU-400 / MOD-1000 / SN77000 / 1000-654-100 / PLUMBING al elegir "Bathroom Faucet").
+
+## Ronda 19 (V0047) — catálogo en 3 columnas y productos en modal
+
+- **Catálogo**: el form usa `.form-grid.catalog-grid-3` (3 columnas fijas, 1 en <760px) cuando el catálogo tiene más de 3 campos, con la foto en `.grid-span-all` (fila completa); el modal pasa a `size="lg"` en ese caso. Los catálogos chicos (destinations, vendors) siguen en una columna.
+- **Item Entrance**: el `inline-form-box` de productos se movió a un `Modal` propio (level 3, encima del modal del PO) que se abre con el botón "Add Product" (`.products-toolbar`). `handleAddOrUpdateDetail` ahora devuelve boolean (validación) y `saveProduct(addAnother)` permite "Add & add another" para cargar varios seguidos; editar una fila de la tabla abre el mismo modal con el draft cargado ("Update Product"). Cancel/cerrar limpia el draft.
+
+Verificación: check 0/0, build OK, Chromium: New Record del catálogo en 3 columnas con foto a lo ancho, y el modal de producto abierto sobre el del PO con los tres botones.

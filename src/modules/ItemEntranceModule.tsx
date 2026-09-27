@@ -1,7 +1,7 @@
 import { useState, useMemo, useCallback, type FormEvent, type MouseEvent } from 'react';
 import { collection, addDoc, updateDoc, doc } from 'firebase/firestore';
 import { db } from '../firebase';
-import { PackageSearch, Plus, X, Settings, Edit2, Trash2, Maximize2, Lock, FileSpreadsheet } from 'lucide-react';
+import { PackageSearch, Plus, Settings, Edit2, Trash2, Maximize2, Lock, FileSpreadsheet } from 'lucide-react';
 import type { NormalizedEntrance, ItemEntranceFormData, EntranceDetail } from '../types';
 import Modal from '../components/Modal';
 import ModuleHeader from '../components/ModuleHeader';
@@ -76,6 +76,7 @@ export default function ItemEntranceModule() {
   const [detailDraft, setDetailDraft] = useState<EntranceDetail>(emptyDetail);
   const [isImportOpen, setIsImportOpen] = useState(false);
   const [editingDetailId, setEditingDetailId] = useState<string | null>(null);
+  const [isProductModalOpen, setIsProductModalOpen] = useState(false);
 
   const isFieldEditable = useCallback((fieldName: string) => {
     if (isProcessing) return false;
@@ -181,9 +182,10 @@ export default function ItemEntranceModule() {
     setIsModalOpen(true);
   };
 
-  const handleAddOrUpdateDetail = () => {
-    if (!detailDraft.itemName.trim()) { alert('Item Name is required for each product.'); return; }
-    if (!detailDraft.itemsArrived || detailDraft.itemsArrived <= 0) { alert('Items Arrived must be greater than 0.'); return; }
+  /** Guarda el producto del modal. @returns true si pasó validación. */
+  const handleAddOrUpdateDetail = (): boolean => {
+    if (!detailDraft.itemName.trim()) { alert('Item Name is required for each product.'); return false; }
+    if (!detailDraft.itemsArrived || detailDraft.itemsArrived <= 0) { alert('Items Arrived must be greater than 0.'); return false; }
     if (editingDetailId) {
       setFormData(prev => ({
         ...prev,
@@ -194,9 +196,19 @@ export default function ItemEntranceModule() {
       setFormData(prev => ({ ...prev, details: [...(prev.details ?? []), { ...detailDraft, detailId: generateDetailId() }] }));
     }
     setDetailDraft(emptyDetail);
+    return true;
+  };
+
+  const openProductModal = () => { setDetailDraft(emptyDetail); setEditingDetailId(null); setIsProductModalOpen(true); };
+  const closeProductModal = () => { setIsProductModalOpen(false); setEditingDetailId(null); setDetailDraft(emptyDetail); };
+  /** Guardar y cerrar / guardar y cargar otro. */
+  const saveProduct = (addAnother: boolean) => {
+    if (!handleAddOrUpdateDetail()) return;
+    if (!addAnother) setIsProductModalOpen(false);
   };
 
   const handleEditDetail = (detail: EntranceDetail) => {
+    setIsProductModalOpen(true);
     setDetailDraft({ ...detail });
     setEditingDetailId(detail.detailId);
   };
@@ -477,7 +489,58 @@ export default function ItemEntranceModule() {
               <span className="text-sm text-muted">Total products: <strong>{(formData.details ?? []).length}</strong></span>
             </div>
 
-            <div className="inline-form-box">
+            <div className="products-toolbar">
+              <button type="button" className="action btn-primary" onClick={openProductModal}>
+                <Plus size={16} /> Add Product
+              </button>
+            </div>
+
+            <DataTable<EntranceDetail>
+              columns={formDetailColumns}
+              rows={formData.details ?? []}
+              rowKey={d => d.detailId}
+              pageSize={0}
+              hideToolbar
+              compact
+              rowClassName={d => (d.detailId === selectedHistoryDetailId ? 'warn' : undefined)}
+              emptyMessage="No products added yet. Use the form above to add products to this PO."
+              actions={d => (
+                <>
+                  <button type="button" className="icon-btn edit" onClick={() => handleEditDetail(d)} title="Edit product"><Edit2 size={14} /></button>
+                  <button type="button" className="icon-btn delete" onClick={() => handleRemoveDetail(d)} title="Remove product"><Trash2 size={14} /></button>
+                  {editingId && (
+                    <button type="button" className="icon-btn" onClick={() => setSelectedHistoryDetailId(d.detailId)} title="View history for this product"><PackageSearch size={14} /></button>
+                  )}
+                </>
+              )}
+            />
+          </div>
+
+          {editingId && (
+            <div className="products-section history">
+              <div className="products-header">
+                <div>
+                  <h4 className="text-primary">
+                    Installation History
+                    {selectedHistoryDetailId && (
+                      <span className="text-sm label-note"> (filtered by selected product) <button type="button" className="btn-link" onClick={() => setSelectedHistoryDetailId(null)}>Show all</button></span>
+                    )}
+                  </h4>
+                  <p className="text-sm text-muted m-0">Recent Work Activities using products from this PO</p>
+                </div>
+                <button type="button" className="action btn-secondary btn-sm" onClick={() => setIsExpandHistoryOpen(true)}><Maximize2 size={16} /> Expand</button>
+              </div>
+              {historyTable(itemHistory.slice(0, 3), 'No installation history for this PO yet.')}
+            </div>
+          )}
+
+          {isProductModalOpen && (
+            <Modal
+              title={editingDetailId ? 'Edit Product' : 'Add Product'}
+              onClose={closeProductModal}
+              size="lg"
+              level={3}
+            >
               <div className="form-grid">
                 <div className="form-group">
                   <label>Item Name {isDetailReq('itemName') && '*'}</label>
@@ -532,55 +595,19 @@ export default function ItemEntranceModule() {
                   <label>Notes / Comments</label>
                   <input type="text" value={detailDraft.comments ?? ''} onChange={e => setDetailDraft({ ...detailDraft, comments: e.target.value })} placeholder="e.g. installed in OV39 on 3/11/26" />
                 </div>
-                <div className="form-group flex-row items-end">
-                  <button type="button" className="action btn-primary w-100" onClick={handleAddOrUpdateDetail}>
-                    <Plus size={16} /> {editingDetailId ? 'Update Product' : 'Add Product'}
-                  </button>
-                  {editingDetailId && (
-                    <button type="button" className="action btn-secondary" onClick={() => { setEditingDetailId(null); setDetailDraft(emptyDetail); }} title="Cancel edit"><X size={16} /></button>
-                  )}
-                </div>
               </div>
-            </div>
-
-            <DataTable<EntranceDetail>
-              columns={formDetailColumns}
-              rows={formData.details ?? []}
-              rowKey={d => d.detailId}
-              pageSize={0}
-              hideToolbar
-              compact
-              rowClassName={d => (d.detailId === selectedHistoryDetailId ? 'warn' : undefined)}
-              emptyMessage="No products added yet. Use the form above to add products to this PO."
-              actions={d => (
-                <>
-                  <button type="button" className="icon-btn edit" onClick={() => handleEditDetail(d)} title="Edit product"><Edit2 size={14} /></button>
-                  <button type="button" className="icon-btn delete" onClick={() => handleRemoveDetail(d)} title="Remove product"><Trash2 size={14} /></button>
-                  {editingId && (
-                    <button type="button" className="icon-btn" onClick={() => setSelectedHistoryDetailId(d.detailId)} title="View history for this product"><PackageSearch size={14} /></button>
-                  )}
-                </>
-              )}
-            />
-          </div>
-
-          {editingId && (
-            <div className="products-section history">
-              <div className="products-header">
-                <div>
-                  <h4 className="text-primary">
-                    Installation History
-                    {selectedHistoryDetailId && (
-                      <span className="text-sm label-note"> (filtered by selected product) <button type="button" className="btn-link" onClick={() => setSelectedHistoryDetailId(null)}>Show all</button></span>
-                    )}
-                  </h4>
-                  <p className="text-sm text-muted m-0">Recent Work Activities using products from this PO</p>
-                </div>
-                <button type="button" className="action btn-secondary btn-sm" onClick={() => setIsExpandHistoryOpen(true)}><Maximize2 size={16} /> Expand</button>
+              <div className="form-actions">
+                <button type="button" className="action btn-secondary" onClick={closeProductModal}>Cancel</button>
+                {!editingDetailId && (
+                  <button type="button" className="action btn-secondary" onClick={() => saveProduct(true)}><Plus size={16} /> Add &amp; add another</button>
+                )}
+                <button type="button" className="action btn-primary" onClick={() => saveProduct(false)}>
+                  <Plus size={16} /> {editingDetailId ? 'Update Product' : 'Add Product'}
+                </button>
               </div>
-              {historyTable(itemHistory.slice(0, 3), 'No installation history for this PO yet.')}
-            </div>
+            </Modal>
           )}
+
         </Modal>
       )}
 
